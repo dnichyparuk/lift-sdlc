@@ -34,23 +34,32 @@ Once installed, the SDLC skills will be automatically registered with your Antig
 
 ## 🚀 See It In Action
 
-Writing code and managing your release lifecycle has never been simpler. With the SDLC plugin, you can go from an issue to a Pull Request purely through conversation:
+Writing code and managing your release lifecycle has never been simpler. With the SDLC plugin, you can go from an issue to a Pull Request by calling dedicated skills directly:
 
-> **You:** We need to add OAuth2 login. I created issue #42 for it. Can you implement it?
+> **You:** `/github-sdlc view issue #42`
 > 
-> **Antigravity:** *(Reads the issue using `/github-sdlc` and creates an architecture document using `/plan-sdlc`)*<br>
-> Here is the implementation plan for OAuth2. Does this look good to you?
+> **Antigravity:** *(Reads issue #42 "Implement OAuth2 login flow" using the GitHub CLI)*<br>
+> I've retrieved the issue details. Let's start with a plan.
 > 
-> **You:** Looks perfect, go ahead.
+> **You:** `/plan-sdlc`
 >
-> **Antigravity:** *(Implements the code, tests it, and stages the files)*<br>
-> All done! I'm running `/commit-sdlc` to snapshot our work...<br>
+> **Antigravity:** *(Generates architecture plan and saves it to `implementation_plan.md`)*<br>
+> Here is the implementation plan for OAuth2. Does this look good?
+>
+> **You:** Looks perfect, go ahead. `/execute-plan-sdlc`
+>
+> **Antigravity:** *(Executes the plan, runs tests, and stages the files)*<br>
+> OAuth2 flow implemented successfully!
+>
+> **You:** `/commit-sdlc`
+>
+> **Antigravity:** *(Analyzes staged files and commits)*<br>
 > 📝 **Auto-generated Commit:** `feat(auth): implement OAuth2 login flow (#42)`
 >
-> **You:** Awesome, let's get it reviewed.
+> **You:** `/pr-sdlc`
 >
-> **Antigravity:** *(Runs `/pr-sdlc`)*<br>
-> 🚀 **Pull Request created!** The PR description has been automatically populated with the business context, technical impact, and linked to Issue #42.
+> **Antigravity:** *(Runs GitHub PR flow)*<br>
+> 🚀 **Pull Request created!** The PR description has been automatically populated with the business context and linked to Issue #42.
 
 ## SDLC Pipeline Structure
 
