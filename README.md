@@ -1,4 +1,4 @@
-# Antigravity SDLC Plugin
+# Antigravity Agentic SDLC Plugin
 
 This plugin provides a comprehensive suite of skills and commands for Software Development Lifecycle (SDLC) workflows (pull requests, code reviews, releases) within Google Antigravity. It is a cross-platform port (POSIX and Windows) of the Claude Code SDLC plugin built on the basis of https://rnagrodzki.github.io/sdlc-marketplace/.
 
