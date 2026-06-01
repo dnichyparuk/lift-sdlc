@@ -3,7 +3,7 @@ name: review-sdlc
 description: "Use this skill when reviewing code changes across project-defined dimensions (security, performance, docs, concurrency, etc.). Runs skill/review.js to pre-compute all git data, then delegates to the review-orchestrator agent. Arguments: [--base <branch>] [--committed] [--staged] [--working] [--worktree] [--set-default] [--dimensions <name,...>] [--dry-run]. Triggers on: review changes, code review, review PR, multi-dimension review, run review."
 user-invocable: true
 argument-hint: "[--base <branch>] [--committed] [--staged] [--dimensions <name,...>]"
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # Reviewing Changes

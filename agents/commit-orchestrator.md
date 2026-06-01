@@ -2,7 +2,7 @@
 name: commit-orchestrator
 description: Drafts a commit message from a prepared payload (no conversation context inherited). Reads the manifest written by commit-prepare.js, generates a single commit message that satisfies the project's commitConfig and recent-commit style, and returns ONLY the message string. Does not call git, does not write files, does not invoke gh.
 tools: Read
-model: haiku
+model: gemini-3.5-flash
 ---
 
 # Commit Message Orchestrator

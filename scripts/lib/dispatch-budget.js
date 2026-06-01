@@ -17,9 +17,8 @@
 // Claude 4 family: all models have 200K token input limit.
 // ---------------------------------------------------------------------------
 const MODEL_MAX_INPUT_BYTES = {
-  haiku:  Math.floor(200_000 * 4 * 0.75),  // 600_000 bytes
-  sonnet: Math.floor(200_000 * 4 * 0.75),  // 600_000 bytes
-  opus:   Math.floor(200_000 * 4 * 0.75),  // 600_000 bytes
+  'gemini-3.5-flash': Math.floor(1_000_000 * 4 * 0.75),
+  'gemini-3.1-pro': Math.floor(2_000_000 * 4 * 0.75),
 };
 
 // Static wave-size cap table (tasks 4-8 → 4, 9-15 → 5, 16+ → 6).
@@ -68,13 +67,13 @@ function computeWaveBudget({
   guardrailsBytes = 0,
   perTaskFactSheetBytes = [],
   priorWaveContextBytes = 0,
-  model = 'sonnet',
+  model = 'gemini-3.5-flash',
   modelMaxInputBytes: modelMaxInputBytesOverride,
   totalRemainingTasks,
 }) {
   const maxInputBytes = modelMaxInputBytesOverride != null
     ? modelMaxInputBytesOverride
-    : (MODEL_MAX_INPUT_BYTES[model] || MODEL_MAX_INPUT_BYTES.sonnet);
+    : (MODEL_MAX_INPUT_BYTES[model] || MODEL_MAX_INPUT_BYTES['gemini-3.5-flash']);
 
   const numCandidates = perTaskFactSheetBytes.length;
   const totalRemaining = totalRemainingTasks != null ? totalRemainingTasks : numCandidates;

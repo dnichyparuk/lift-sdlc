@@ -32,7 +32,7 @@ skip-when:
   - "**/__fixtures__/**"
 severity: high
 max-files: 50
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # Security Review (OWASP Top 10)
@@ -99,7 +99,7 @@ skip-when:
   - "**/dist/**"
   - "**/build/**"
 severity: medium
-model: haiku
+model: gemini-3.5-flash
 ---
 
 # Code Quality Review
@@ -151,7 +151,7 @@ triggers:
   - "**/*cache*"
 severity: medium
 max-files: 30
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # Performance Review
@@ -205,7 +205,7 @@ skip-when:
   - "**/*.test.*"
   - "**/*.spec.*"
 severity: high
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # API Review
@@ -259,7 +259,7 @@ skip-when:
   - "**/node_modules/**"
   - "**/vendor/**"
 severity: medium
-model: haiku
+model: gemini-3.5-flash
 ---
 
 # Test Coverage Review
@@ -304,7 +304,7 @@ triggers:
   - "**/Makefile"
 severity: medium
 max-files: 20
-model: haiku
+model: gemini-3.5-flash
 ---
 
 # CI/CD Pipeline Review
@@ -356,7 +356,7 @@ triggers:
   - "**/db/migrate/**"
 severity: high
 max-files: 30
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # Database Migrations Review
@@ -417,7 +417,7 @@ skip-when:
   - "**/node_modules/**"
   - "**/vendor/**"
 severity: medium
-model: haiku
+model: gemini-3.5-flash
 ---
 
 # Dependency Management Review
@@ -474,7 +474,7 @@ skip-when:
   - "**/vendor/**"
   - "**/dist/**"
 severity: medium
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # Error Handling Review
@@ -533,7 +533,7 @@ skip-when:
   - "**/build/**"
 severity: medium
 max-files: 40
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # Accessibility Review

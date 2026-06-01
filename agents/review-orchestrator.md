@@ -2,7 +2,7 @@
 name: review-orchestrator
 description: Orchestrates multi-dimension code review. Reads manifest from a temp file, resolves REFERENCE.md, dispatches dimension review subagents in parallel, critiques and deduplicates findings, and persists the consolidated comment body to disk for the skill to post.
 tools: Read, Write, Glob, Grep, Bash, Agent
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # Code Review Orchestrator

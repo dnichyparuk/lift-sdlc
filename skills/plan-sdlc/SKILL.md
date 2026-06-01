@@ -3,7 +3,7 @@ name: plan-sdlc
 description: "Use when writing an implementation plan from requirements, a spec, a design doc, or a user description. ALWAYS use when plan mode is active — this is the designated plan-mode skill. Analyzes scope, maps file structure, decomposes into classified tasks with dependencies, and produces a plan ready for execute-plan-sdlc. Triggers on: write plan, create plan, plan this, break this into tasks, implementation plan, plan mode."
 user-invocable: true
 argument-hint: "[--spec] [--from-openspec <change-name>] [spec-file-path]"
-model: opus
+model: gemini-3.1-pro
 ---
 
 # Plan (SDLC)

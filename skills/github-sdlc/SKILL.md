@@ -3,7 +3,7 @@ name: github-sdlc
 description: "Use this skill when creating, editing, reading, viewing, searching, commenting on, or managing GitHub issues. Leverages the GitHub CLI (gh) to interact with issues directly. Arguments: [--repo <owner/repo>]. Triggers on: create github issue, edit github ticket, search github, github comment, assign github, manage github, github template, read github, view github, show github, get github, fetch github, github details, add comment, comment on github, reply to github, github ticket, github issue."
 user-invocable: true
 argument-hint: "[--repo <owner/repo>]"
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # Managing GitHub Issues

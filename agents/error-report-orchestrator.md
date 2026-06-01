@@ -2,7 +2,7 @@
 name: error-report-orchestrator
 description: Drafts a tooling-error GitHub issue body from a prepared payload (no conversation context inherited). Reads the manifest written by error-report-prepare.js plus the ToolingError.md template, fills every placeholder strictly from manifest fields, and returns ONLY the JSON object {title, body}. Does not call gh, does not call git, does not write any file.
 tools: Read
-model: haiku
+model: gemini-3.5-flash
 ---
 
 # Error Report Orchestrator

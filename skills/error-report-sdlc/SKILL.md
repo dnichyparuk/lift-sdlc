@@ -3,7 +3,7 @@ name: error-report-sdlc
 description: "Internal skill invoked by other SDLC skills when they encounter an actionable error (script crash, CLI failure, persistent API error, build failure after retries). Proposes creating a GitHub issue in rnagrodzki/sdlc-marketplace to track the error with full context capture, two-gate user consent, and pre-flight verification. NOT user-invocable — only dispatched from within another skill's error handling path. When dispatched, follow ./REFERENCE.md for the full procedure."
 user-invocable: false
 disable-model-invocation: true
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # Error-to-GitHub Issue Proposal
@@ -187,7 +187,7 @@ loop exit).
 - Invoke this skill directly in response to user requests — it is internal only.
 - Pin `model:` in this skill's frontmatter — the harness will route the skill into a
   subagent that inherits the full conversation transcript (issue #202). The
-  orchestrator agent (Step 4) is the correct place to pin `model: haiku`.
+  orchestrator agent (Step 4) is the correct place to pin `model: gemini-3.5-flash`.
 - Run consent gates inside the orchestrator agent. Both gates (Section 3 and
   Section 5) MUST execute in the main context.
 - Run `gh issue create` inside the orchestrator agent. The agent has no `Bash`

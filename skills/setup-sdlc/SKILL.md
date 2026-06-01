@@ -3,7 +3,7 @@ name: setup-sdlc
 description: "Use this skill when setting up the SDLC plugin for a project, initializing configuration, or when any skill reports missing config. Renders a selective-section menu so users choose which sections to configure; each selected section prints a verbose header (purpose, files-modified, consuming skills, per-option description) before any prompt. Supports direct sub-flow entry via --only, --dimensions, --pr-template, --guardrails, --execution-guardrails, --openspec-enrich. Arguments: [--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--remove-openspec] [--add] [--no-copilot]"
 user-invocable: true
 argument-hint: "[--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--remove-openspec] [--add] [--no-copilot]"
-model: sonnet
+model: gemini-3.5-flash
 ---
 
 # SDLC Setup

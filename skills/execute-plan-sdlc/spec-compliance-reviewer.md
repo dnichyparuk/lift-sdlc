@@ -1,6 +1,6 @@
 # Spec Compliance Reviewer Prompt Template
 
-Use this template in Step 5c-bis when dispatching the per-wave spec compliance reviewer. Dispatch as a single agent (sonnet) after mechanical verification passes for the wave.
+Use this template in Step 5c-bis when dispatching the per-wave spec compliance reviewer. Dispatch as a single agent (gemini-3.5-flash) after mechanical verification passes for the wave.
 
 **Purpose:** Verify that agents built what was requested — nothing more, nothing less.
 
@@ -19,7 +19,7 @@ For `{WAVE_NUMBER}`, use the current wave number.
 ```
 Task tool (general-purpose):
   description: "Spec compliance review for Wave {WAVE_NUMBER}"
-  model: sonnet
+  model: gemini-3.5-flash
   mode: bypassPermissions
   prompt: |
     You are reviewing whether implementations match their specifications. Read the actual

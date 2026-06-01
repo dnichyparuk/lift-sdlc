@@ -15,7 +15,7 @@ See `EXAMPLES.md` (in this directory) for 5 copy-paste-ready example dimension f
 {
   "version": 1,
   "timestamp": "ISO-8601",
-  "subagent_model": "sonnet",
+  "subagent_model": "gemini-3.5-flash",
   "scope": "all",
   "base_branch": "main",
   "current_branch": "feat/xyz",
@@ -39,7 +39,7 @@ See `EXAMPLES.md` (in this directory) for 5 copy-paste-ready example dimension f
       "description": "...",
       "severity": "high",
       "requires_full_diff": false,
-      "model": "sonnet",
+      "model": "gemini-3.5-flash",
       "status": "ACTIVE",
       "matched_files": ["src/auth/login.ts"],
       "matched_count": 1,
@@ -134,7 +134,7 @@ requires-full-diff: false   # OPTIONAL. Default: false. If true, subagent receiv
 | `severity` | No | string | `medium` | One of: `critical`, `high`, `medium`, `low`, `info` |
 | `max-files` | No | integer | `100` | Positive integer |
 | `requires-full-diff` | No | boolean | `false` | — |
-| `model` | No | string | `null` | One of: `haiku`, `sonnet`, `opus`. Per-dimension model override; falls back to `manifest.subagent_model` when null. Claude-Code-only — Copilot transform omits it. |
+| `model` | No | string | `null` | One of: `gemini-3.5-flash`, `gemini-3.5-flash`, `gemini-3.1-pro`. Per-dimension model override; falls back to `manifest.subagent_model` when null. Claude-Code-only — Copilot transform omits it. |
 
 ### Body content
 

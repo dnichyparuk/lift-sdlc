@@ -42,15 +42,15 @@ Max 1 retry. If it fails again, escalate.
 When re-dispatching a failed task, escalate the model one step up the chain:
 
 ```
-haiku → sonnet → opus → user (escalate, do not retry further)
+gemini-3.5-flash → gemini-3.5-flash → gemini-3.1-pro → user (escalate, do not retry further)
 ```
 
 Rules:
 - Model escalation counts as one of the 2 allowed retries — it is not a separate retry budget.
-- Only escalate one step per retry. Do not jump from haiku directly to opus.
+- Only escalate one step per retry. Do not jump from gemini-3.5-flash directly to gemini-3.1-pro.
 - Always add failure context to the retry prompt regardless of model change. A stronger model with the same bad prompt produces the same bad output.
 - Always pass `mode: "bypassPermissions"` when re-dispatching. Model escalation changes the model, not the mode — both parameters must be set on every dispatch.
-- Tasks already on `opus` that fail: re-dispatch once with failure context and the same `opus` model. If that fails, escalate to user immediately.
+- Tasks already on `gemini-3.1-pro` that fail: re-dispatch once with failure context and the same `gemini-3.1-pro` model. If that fails, escalate to user immediately.
 
 Add this line at the top of the retry prompt when escalating:
 ```
@@ -116,7 +116,7 @@ When a batch agent reports mixed results (some tasks SUCCESS, some tasks FAILED)
 2. Extract each failed task from the batch into its own individual retry
 3. Re-dispatch each failed task as a standalone agent with:
    - The single-task Agent Prompt Template (not the batch template)
-   - Model escalated one step: haiku → sonnet
+   - Model escalated one step: gemini-3.5-flash → gemini-3.5-flash
    - `mode: "bypassPermissions"` passed explicitly to the Agent tool
    - Failure context from the batch report added at the top of the prompt
 4. Treat each extracted retry independently — it counts toward that task's 2-retry budget
@@ -145,7 +145,7 @@ When an agent reports successful completion but `git diff --stat` shows no chang
 
    Complete the task from scratch — assume none of your previous work exists.
    ```
-   Escalate model one step (haiku → sonnet → opus) and pass `mode: "bypassPermissions"` explicitly. This counts toward the 2-retry budget.
+   Escalate model one step (gemini-3.5-flash → gemini-3.5-flash → gemini-3.1-pro) and pass `mode: "bypassPermissions"` explicitly. This counts toward the 2-retry budget.
 
 4. **After the retry, re-run filesystem verification.** Run `git diff --stat` and grep for the verification token. If still no changes, escalate to the user immediately — do not retry a third time. Include: "Agent reported success twice but produced no filesystem changes. Manual implementation required."
 
@@ -181,7 +181,7 @@ The agent cannot complete the task. Assess the blocker before acting:
    Provide the missing context and re-dispatch with the same or escalated model. Counts as one retry.
 
 2. **Capability problem** — the task requires more reasoning than the assigned model:
-   Re-dispatch with an escalated model (haiku → sonnet → opus). Counts as one retry.
+   Re-dispatch with an escalated model (gemini-3.5-flash → gemini-3.5-flash → gemini-3.1-pro). Counts as one retry.
 
 3. **Scope problem** — the task is too large for a single agent dispatch:
    Break the task into smaller sub-tasks. Each sub-task starts with a fresh retry budget.
@@ -226,7 +226,7 @@ When escalating to the user after 2 failed retries or a systemic failure, provid
 Task: {task name and wave number}
 Failure: {clear description of what went wrong}
 Attempts: {N retries attempted}
-Models used:     {e.g., "haiku (attempt 1), sonnet (attempt 2)"}
+Models used:     {e.g., "gemini-3.5-flash (attempt 1), gemini-3.5-flash (attempt 2)"}
 
 Recovery tried:
 {describe each recovery attempt and its outcome}
