@@ -23,6 +23,26 @@ mkdir -p .agents/plugins
 git clone https://github.com/dnichyparuk/antigravity-sdlc.git .agents/plugins/sdlc
 ```
 
+### Permissions Configuration
+
+To prevent Antigravity from repeatedly asking for permission to run the plugin's internal helper scripts (e.g. for planning, validation, and telemetry), you should allow executing `node` commands under the plugin's path.
+
+Open your global Antigravity settings file (typically located at `~/.gemini/antigravity-ide/settings.json`) and add the following rule to the `permissions.allow` array:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "command(node ~/.gemini/config/plugins/.*)"
+    ]
+  }
+}
+```
+
+*Note: `~` represents your home directory path.*
+
+Alternatively, you can open the interactive permission manager in the CLI by typing `/permissions` and allow the command there.
+
 ## Usage
 
 Once installed, the SDLC skills will be automatically registered with your Antigravity agent. You can invoke them via the chat interface, for example:
