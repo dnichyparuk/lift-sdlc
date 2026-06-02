@@ -14,9 +14,8 @@ Sub-flow of `/setup-sdlc --guardrails`. Runs skill/guardrails.js to scan the pro
 
 Run skill/guardrails.js:
 
-```bash
-for d in "antigravity" "plugins/sdlc" "plugins/sdlc-utilities" "$HOME/.gemini/config/plugins/sdlc" "$HOME/.gemini/plugins/sdlc"; do [ -z "$SDLC_ROOT" ] && [ -f "$d/plugin.json" ] && SDLC_ROOT="$d"; done
-eval 'source "${SDLC_ROOT:?ERROR: SDLC plugin root not found.}/scripts/run.sh" "skills/setup-sdlc/scripts/setup-guardrails_prepare.sh"'
+```shell
+<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-guardrails_prepare.sh
 ```
 
 Replace `{init|add}` with `add` if `--add` was passed, otherwise `init`.
@@ -80,18 +79,16 @@ Allow multiple custom entries. Custom guardrails are added alongside the standar
 
 Write selected guardrails via inline Node.js using config library:
 
-```bash
-for d in "antigravity" "plugins/sdlc" "plugins/sdlc-utilities" "$HOME/.gemini/config/plugins/sdlc" "$HOME/.gemini/plugins/sdlc"; do [ -z "$SDLC_ROOT" ] && [ -f "$d/plugin.json" ] && SDLC_ROOT="$d"; done
-eval 'source "${SDLC_ROOT:?ERROR: SDLC plugin root not found.}/scripts/run.sh" "skills/setup-sdlc/scripts/setup-guardrails_write.sh"'
+```shell
+<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-guardrails_write.sh
 ```
 
 Replace `<GUARDRAILS_JSON>` with the JSON array of selected guardrails. In `--add` mode: prepend existing guardrails from the prepare output to the array.
 
 ### Step 4 (VALIDATE) — Run Validation Script
 
-```bash
-for d in "antigravity" "plugins/sdlc" "plugins/sdlc-utilities" "$HOME/.gemini/config/plugins/sdlc" "$HOME/.gemini/plugins/sdlc"; do [ -z "$SDLC_ROOT" ] && [ -f "$d/plugin.json" ] && SDLC_ROOT="$d"; done
-eval 'source "${SDLC_ROOT:?ERROR: SDLC plugin root not found.}/scripts/run.sh" "skills/setup-sdlc/scripts/setup-guardrails_validate.sh"'
+```shell
+<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-guardrails_validate.sh
 ```
 
 Parse output. If `overall` is "pass", report success with count. If "fail", show errors and offer to fix.

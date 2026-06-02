@@ -147,9 +147,8 @@ After the user accepts:
 
 After writing, locate and run the validation script:
 
-```bash
-for d in "antigravity" "plugins/sdlc" "plugins/sdlc-utilities" "$HOME/.gemini/config/plugins/sdlc" "$HOME/.gemini/plugins/sdlc"; do [ -z "$SDLC_ROOT" ] && [ -f "$d/plugin.json" ] && SDLC_ROOT="$d"; done
-eval 'source "${SDLC_ROOT:?ERROR: SDLC plugin root not found.}/scripts/run.sh" "skills/setup-sdlc/scripts/setup-pr-template_validate.sh"'
+```shell
+<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-pr-template_validate.sh
 ```
 
 - Exit code 0 (validation **passes**): show the summary table from the script output.
