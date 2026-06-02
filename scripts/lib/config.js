@@ -18,7 +18,7 @@ const { resolveMainWorktreeSafe } = require('./worktree');
 // path is read transparently as a one-time fallback (with stderr deprecation
 // notice) for two minor versions; writes always target the new path.
 const PROJECT_CONFIG_PATH = path.join('.sdlc', 'config.json');
-const LEGACY_PROJECT_CONFIG_PATH = path.join('.sdlc', 'sdlc.json');
+const LEGACY_PROJECT_CONFIG_PATH = path.join('.antigravity', 'antigravity.json');
 const LOCAL_CONFIG_PATH = path.join('.sdlc', 'local.json');
 
 // Per-process flag: emit the legacy-path deprecation warning at most once.
@@ -62,10 +62,10 @@ function normalizePreset(value) {
 
 /** Legacy file paths relative to projectRoot. */
 const LEGACY = {
-  version: path.join('.sdlc', 'version.json'),
-  ship: path.join('.sdlc', 'ship-config.json'),
-  jira: path.join('.sdlc', 'jira-config.json'),
-  reviewSdlc: path.join('.sdlc', 'review.json'),
+  version: path.join('.antigravity', 'version.json'),
+  ship: path.join('.antigravity', 'ship-config.json'),
+  jira: path.join('.antigravity', 'jira-config.json'),
+  reviewSdlc: path.join('.antigravity', 'review.json'),
   reviewAntigravity: path.join('.antigravity', 'review.json'),
 };
 
@@ -856,8 +856,8 @@ function ensureReviewDimensionsRelocated(projectRoot) {
  */
 function cleanupLegacyAntigravityFiles(projectRoot) {
   const removed = [];
-  const antigravityJson    = path.join(projectRoot, '.antigravity', 'sdlc.json');
-  const antigravityBak     = path.join(projectRoot, '.antigravity', 'sdlc.json.bak');
+  const antigravityJson    = path.join(projectRoot, '.antigravity', 'antigravity.json');
+  const antigravityBak     = path.join(projectRoot, '.antigravity', 'antigravity.json.bak');
   const antigravityRevDir  = path.join(projectRoot, '.antigravity', 'review-dimensions');
   const sdlcJson      = path.join(projectRoot, '.sdlc', 'config.json');
   const sdlcRevDir    = path.join(projectRoot, '.sdlc', 'review-dimensions');

@@ -456,8 +456,8 @@ function verifyAndMigrate(projectRoot, role, opts = {}) {
  */
 function computeBackupPath(projectRoot, role, paths, detected) {
   if (role === 'project' && detected.source === 'legacy') {
-    // Backup of legacy `.sdlc/sdlc.json` lands inside `.sdlc/` (consumer
-    // project's SDLC surface), not `.sdlc/` (Antigravity Code's surface).
+    // Backup of legacy `.antigravity/antigravity.json` lands inside `.sdlc/` (consumer
+    // project's SDLC surface), not `.antigravity/` (Antigravity Code's surface).
     // Single one-time backup, no timestamp suffix.
     return path.join(projectRoot, '.sdlc', path.basename(paths.legacyPath) + '.bak');
   }
