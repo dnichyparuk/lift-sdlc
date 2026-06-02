@@ -275,14 +275,14 @@ Wave 3 (N tasks — HIGH RISK, will pause):
 Total: N tasks across N waves + pre-wave
 
 Quality Tiers (Model Presets):
-  full) Speed:       N × gemini-3.5-flash, N × gemini-3.5-flash              — fast, low cost (skips spec compliance review)
+  minimal) Speed:       N × gemini-3.5-flash, N × gemini-3.5-flash              — fast, low cost (skips spec compliance review)
   balanced) Balanced:  N × gemini-3.5-flash, N × gemini-3.5-flash, N × gemini-3.1-pro  — default ✓
-  minimal) Quality:    N × gemini-3.5-flash, N × gemini-3.1-pro              — max correctness
+  full) Quality:    N × gemini-3.5-flash, N × gemini-3.1-pro              — max correctness
 
 Use AskUserQuestion to select a quality tier:
 > Select execution quality tier
 
-Options: **full** (Speed) | **balanced** (Balanced, default) | **minimal** (Quality) | **custom** | **cancel**
+Options: **minimal** (Speed) | **balanced** (Balanced, default) | **full** (Quality) | **custom** | **cancel**
 Tip: Use --quality balanced to skip this prompt next time.
 ```
 
