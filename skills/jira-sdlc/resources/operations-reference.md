@@ -173,13 +173,10 @@ conditionally after Step 2 classifies the operation type.
    - After ADF conversion, walk commentBody.body[] and resolve every `low`-confidence marker
 
 4. Build payload — convert markdown to ADF and assemble:
-   for d in "antigravity" "plugins/sdlc" "plugins/sdlc-utilities" "$HOME/.gemini/config/plugins/sdlc" "$HOME/.gemini/plugins/sdlc"; do [ -z "$SDLC_ROOT" ] && [ -f "$d/plugin.json" ] && SDLC_ROOT="$d"; done
-   [ -z "$SDLC_ROOT" ] && { echo "ERROR: SDLC plugin root not found." >&2; node -e 'process.exit(2)'; }
-   SCRIPT="$SDLC_ROOT/scripts/lib/markdown-to-adf.js"
-   [ ! -f "$SCRIPT" ] && { echo "ERROR: markdown-to-adf.js not found"; node -e 'process.exit(2)'; }
-   cat <<'COMMENT_MD' | node "$SCRIPT"
-   <markdown text>
-   COMMENT_MD
+   Write the markdown comment to a temporary file (e.g., `comment.md`), then convert it to ADF using the node script:
+   ```shell
+   node <PLUGIN_ROOT>/scripts/lib/markdown-to-adf.js < comment.md
+   ```
    Final shape: { cloudId, issueIdOrKey, commentBody: <ADF JSON>, contentFormat: "adf",
                  responseContentFormat: "markdown" }
    Never use HTML tags, task lists (- [ ]), or footnotes in source markdown.
