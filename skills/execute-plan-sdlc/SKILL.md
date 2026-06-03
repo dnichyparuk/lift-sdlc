@@ -143,33 +143,26 @@ When ship-sdlc invokes execute-plan-sdlc inside the ship pipeline, `--branch` is
 
    **Do NOT use the `gitStatus` snapshot from conversation context.** The `gitStatus` block in system-reminder tags is captured once at conversation start and is not updated during the session. If the user switched branches after the conversation began, `gitStatus` will report the old branch. Always run the `git branch --show-current` command above via Bash at execution time.
 3. If the current branch matches the default branch:
-   - Derive a branch name using `lib/branch-name.js` driven by `workspace.branch` config (config-driven; no hardcoded type-map in SKILL.md prose):
-
-     ```shell
-<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/load_libs.sh
-```
-
-     Branch name is derived by `lib/branch-name.js` from `workspace.branch` config. Defaults: `template={type}/{slug}`, `slugMaxLength=50`, `typeMap={feature:'feat', bugfix:'fix', chore:'chore', docs:'docs', refactor:'refactor'}`. Override in `.sdlc/local.json` under `workspace.branch`. The logical type and slug are inferred from the plan title as before (feature/bugfix/chore/docs/refactor). Implements R30.
-
-   - **If `--workspace branch`:** Run `git checkout -b "$EXECUTE_NEW_BRANCH"` directly without prompting. Print the branch name. Set `WORKTREE_PATH` to unset (branch mode: no worktree).
-
-   - **If `--workspace worktree`:** Create worktree without prompting:
-     ```shell
-<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/worktree_create.sh
-```
-     Print the branch and path from the script output. The branch may differ from the derived name if a collision suffix was added.
-
-   - **If `--workspace prompt` or absent:** Use AskUserQuestion:
+   - Resolve workspace mode (branch/worktree/prompt/continue) from config or CLI flags.
+   - If workspace mode is `prompt` or absent, use AskUserQuestion:
      > You're on the default branch (`<branch>`). Working directly on it is not recommended.
      >
-     > Suggested: `<EXECUTE_NEW_BRANCH>`
+     > Suggested branch name: `<derived-branch-name>` (derived from plan title, e.g. `<logical-type>/<derived-slug>`)
      >
-     > 1. Create branch `<EXECUTE_NEW_BRANCH>` (or provide a custom name)
+     > 1. Create branch `<derived-branch-name>` (or provide a custom name)
      > 2. Create a worktree for isolated execution
      > 3. Continue on `<branch>` anyway
-   - **Option 1:** Run `git checkout -b <name>`. If the user provides a custom name, use it instead of the suggestion. Set `EXECUTE_NEW_BRANCH` to the chosen name.
-   - **Option 2:** Create worktree using `util/worktree-create.js` as shown above. Set `WORKTREE_PATH` and update `EXECUTE_NEW_BRANCH` from JSON output.
-   - **Option 3:** Proceed without changes. `EXECUTE_NEW_BRANCH` remains unset.
+
+   - Execute the setup script to perform the branch checkouts or worktree creation:
+     ```shell
+     SETUP_JSON=$(<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/workspace_setup.sh \
+       --workspace-flag "<workspace-mode>" \
+       --logical-type "<logical-type>" \
+       --derived-slug "<derived-slug>" \
+       [--branch-name "<custom-branch-name>"])
+     ```
+     Parse the JSON output. Extract `executeBranch` and `worktreePath`.
+     If `worktreePath` is set (non-empty), the LLM must explicitly use `worktreePath` as the current working directory (`Cwd` parameter) for all subsequent shell commands and tool dispatches. If `worktreePath` is empty, continue using the current workspace directory.
 4. If the current branch is NOT the default branch, skip this check entirely — no warning, no prompt. `EXECUTE_NEW_BRANCH` and `WORKTREE_PATH` remain unset.
 
 **Pre-execution rebase:** If `--rebase auto` was passed, rebase onto the default branch before executing the plan. This ensures tasks run against the latest code.
@@ -519,7 +512,7 @@ When `commitWaves === true`:
      ```
    - Persist via the new state subcommand:
      ```bash
-     node "$STATE_SCRIPT" wave-committed --branch <slug> --wave <N> --sha "$committedSha"
+     <PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh wave-committed --branch <slug> --wave <N> --sha "$committedSha"
      ```
    - For the soft-success path above, omit `--sha` (or pass `--sha ""`): the subcommand persists `committedSha: null`.
 
@@ -536,39 +529,40 @@ Proceeding to Wave N+1 (N tasks)
 
 The progress report is rendered from `WAVE_SUMMARY` payload — per-task names, statuses, and `filesTouched` (R-FILESTOUCHED) from the summary. State writes happen after wave-runner returns and main-context verification completes.
 
-**State persistence:** After each wave completes, update the execution state via `state/execute.js`. Locate the script:
-```shell
-<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/load_state.sh
-```
+**State persistence:** After each wave completes, update the execution state using the state wrapper script: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh`.
 
 On the very first wave dispatch, initialize the state file:
 ```bash
-node "$STATE_SCRIPT" init --branch <branch> --quality <X> --total-tasks <N> --planned-task-ids '<json-array-of-all-task-ids>'
+<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh init --branch <branch> --quality <X> --total-tasks <N> --planned-task-ids '<json-array-of-all-task-ids>'
 ```
 Where `<json-array-of-all-task-ids>` is a JSON array of every task ID from the plan (e.g. `'["1","2","3"]'`), parsed from the plan in Step 1. This seeds `plannedTaskIds` in the state file so the `verify-completeness` gate (Step 5f) can cross-check all planned IDs against accounted task records.
 
-Before each wave: `node "$STATE_SCRIPT" wave-start --wave <N>`
-After each task (sourced from `WAVE_SUMMARY.tasks[]`): `node "$STATE_SCRIPT" task-done --wave <N> --task <id> --name "<name>" --complexity <c> --risk <r> --files-changed '<json>'` where `<json>` is `WAVE_SUMMARY.tasks[].filesTouched` (R-FILESTOUCHED) (or `task-fail` when `task.status === 'FAILED'`)
-After each wave: `node "$STATE_SCRIPT" wave-done --wave <N>` (or `wave-fail` when `WAVE_SUMMARY.status === 'failed'`)
-Update context: `node "$STATE_SCRIPT" context --data '<json>'`
+Before each wave: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh wave-start --wave <N>`
+After each task (sourced from `WAVE_SUMMARY.tasks[]`): `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh task-done --wave <N> --task <id> --name "<name>" --complexity <c> --risk <r> --files-changed '<json>'` where `<json>` is `WAVE_SUMMARY.tasks[].filesTouched` (R-FILESTOUCHED) (or `task-fail` when `task.status === 'FAILED'`)
+After each wave: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh wave-done --wave <N>` (or `wave-fail` when `WAVE_SUMMARY.status === 'failed'`)
+Update context: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh context --data '<json>'`
 
 The `state/execute.js` CLI surface is unchanged — only the SKILL.md call-site shape shifts (writes happen after wave-runner returns, driven by `WAVE_SUMMARY` data, but with the same arguments).
 
-On successful completion: `node "$STATE_SCRIPT" cleanup`
+On successful completion: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh cleanup`
 
 **5d-bis — OpenSpec task flip (implements R37, R39, I13, E14 — Fixes #414).** After `task-done` state writes for this wave, before the `wave-done` state write, flip OpenSpec checkboxes for refs whose plan-task siblings have all reached DONE / DONE_WITH_CONCERNS. This step runs in execute-plan-sdlc main context ONLY — never from inside the wave-runner Agent or per-task sub-agents (cite R37). When `refToTaskIds` is empty (plan has no `openspec-task` blocks), skip this step entirely (zero new behavior).
 
 Algorithm:
 
-1. Build `completedOpenspecTaskIds`: the cumulative set of plan-task IDs (across all waves so far) whose `status` in the state file is `completed`. Source this from `state/execute.js read` output so it survives `--resume` — do NOT cache in conversation memory only.
+1. Build `completedOpenspecTaskIds`: the cumulative set of plan-task IDs (across all waves so far) whose `status` in the state file is `completed`. Source this from `state/execute.js read` output (called using `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/state_wrapper.sh read`) so it survives `--resume` — do NOT cache in conversation memory only.
 2. For each `(ref, siblings)` in `refToTaskIds`:
    - Skip if `ref` ∈ `flippedRefs` (already attempted this run — idempotent).
    - Skip if `siblings` is NOT a subset of `completedOpenspecTaskIds` (at least one sibling is still pending, failed, or blocked — leaves the OpenSpec checkbox `- [ ]` per R37).
-   - Otherwise, look up the `openspec-task` block for any one sibling (all siblings share `change`/`ref`/`line`/`title`) and call `markTaskDone(change, ref, { line, title })` via inline Node.js:
+   - Otherwise, look up the `openspec-task` block for any one sibling (all siblings share `change`/`ref`/`line`/`title`) and call `markTaskDone` via the wrapper script:
 
      ```shell
-<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/load_openspec.sh
-```
+     RESULT_JSON=$(<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/openspec_wrapper.sh \
+       --change "<change>" \
+       --ref "<ref>" \
+       [--line "<line>"] \
+       [--title "<title>"])
+     ```
    - Add `ref` to `flippedRefs` regardless of the outcome (single-fire per run; idempotency in `markTaskDone` handles a future `--resume`).
    - Interpret the result:
      - `{ changed: true }` — no action.
@@ -857,11 +851,11 @@ If `openspecSpecs` was loaded in Step 1 (the plan was OpenSpec-sourced), also su
    - `/opsx:verify` — validate implementation completeness against the spec
    - `/opsx:archive` — merge delta specs into main specs after verification passes
 4. **If `ok === true`:** apply the tasks.md coverage gate (implements R38 — Fixes #414) before emitting the suggestion:
-   - Re-parse `openspec/changes/<name>/tasks.md` via `lib/openspec.js::parseTasks` using the same `$LIB` resolution + failure-guard + env-var contract as the `markTaskDone` block in Step 5d-bis:
+   - Re-parse `openspec/changes/<name>/tasks.md` via the wrapper script:
 
      ```shell
-<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/load_openspec_tasks.sh
-```
+     TASKS_JSON=$(<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/openspec_tasks_wrapper.sh --name "<name>")
+     ```
 
      Build `unflippedTitles` from entries where `done === false`.
    - Parse the plan file's `## Out-of-scope OpenSpec tasks` section (a flat bullet list of `- <title> — <rationale>` items) into `outOfScopeTitles: Set<string>` (case-sensitive title match).

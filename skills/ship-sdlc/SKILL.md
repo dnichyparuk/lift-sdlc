@@ -388,15 +388,9 @@ Ship-sdlc retains full control of: pipeline table display, validation output, st
 
 ship-sdlc surfaces live pipeline progress in the Antigravity Code task tray via main-thread `TodoWrite` calls. All derivation logic lives in `scripts/lib/ship-todos.js` (R-todowrite-visibility clause 11). The MAIN thread invokes the helper via Bash and passes the returned `todos[]` array to the `TodoWrite` tool. The helper's `marker` field is echoed verbatim to stdout (audit trail when the tray is hidden).
 
-**Helper resolution (run once at Step 5 entry):**
-
-```shell
-<PLUGIN_ROOT>/skills/ship-sdlc/scripts/load_todos.sh
-```
-
 **Setup (one-time, BEFORE the Step 5 dispatch loop, only when `flags.steps.length >= 2`):**
 
-1. Run: `node "$SHIP_TODOS" --state-file "$STATE_FILE" --event init` (where `$STATE_FILE` is the resolved ship state file path from Step 1c output).
+1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event init` (where `$STATE_FILE` is the resolved ship state file path from Step 1c output).
 2. Parse JSON from stdout. Call `TodoWrite` with `todos` array.
 3. Echo `marker` verbatim to stdout.
 
@@ -404,70 +398,54 @@ For ultra-short runs (`flags.steps.length < 2`), skip TodoWrite entirely.
 
 **Per-step transition (called at start of EACH Step 5 iteration, BEFORE the verbose progress header):**
 
-1. Run: `node "$SHIP_TODOS" --state-file "$STATE_FILE" --event step --current-step <stepName>`.
+1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event step --current-step <stepName>`.
 2. Parse JSON, call `TodoWrite`, echo `marker`.
 
 **Per-step completion (called AFTER the Agent return and result print, AFTER `state/ship.js complete` records success):**
 
 <!-- Ordering required: `state/ship.js complete` must persist status=completed BEFORE this call;
      ship-todos reads the state file to derive substep statuses, so completion must be on disk first. -->
-1. Run: `node "$SHIP_TODOS" --state-file "$STATE_FILE" --event step --current-step <stepName> --mark-completed <stepName>`.
+1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event step --current-step <stepName> --mark-completed <stepName>`.
 2. Parse JSON, call `TodoWrite`, echo `marker`.
 
 **Per-step failure (called when `state/ship.js fail` records a failure):**
 
-1. Run: `node "$SHIP_TODOS" --state-file "$STATE_FILE" --event step --current-step <stepName> --fail-step <stepName>`.
+1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event step --current-step <stepName> --fail-step <stepName>`.
 2. Parse JSON, call `TodoWrite`, echo `marker`.
 3. No todo lingers in_progress (helper enforces — AC4).
 
 **Resume reconstruction (called inside the existing implicit-resume banner block, BEFORE the pipeline table prints, when `flags.resume === true`):**
 
-1. Run: `node "$SHIP_TODOS" --state-file "$STATE_FILE" --event resume --current-step <resume.nextPendingStep>`.
+1. Run: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event resume --current-step <resume.nextPendingStep>`.
 2. Parse JSON, call `TodoWrite`, echo `marker`.
 
 `flags.resume === true` is the single gate (the prepare script unifies explicit `--resume` and `flags.implicitResume`; this matches the existing implicit-resume banner condition and satisfies `no-opposite-logical-vectors`).
 
 **Cross-skill note:** `execute-plan-sdlc`'s internal per-wave `TodoWrite` calls remain (Agent-context bookkeeping). They are NOT parent-visible — see `execute-plan-sdlc/SKILL.md` Progress signal section and `R-todowrite-visibility`, issue #427.
 
-### Workspace-mode resolution and default-branch guard (R61, R62 — fixes #378)
+### Workspace isolation and branch setup (R60, R61, R62, R65, R37 — fixes #378, #379)
 
-**Skip on resume re-entry** (`flags.resume === true`) — the resume block below already handled mode/cwd.
+**Skip on resume re-entry** (`flags.resume === true`) or when `WORKSPACE_MODE = continue` — the resume block below already handled mode/cwd, and continue requires no setup.
 
-When NOT resuming, resolve workspace mode and enforce the default-branch guard before any workspace creation:
-
-```shell
-<PLUGIN_ROOT>/skills/ship-sdlc/scripts/resolve_branches.sh
-```
-
-`WORKSPACE_MODE_FLAG` is set from the `--workspace` CLI flag parsed by the prepare script. `SDLC_LIB` is the directory containing `config.js` and `branch-name.js`, resolved via the standard plugin path search above (or the in-repo fallback when developing this plugin). The variable persists across all subsequent Bash invocations in this section.
-
-### Cwd-assertion diagnostic (R65 — fixes #405)
-
-Before any branch creation, state migration, or Agent dispatch, consume the `assertions` field from the prepare output and verify the current working directory is the main worktree root when workspace mode is `branch`. This is a diagnostic gate — it aborts the pipeline with a four-field diagnostic so the failure mode (ship-sdlc launched from inside a stale linked worktree under `workspace: branch`) surfaces with structured evidence on next reproduction.
-
-**Skip when resuming** (`flags.resume === true`) and when workspace mode is `worktree` or `continue` — the prepare script emits `assertions.requireMainWorktreeCwd: false` in those cases, so the assertion is a no-op below.
+When NOT resuming, resolve workspace mode, enforce default-branch guard, assert correct cwd, and create branch/worktree by calling the unified setup script. Derive `<logical-type>` and `<derived-slug>` from the plan title in context:
 
 ```shell
-<PLUGIN_ROOT>/skills/ship-sdlc/scripts/cwd_assertion.sh "$PREPARE_OUTPUT_FILE" "$WORKSPACE_MODE"
+SETUP_JSON=$(<PLUGIN_ROOT>/skills/ship-sdlc/scripts/workspace_setup.sh \
+  --workspace-flag "$WORKSPACE_MODE_FLAG" \
+  --prepare-output-file "$PREPARE_OUTPUT_FILE" \
+  --logical-type "<logical-type>" \
+  --derived-slug "<derived-slug>")
 ```
 
-The assertion runs unconditionally on every non-resume invocation — when `REQUIRE_MAIN_CWD` is `false` (worktree/continue modes or resume re-entry) the inner block is skipped. `$WORKSPACE_MODE` is already resolved from the section above.
+Where `$WORKSPACE_MODE_FLAG` is set from the `--workspace` CLI flag parsed by the prepare script, and `$PREPARE_OUTPUT_FILE` is the path to the prepare JSON file.
 
-### Pre-execute workspace isolation (R60, R37 — fixes #378, #379)
+Parse the output `SETUP_JSON` from stdout:
+1. If `status` is `"error"`, print the error message and halt.
+2. Extract `workspaceMode`, `executeBranch`, and `worktreePath`.
+3. If `worktreePath` is set (non-empty), the LLM must explicitly use `worktreePath` as the current working directory (`Cwd` parameter) for all subsequent shell commands and Agent dispatches (e.g. `execute-plan-sdlc`, `commit-sdlc`, `review-sdlc`, `pr-sdlc`, etc.). If `worktreePath` is empty, continue using the current workspace directory.
+4. Pass `--branch "$executeBranch"` to `execute-plan-sdlc` in the execute dispatch (see "Execute step" section below) so execute-plan-sdlc knows which branch is active.
 
-**Skip when `WORKSPACE_MODE = continue` or when resuming** — no isolation setup needed.
-
-When not resuming and `WORKSPACE_MODE` is `branch` or `worktree`, run the five-step skeleton before dispatching execute-plan-sdlc. This is the single workspace-creation site for the entire pipeline (implements spec I8, R60):
-
-```shell
-<PLUGIN_ROOT>/skills/ship-sdlc/scripts/worktree_create.sh
-```
-
-**Cwd propagation contract:** The single `cd "$WORKTREE_PATH"` above sets the main-context shell cwd. Bash cwd persists across subsequent Bash invocations in the same agent context. Agent-tool dispatches inherit the parent's cwd — so commit-sdlc, review-sdlc, pr-sdlc, verify-pipeline-sdlc, version-sdlc, received-review-sdlc, learnings-commit, and archive-openspec all start in the new worktree automatically. No per-prompt `cd` prepend is needed. In branch mode there is nothing to cd into (HEAD shared with main worktree) — same cwd propagation applies trivially.
-
-**Step 5:** Pass `--branch "$EXECUTE_BRANCH"` to execute-plan-sdlc in the execute dispatch (see "Execute step" section below). execute-plan-sdlc will short-circuit its own Step 1 isolation block (implements R30 from execute-plan-sdlc spec).
-
-The `migrate` subcommand renames `ship-<oldSlug>-<ts>.json` → `ship-<newSlug>-<ts>.json` and updates `data.branch`. On `migrated: false` (e.g. no state file yet, slug already correct), warn and continue — do not abort; the orphaned file (if any) will be cleaned by the terminal `cleanup` step or by `--gc`.
+The setup script handles ship state migration (`state/ship.js` migrate) internally before creating any branch or worktree.
 
 ### Execution loop
 
@@ -488,31 +466,31 @@ Match the branch from the ship state file against worktree entries. If found and
 
 **Execute-step todo mirroring (R-todowrite-visibility clause 4):**
 
-Assign `PLAN_FILE` from the prepare output's `context.planFile` field (R-PLANFILE). This is resolved once by `skill/ship.js` using the priority order: CLI `--plan-file` → project `.gemini/antigravity-cli/settings.json` `plansDirectory` → global `~/.gemini/antigravity-cli/settings.json` `plansDirectory` → default `~/.gemini/plans/` (most recent `*.md`). Do not re-derive the path here — use `context.planFile` verbatim:
+Assign `PLAN_FILE` by parsing the JSON output of the resolve plan script:
 
 ```shell
-PLAN_FILE=$("<PLUGIN_ROOT>/skills/ship-sdlc/scripts/resolve_plan_file.sh" "$SHIP_PREPARE_OUTPUT_FILE")
+PLAN_FILE=$(<PLUGIN_ROOT>/skills/ship-sdlc/scripts/resolve_plan_file.sh "$SHIP_PREPARE_OUTPUT_FILE" | node -e "process.stdin.on('data',d=>{try{process.stdout.write(JSON.parse(d).planFile||'')}catch(_){}})")
 ```
 
-Where `$SHIP_PREPARE_OUTPUT_FILE` is the path to the temp file holding the `skill/ship.js` JSON output (same file used to read `flags`, `steps`, etc.). When `context.planFile` is null or empty, `PLAN_FILE` will be empty and the `ship-todos.js` execute event will node -e 'process.exit(2)' with a clear error — surface that error before dispatching.
+Where `$SHIP_PREPARE_OUTPUT_FILE` is the path to the temp file holding the `skill/ship.js` JSON output. When `PLAN_FILE` is empty, the `ship-todos.js` execute event will fail. Surface that error before dispatching.
 
 Before dispatching `execute-plan-sdlc`, run:
 
 ```bash
-node "$SHIP_TODOS" --state-file "$STATE_FILE" --plan-file "$PLAN_FILE" --event execute --current-step execute
+<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --plan-file "$PLAN_FILE" --event execute --current-step execute
 ```
 
-`$PLAN_FILE` is sourced from `context.planFile` in the prepare output (R-PLANFILE). The helper expands the `execute` step's placeholder substep to one substep per plan task (one `### Task N:` heading per substep). Parse JSON, call `TodoWrite`, echo `marker`.
+`$PLAN_FILE` is the resolved plan file path. The helper expands the `execute` step's placeholder substep to one substep per plan task (one `### Task N:` heading per substep). Parse JSON, call `TodoWrite`, echo `marker`.
 
 Then dispatch `execute-plan-sdlc` as below. On Agent return (success), run the post-execution completeness invariant **before** marking the step complete (R-INVARIANT-COMPLETENESS, #432):
 
 ```shell
-<PLUGIN_ROOT>/skills/ship-sdlc/scripts/verify_completeness.sh
+<PLUGIN_ROOT>/skills/ship-sdlc/scripts/verify_completeness.sh --state-file "$STATE_FILE" --plan-file "$PLAN_FILE"
 ```
 
 If `verify-completeness` exits 65, the pipeline MUST halt before commit. The missing task IDs appear on stderr as JSON `{missingIds, totalPlanned, totalAccounted}`. Do NOT advance to the commit step.
 
-Then run per-step-completion: `--mark-completed execute`. The parent does NOT receive per-task completion signals from the Agent; per-task todos all transition to `completed` atomically on return.
+Then run per-step-completion: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event step --current-step execute --mark-completed execute`. The parent does NOT receive per-task completion signals from the Agent; per-task todos all transition to `completed` atomically on return.
 
 Example dispatch sequence (use `step.invocation` for actual args):
 - Agent: execute-plan-sdlc, args: from `step.invocation` PLUS `--branch "$EXECUTE_BRANCH"` when `EXECUTE_BRANCH` is set (i.e. `WORKSPACE_MODE` is `branch` or `worktree`). When `WORKSPACE_MODE` is `continue`, omit `--branch` (execute handles its own isolation or runs on existing branch). Example: `"--quality balanced --branch feat/my-feature"`. This implements R60 step 5 — execute-plan-sdlc short-circuits its own Step 1 isolation in response (R30).
@@ -725,32 +703,29 @@ Note: in a worktree, all of this is safe — main working tree is untouched.
 
 ### State persistence
 
-After each step, update pipeline state via `state/ship.js`. Locate the script:
-```shell
-<PLUGIN_ROOT>/skills/ship-sdlc/scripts/load_state.sh
-```
+After each step, update pipeline state using the state wrapper script: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/state_wrapper.sh`.
 
 At pipeline start (after Step 1 completes), initialize the state file:
 ```bash
-node "$SCRIPT" init --branch <branch> --flags '<flags JSON>'
+<PLUGIN_ROOT>/skills/ship-sdlc/scripts/state_wrapper.sh init --branch <branch> --flags '<flags JSON>'
 ```
 
-Before each step: `node "$SCRIPT" start --step <name>`
-After each step: `node "$SCRIPT" complete --step <name> --result "<summary>"` (or `skip --step <name> --reason "<reason>"` or `fail --step <name> --error "<error>"`)
-Record decisions: `node "$SCRIPT" decide --step <name> --text "<decision>"`
-Defer findings: `node "$SCRIPT" defer --severity <s> --file <f> --title "<t>"`
+Before each step: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/state_wrapper.sh` start --step <name>
+After each step: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/state_wrapper.sh` complete --step <name> --result "<summary>" (or skip --step <name> --reason "<reason>" or fail --step <name> --error "<error>")
+Record decisions: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/state_wrapper.sh` decide --step <name> --text "<decision>"
+Defer findings: `<PLUGIN_ROOT>/skills/ship-sdlc/scripts/state_wrapper.sh` defer --severity <s> --file <f> --title "<t>"
 
 ### Terminal cleanup step (R38, issue #223)
 
 The prepare-script output (`steps[]` array) ends with a synthetic step named `cleanup` (`status: "will_run"`, `skill: null`, `reserved: true`). It is appended unconditionally by `skill/ship.js::computeSteps` and is NOT user-configurable — listing `cleanup` in `--steps` or `ship.steps[]` produces a validation error in Step 1c.
 
-Dispatch the cleanup step **as a direct Bash call**, not as an Agent. Each `cleanup` step entry has an `invocation` object with two precomputed command variants:
+Dispatch the cleanup step **as a direct Bash call**, not as an Agent. Each `cleanup` step entry has an `invocation` object with two precomputed command variants, which should be called using `state_wrapper.sh` (replacing `"node \"$SCRIPT\""` with `"<PLUGIN_ROOT>/skills/ship-sdlc/scripts/state_wrapper.sh"`):
 
 ```json
 {
   "method": "bash",
-  "normal": "node \"$SCRIPT\" cleanup-pipeline",
-  "forced": "node \"$SCRIPT\" cleanup-pipeline --force"
+  "normal": "<PLUGIN_ROOT>/skills/ship-sdlc/scripts/state_wrapper.sh cleanup-pipeline",
+  "forced": "<PLUGIN_ROOT>/skills/ship-sdlc/scripts/state_wrapper.sh cleanup-pipeline --force"
 }
 ```
 
@@ -759,7 +734,7 @@ Dispatch the cleanup step **as a direct Bash call**, not as an Agent. Each `clea
 Before invoking the cleanup Bash command, run:
 
 ```bash
-node "$SHIP_TODOS" --state-file "$STATE_FILE" --event cleanup --current-step cleanup
+<PLUGIN_ROOT>/skills/ship-sdlc/scripts/todos_wrapper.sh --state-file "$STATE_FILE" --event cleanup --current-step cleanup
 ```
 
 Call `TodoWrite`, echo `marker`. After the cleanup command returns (success or contract violation), run per-step-completion with `--mark-completed cleanup`.
