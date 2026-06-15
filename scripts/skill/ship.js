@@ -439,7 +439,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'execute',
       skill: 'execute-plan-sdlc',
-      model: 'gemini-3.1-pro-low',
+      model: 'gemini-3.5-flash-medium',
       status: (!flags.hasPlan || !isIn('execute')) ? 'skipped' : 'will_run',
       skipSource: !flags.hasPlan && isIn('execute')
         ? 'none'
@@ -474,7 +474,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'commit',
       skill: 'commit-sdlc',
-      model: 'gemini-3.5-flash-low',
+      model: 'gemini-3.5-flash-medium',
       status: isIn('commit') ? 'will_run' : 'skipped',
       skipSource: skipSource('commit'),
       args: [
@@ -501,7 +501,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'received-review',
       skill: 'received-review-sdlc',
-      model: 'gemini-3.5-flash-medium',
+      model: 'gemini-3.5-flash-high',
       status: 'conditional',
       skipSource: 'none',
       args: flags.auto ? '--auto' : '',
@@ -513,7 +513,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'commit-fixes',
       skill: 'commit-sdlc',
-      model: 'gemini-3.5-flash-low',
+      model: 'gemini-3.5-flash-medium',
       status: 'conditional',
       skipSource: 'none',
       args: [
@@ -528,7 +528,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'version',
       skill: 'version-sdlc',
-      model: 'gemini-3.5-flash-low',
+      model: 'gemini-3.5-flash-medium',
       status: (!isIn('version') || flags.workspace === 'worktree') ? 'skipped' : 'will_run',
       skipSource: !isIn('version')
         ? skipSource('version')
@@ -563,7 +563,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
         return {
           name: 'archive-openspec',
           skill: null,
-          model: 'gemini-3.5-flash-low',
+          model: 'gemini-3.5-flash-medium',
           status: 'skipped',
           skipSource: skipSource('archive-openspec'),
           args: '',
@@ -577,7 +577,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
         return {
           name: 'archive-openspec',
           skill: null,
-          model: 'gemini-3.5-flash-low',
+          model: 'gemini-3.5-flash-medium',
           status: 'skipped',
           skipSource: 'condition',
           args: '',
@@ -592,7 +592,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
       return {
         name: 'archive-openspec',
         skill: null,
-        model: 'gemini-3.5-flash-low',
+        model: 'gemini-3.5-flash-medium',
         status: 'conditional',
         skipSource: 'none',
         args: `--change ${changeName}${flags.auto ? ' --auto' : ''}`,
@@ -605,7 +605,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'pr',
       skill: 'pr-sdlc',
-      model: 'gemini-3.5-flash-low',
+      model: 'gemini-3.5-flash-high',
       status: isIn('pr') ? 'will_run' : 'skipped',
       skipSource: skipSource('pr'),
       args: [
@@ -720,7 +720,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
       // orchestrator runs inline (see ship-sdlc SKILL.md). The model field
       // is unused but kept for table-rendering consistency.
       skill: null,
-      model: 'gemini-3.5-flash-low',
+      model: 'gemini-3.5-flash-medium',
       status: isIn('learnings-commit') ? 'will_run' : 'skipped',
       skipSource: skipSource('learnings-commit'),
       args: '',
@@ -753,7 +753,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
   steps.push({
     name: 'cleanup',
     skill: null,
-    model: 'gemini-3.5-flash-low',
+    model: 'gemini-3.5-flash-medium',
     status: 'will_run',
     skipSource: 'none',
     args: '',

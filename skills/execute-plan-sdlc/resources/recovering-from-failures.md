@@ -42,12 +42,13 @@ Max 1 retry. If it fails again, escalate.
 When re-dispatching a failed task, escalate the model's reasoning budget / capability up the chain:
 
 ```
-[base-model] → [base-model]-high (Retry 1) → gemini-3.1-pro-low (Retry 2) → user (escalate, do not retry further)
+[base-model] → [base-model]-high (Retry 1) → gemini-3.1-pro-low → gemini-3.1-pro-high → user (escalate, do not retry further)
 ```
 
 Examples:
 - If a task starts on `gemini-3.5-flash-medium`, it escalates to `gemini-3.5-flash-high` (Retry 1), and then to `gemini-3.1-pro-low` (Retry 2).
-- If a task starts on `gemini-3.1-pro-low`, it escalates to `gemini-3.1-pro-medium` (Retry 1), and then to `gemini-3.1-pro-high` (Retry 2).
+- If a task starts on `gemini-3.5-flash-high`, it escalates to `gemini-3.1-pro-low` (Retry 1), and then to `gemini-3.1-pro-high` (Retry 2).
+- If a task starts on `gemini-3.1-pro-low`, it escalates to `gemini-3.1-pro-high` (Retry 1), and then to `gemini-3.1-pro-high` with failure context (Retry 2).
 - If a task starts on `gemini-3.1-pro-high`, it is retried on `gemini-3.1-pro-high` with failure context (Retry 1), and then escalated to user (Retry 2 / no further escalation).
 
 Rules:
@@ -149,7 +150,7 @@ When an agent reports successful completion but `git diff --stat` shows no chang
 
    Complete the task from scratch — assume none of your previous work exists.
    ```
-    Escalate model one step per the dynamic escalation path (e.g. `[base-model] → [base-model]-high → gemini-3.1-pro-low`) and pass `mode: "bypassPermissions"` explicitly. This counts toward the 2-retry budget.
+    Escalate model one step per the dynamic escalation path (e.g. `[base-model] → [base-model]-high → gemini-3.1-pro-low → gemini-3.1-pro-high`) and pass `mode: "bypassPermissions"` explicitly. This counts toward the 2-retry budget.
 
 4. **After the retry, re-run filesystem verification.** Run `git diff --stat` and grep for the verification token. If still no changes, escalate to the user immediately — do not retry a third time. Include: "Agent reported success twice but produced no filesystem changes. Manual implementation required."
 
@@ -185,7 +186,7 @@ The agent cannot complete the task. Assess the blocker before acting:
    Provide the missing context and re-dispatch with the same or escalated model. Counts as one retry.
 
 2. **Capability problem** — the task requires more reasoning than the assigned model:
-   Re-dispatch with an escalated model (gemini-3.5-flash-medium → gemini-3.5-flash-high → gemini-3.1-pro-low). Counts as one retry.
+   Re-dispatch with an escalated model (gemini-3.5-flash-medium → gemini-3.5-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high). Counts as one retry.
 
 3. **Scope problem** — the task is too large for a single agent dispatch:
    Break the task into smaller sub-tasks. Each sub-task starts with a fresh retry budget.

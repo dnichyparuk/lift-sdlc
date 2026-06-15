@@ -231,7 +231,7 @@ Review your work before reporting. Check:
 If you find issues during self-review, fix them before reporting.
 
 ## Execution Context
-- Assigned model: {MODEL — gemini-3.5-flash-low, gemini-3.5-flash-medium, gemini-3.5-flash-high, gemini-3.1-pro-low, gemini-3.1-pro-medium, or gemini-3.1-pro-high}
+- Assigned model: {MODEL — gemini-3.5-flash-low, gemini-3.5-flash-medium, gemini-3.5-flash-high, gemini-3.1-pro-low, or gemini-3.1-pro-high}
 - Permission mode: bypassPermissions (set explicitly on this agent — do not change).
 - Attempt: {first attempt | retry N — previous attempt failed: {failure description}}
 - {If model was escalated: "Model escalated from {previous-model} to {this-model} due to prior failure."}
@@ -325,7 +325,7 @@ VERIFY Task {N}: <symbol_name> in <file_path>
 Use the primary symbol added or modified in each task. The orchestrator greps for these symbols to confirm changes persisted.
 
 ## Execution Context
-- Assigned model: {MODEL — gemini-3.5-flash-low, gemini-3.5-flash-medium, gemini-3.5-flash-high, gemini-3.1-pro-low, gemini-3.1-pro-medium, or gemini-3.1-pro-high}
+- Assigned model: {MODEL — gemini-3.5-flash-low, gemini-3.5-flash-medium, gemini-3.5-flash-high, gemini-3.1-pro-low, or gemini-3.1-pro-high}
 - Permission mode: bypassPermissions (set explicitly on this agent — do not change).
 - Attempt: {first attempt | retry N — previous attempt failed: {failure description}}
 - {If model was escalated: "Model escalated from {previous-model} to {this-model} due to prior failure."}

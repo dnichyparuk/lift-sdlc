@@ -28,18 +28,18 @@ To upgrade to a new generation of models in the future, you must update the foll
 
 ---
 
-## Inventory Mapping Table
+### Inventory Mapping Table
 
 The following table summarizes the explicit model mappings across the SDLC plugin skills, agents, and prompts, including the reasoning for their reasoning budget allocations.
 
 | File Type | Component | Target Model | Reason |
 |-----------|-----------|--------------|--------|
-| Skill | `harden-sdlc` | `gemini-3.5-flash-low` | Explicit orchestrator constraint |
-| Skill | `error-report-sdlc` | `gemini-3.5-flash-low` | Explicit orchestrator constraint |
-| Skill | `commit-sdlc` | `gemini-3.5-flash-low` | Explicit orchestrator constraint |
-| Skill | `ship-sdlc` (Explicit dispatch) | `gemini-3.5-flash-low` / `-medium`| Uses static suffixes assigned in ship.js |
-| Skill | `ship-sdlc` (Default pipeline) | `gemini-3.1-pro-low` | Uses static suffixes assigned in ship.js |
-| Skill | `plan-sdlc` | `gemini-3.5-flash-medium` & `gemini-3.1-pro-low`| Reflect the new tier mappings |
+| Skill | `harden-sdlc` | `gemini-3.5-flash-high` | High cognitive context for error analysis |
+| Skill | `error-report-sdlc` | `gemini-3.5-flash-medium` | Standard routing, formats error reports |
+| Skill | `commit-sdlc` | `gemini-3.5-flash-medium` | Standard routine parsing and generation |
+| Skill | `ship-sdlc` (Explicit dispatch) | `gemini-3.5-flash-medium` / `-high`| Uses static suffixes assigned in ship.js |
+| Skill | `ship-sdlc` (Default pipeline) | `gemini-3.5-flash-medium` | State-machine orchestrator |
+| Skill | `plan-sdlc` | `gemini-3.5-flash-medium` | Orchestrator routing and check logic |
 | Agent | `error-report-orchestrator` | `gemini-3.5-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
 | Agent | `harden-orchestrator` | `gemini-3.5-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
 | Agent | `commit-orchestrator` | `gemini-3.5-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
@@ -76,26 +76,26 @@ The following tables map exactly where specific models are hardcoded or referenc
 
 | Skill Name | File Path | Models Referenced |
 |------------|-----------|-------------------|
-| `commit-sdlc` | [skills/commit-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/commit-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
-| `error-report-sdlc` | [skills/error-report-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/error-report-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
+| `commit-sdlc` | [skills/commit-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/commit-sdlc/SKILL.md) | `gemini-3.5-flash-medium` |
+| `error-report-sdlc` | [skills/error-report-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/error-report-sdlc/SKILL.md) | `gemini-3.5-flash-medium` |
 | `execute-plan-sdlc` | [skills/execute-plan-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/execute-plan-sdlc/SKILL.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.5-flash-low`, `gemini-3.5-flash-medium`, `gemini-3.5-flash-high` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/classifying-and-waving-tasks.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/execute-plan-sdlc/classifying-and-waving-tasks.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-medium`, `gemini-3.1-pro-high`, `gemini-3.5-flash-low`, `gemini-3.5-flash-medium`, `gemini-3.5-flash-high` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/recovering-from-failures.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/execute-plan-sdlc/recovering-from-failures.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-medium`, `gemini-3.1-pro-high`, `gemini-3.5-flash-medium`, `gemini-3.5-flash-high` |
+| `execute-plan-sdlc` | [skills/execute-plan-sdlc/classifying-and-waving-tasks.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/execute-plan-sdlc/classifying-and-waving-tasks.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.5-flash-low`, `gemini-3.5-flash-medium`, `gemini-3.5-flash-high` |
+| `execute-plan-sdlc` | [skills/execute-plan-sdlc/recovering-from-failures.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/execute-plan-sdlc/recovering-from-failures.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.5-flash-medium`, `gemini-3.5-flash-high` |
 | `execute-plan-sdlc` | [skills/execute-plan-sdlc/spec-compliance-reviewer.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/execute-plan-sdlc/spec-compliance-reviewer.md) | `gemini-3.5-flash-medium` |
 | `execute-plan-sdlc` | [skills/execute-plan-sdlc/wave-runner-template.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/execute-plan-sdlc/wave-runner-template.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.5-flash-low`, `gemini-3.5-flash-medium`, `gemini-3.5-flash-high` |
-| `github-sdlc` | [skills/github-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/github-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
-| `harden-sdlc` | [skills/harden-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/harden-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
-| `jira-sdlc` | [skills/jira-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/jira-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
+| `github-sdlc` | [skills/github-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/github-sdlc/SKILL.md) | `gemini-3.5-flash-medium` |
+| `harden-sdlc` | [skills/harden-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/harden-sdlc/SKILL.md) | `gemini-3.5-flash-high` |
+| `jira-sdlc` | [skills/jira-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/jira-sdlc/SKILL.md) | `gemini-3.5-flash-medium` |
 | `plan-sdlc` | [skills/plan-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/plan-sdlc/SKILL.md) | `gemini-3.5-flash-medium`, `gemini-3.1-pro-low` |
-| `pr-sdlc` | [skills/pr-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/pr-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
-| `received-review-sdlc` | [skills/received-review-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/received-review-sdlc/SKILL.md) | `gemini-3.1-pro-low` |
+| `pr-sdlc` | [skills/pr-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/pr-sdlc/SKILL.md) | `gemini-3.5-flash-high` |
+| `received-review-sdlc` | [skills/received-review-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/received-review-sdlc/SKILL.md) | `gemini-3.5-flash-high` |
 | `review-sdlc` | [skills/review-sdlc/EXAMPLES.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/review-sdlc/EXAMPLES.md) | `gemini-3.5-flash-medium` |
 | `review-sdlc` | [skills/review-sdlc/REFERENCE.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/review-sdlc/REFERENCE.md) | `gemini-3.1-pro-low`, `gemini-3.5-flash-low`, `gemini-3.5-flash-medium` |
-| `review-sdlc` | [skills/review-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/review-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
-| `setup-sdlc` | [skills/setup-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/setup-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
-| `ship-sdlc` | [skills/ship-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/ship-sdlc/SKILL.md) | `gemini-3.1-pro-low`, `gemini-3.5-flash-low`, `gemini-3.5-flash-medium` |
-| `verify-pipeline-sdlc` | [skills/verify-pipeline-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/verify-pipeline-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
-| `version-sdlc` | [skills/version-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/version-sdlc/SKILL.md) | `gemini-3.5-flash-low` |
+| `review-sdlc` | [skills/review-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/review-sdlc/SKILL.md) | `gemini-3.5-flash-medium` |
+| `setup-sdlc` | [skills/setup-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/setup-sdlc/SKILL.md) | `gemini-3.5-flash-medium` |
+| `ship-sdlc` | [skills/ship-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/ship-sdlc/SKILL.md) | `gemini-3.5-flash-medium`, `gemini-3.5-flash-high` |
+| `verify-pipeline-sdlc` | [skills/verify-pipeline-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/verify-pipeline-sdlc/SKILL.md) | `gemini-3.5-flash-high` |
+| `version-sdlc` | [skills/version-sdlc/SKILL.md](file:///home/dzmitry/.gemini/config/plugins/sdlc/skills/version-sdlc/SKILL.md) | `gemini-3.5-flash-medium` |
 
 ### Scripts & Libraries
 *JavaScript utility files that handle budget allocation and dynamic model routing.*
@@ -105,7 +105,7 @@ The following tables map exactly where specific models are hardcoded or referenc
 | `dispatch-budget.js` | [scripts/lib/dispatch-budget.js](file:///home/dzmitry/.gemini/config/plugins/sdlc/scripts/lib/dispatch-budget.js) | `gemini-3.1-pro`, `gemini-3.5-flash` variants (suffixes stripped at runtime) |
 | `plan.js` | [scripts/skill/plan.js](file:///home/dzmitry/.gemini/config/plugins/sdlc/scripts/skill/plan.js) | `gemini-3.5-flash-low`, `gemini-3.5-flash-medium` |
 | `review.js` | [scripts/skill/review.js](file:///home/dzmitry/.gemini/config/plugins/sdlc/scripts/skill/review.js) | `gemini-3.5-flash-medium` |
-| `ship.js` | [scripts/skill/ship.js](file:///home/dzmitry/.gemini/config/plugins/sdlc/scripts/skill/ship.js) | `gemini-3.1-pro-low`, `gemini-3.5-flash-low`, `gemini-3.5-flash-medium` |
+| `ship.js` | [scripts/skill/ship.js](file:///home/dzmitry/.gemini/config/plugins/sdlc/scripts/skill/ship.js) | `gemini-3.5-flash-medium`, `gemini-3.5-flash-high` |
 
 ---
 

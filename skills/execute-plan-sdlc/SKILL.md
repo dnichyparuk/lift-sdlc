@@ -396,7 +396,7 @@ Dispatch with:
 - **`model:` is REQUIRED — no exceptions.** Omitting it causes the wave-runner to inherit the parent model (gemini-3.1-pro-low), defeating the quality-tier system.
 - **DO NOT pass `isolation: "worktree"` (or any other `isolation` value) to the Agent tool.** The SDLC `--workspace worktree` flag controls a separate concept (a sibling git worktree created via `util/worktree-create.js`). Adding `isolation` here creates ephemeral `.sdlc/worktrees/agent-<id>` paths that are not the intended SDLC worktree. Implements R-no-agent-sdk-isolation from spec. See issues #370 #372. (Mirrors the R-agent-isolation-script-driven constraint in ship-sdlc/SKILL.md.)
 
-The wave-runner Agent handles in-wave per-task fan-out internally — it dispatches one per-task Agent per Standard/Complex task and one batch-gemini-3.5-flash-low Agent for any 2+ Trivials, all within its own context. A single Trivial in a wave is dispatched by the wave-runner as an inline single-agent, not a batch. Per-task retries are the wave-runner's responsibility, following a 2-retry dynamic reasoning escalation path: `[base-model] → [base-model]-high → gemini-3.1-pro-low`. (For example, a task starting on `gemini-3.5-flash-medium` escalates to `gemini-3.5-flash-high` on the first retry, then to `gemini-3.1-pro-low` on the second).
+The wave-runner Agent handles in-wave per-task fan-out internally — it dispatches one per-task Agent per Standard/Complex task and one batch-gemini-3.5-flash-low Agent for any 2+ Trivials, all within its own context. A single Trivial in a wave is dispatched by the wave-runner as an inline single-agent, not a batch. Per-task retries are the wave-runner's responsibility, following a 2-retry dynamic reasoning escalation path: escalating one step per retry (e.g., if starting on `gemini-3.5-flash-medium`, it escalates to `gemini-3.5-flash-high` on the first retry, then `gemini-3.1-pro-low` on the second; if starting on `gemini-3.5-flash-high`, it escalates to `gemini-3.1-pro-low` on the first retry, then `gemini-3.1-pro-high` on the second).
 
 **5c. Collect and verify** — After the wave-runner Agent returns:
 
@@ -633,7 +633,7 @@ Gate phrasing invariant (no-opposite-logical-vectors): the "wave complete" condi
 | Failure Type | Recovery Action |
 |---|---|
 | Agent error / incomplete output (gemini-3.5-flash-medium task) | Re-dispatch with failure context: escalate to `gemini-3.5-flash-high` (Retry 1), then to `gemini-3.1-pro-low` (Retry 2) |
-| Agent error / incomplete output (gemini-3.1-pro-low task) | Re-dispatch with failure context: escalate to `gemini-3.1-pro-medium` (Retry 1), then to `gemini-3.1-pro-high` (Retry 2) |
+| Agent error / incomplete output (gemini-3.1-pro-low task) | Re-dispatch with failure context: escalate to `gemini-3.1-pro-high` (Retry 1), then to `gemini-3.1-pro-high` with failure context (Retry 2) |
 | File conflict between agents | Resolve manually in main context; re-run affected verification |
 | Test failure (1-2 tests) | Fix inline in main context |
 | Test failure (3+ tests) | Stop; diagnose root cause before proceeding |

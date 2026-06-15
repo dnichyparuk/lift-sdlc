@@ -160,20 +160,20 @@ The `--quality` flag (provided in `ship-sdlc` or `execute-plan-sdlc`) configures
 For agent dispatches, computational reasoning limits are assigned statically via hardcoded suffixes appended to the target model identifier:
 * **`-low`:** Minimizes latency and costs by skipping extended reasoning loops (e.g., `gemini-3.5-flash-low`). Permanently mapped to orchestrators (like `wave-runner` and `error-report-orchestrator`), simple extractors, and fast mechanical validators.
 * **`-medium`:** Balanced reasoning depth and cost optimization (e.g., `gemini-3.5-flash-medium`). Mapped to workers executing standard, multi-file code generation.
-* **`-high`:** Allocates maximum dynamic reasoning and computation steps (e.g., `gemini-3.1-pro-high`). Reserved strictly for workers executing ambiguous, high-stakes architectural tasks and complex coding.
+* **`-high`:** Allocates maximum dynamic reasoning and computation steps (e.g., `gemini-3.5-flash-high` or `gemini-3.1-pro-high`). Reserved strictly for workers executing ambiguous, high-stakes architectural tasks and complex coding/review.
 
-*Note: Per-task workers dynamically inherit reasoning suffixes through the Model Presets, while orchestrators are permanently locked to `-low` budgets since they only perform mechanical string parsing and routing.*
+*Note: Per-task workers dynamically inherit reasoning suffixes through the Model Presets, while orchestrators are permanently locked to `-low` or `-medium` budgets since they only perform mechanical string parsing and routing.*
 
 ### C. Complete Model Inventory Mapping
 
 | File Type | Component / Prompt | Target Model | Reasoning Allocation & Rationale |
 |---|---|---|---|
-| **Skill** | `harden-sdlc` | `gemini-3.5-flash-low` | Compact input profile; requires fast classification. |
-| **Skill** | `error-report-sdlc` | `gemini-3.5-flash-low` | Simple template filling based on tooling failures. |
-| **Skill** | `commit-sdlc` | `gemini-3.5-flash-low` | Staged diff summary evaluation. |
-| **Skill** | `ship-sdlc` (Explicit dispatch) | `gemini-3.5-flash-medium` | General pipeline state verification; requires log headroom. |
-| **Skill** | `ship-sdlc` (Default pipeline) | `gemini-3.1-pro-low` | Default execute orchestrator routing (DAG sorting). |
-| **Skill** | `plan-sdlc` | `gemini-3.5-flash-medium` & `gemini-3.1-pro-low` | Split routing based on plan complexity. |
+| **Skill** | `harden-sdlc` | `gemini-3.5-flash-high` | High cognitive context for error analysis |
+| **Skill** | `error-report-sdlc` | `gemini-3.5-flash-medium` | Standard routing, formats error reports |
+| **Skill** | `commit-sdlc` | `gemini-3.5-flash-medium` | Standard routine parsing and generation |
+| **Skill** | `ship-sdlc` (Explicit dispatch) | `gemini-3.5-flash-medium` / `-high` | Uses static suffixes assigned in ship.js |
+| **Skill** | `ship-sdlc` (Default pipeline) | `gemini-3.5-flash-medium` | State-machine orchestrator |
+| **Skill** | `plan-sdlc` | `gemini-3.5-flash-medium` | Orchestrator routing and check logic |
 | **Agent** | `error-report-orchestrator` | `gemini-3.5-flash-low` | Structured markdown parser. |
 | **Agent** | `harden-orchestrator` | `gemini-3.5-flash-low` | Structured JSON classification output. |
 | **Agent** | `commit-orchestrator` | `gemini-3.5-flash-low` | Subject & body construction under 72 chars. |

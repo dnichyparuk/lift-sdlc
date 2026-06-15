@@ -620,11 +620,11 @@ If the `verify-pipeline` step has `status: "will_run"` (gated by step membership
    > Wave verify-pipeline failed for PR #N. <X> failed checks: <names>.
    >
    > Options: **analyze** (Recommended) | **skip** | **abort**
-   - **analyze**: dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.5-flash-medium) with `--pr <N>` and `--logs <inline-log-excerpt-from-failedChecks>`. On verdict `fix-applied`, dispatch `commit-sdlc` (Agent tool, model gemini-3.5-flash-low, `--auto`) directly to commit and push. Then re-run verify-pipeline (loop). Iteration cap = `flags.verifyPipelineMaxIterations` (default 3, R47); after cap, log warning and proceed to `await-remote-review`. The pre-existing `commit-fixes` step entry (already visited before `pr`) is NOT involved — this dispatch is direct via the Agent tool.
+   - **analyze**: dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.5-flash-high) with `--pr <N>` and `--logs <inline-log-excerpt-from-failedChecks>`. On verdict `fix-applied`, dispatch `commit-sdlc` (Agent tool, model gemini-3.5-flash-medium, `--auto`) directly to commit and push. Then re-run verify-pipeline (loop). Iteration cap = `flags.verifyPipelineMaxIterations` (default 3, R47); after cap, log warning and proceed to `await-remote-review`. The pre-existing `commit-fixes` step entry (already visited before `pr`) is NOT involved — this dispatch is direct via the Agent tool.
    - **skip**: log warning, proceed to `await-remote-review`.
    - **abort**: write `verifyPipelineExhausted: true` to the ship state file, exit pipeline 1.
 
-   **`status === "failed"`** AND `flags.auto === true` — non-interactive (R46). Directly dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.5-flash-medium) with `--pr <N> --logs <excerpt> --auto`. On `fix-applied`, dispatch `commit-sdlc --auto` directly. Loop with the same iteration cap (`flags.verifyPipelineMaxIterations`, R47). On cap exhaustion, log warning and proceed.
+   **`status === "failed"`** AND `flags.auto === true` — non-interactive (R46). Directly dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.5-flash-high) with `--pr <N> --logs <excerpt> --auto`. On `fix-applied`, dispatch `commit-sdlc --auto` directly (Agent tool, model gemini-3.5-flash-medium). Loop with the same iteration cap (`flags.verifyPipelineMaxIterations`, R47). On cap exhaustion, log warning and proceed.
 
    **`status === "timeout"`** — log warning `verify-pipeline: timeout after Ns`. The script has already written `verifyPipelineExhausted: true` to the state file. Proceed to `await-remote-review`. Cites R48, R49.
 
@@ -653,7 +653,7 @@ If the `await-remote-review` step has `status: "will_run"` (gated by step member
    ```
 3. Parse the single JSON line on stdout. Branch on `status`:
 
-   **`status === "actionable"`** — directly dispatch `received-review-sdlc` (Agent tool, model gemini-3.5-flash-medium) with `--pr <verdict.prNumber>` (and `--auto` when `flags.auto === true`). After the subagent completes, run `git status --porcelain` in the main context; if there are working-tree changes, directly dispatch `commit-sdlc` (Agent tool, model gemini-3.5-flash-low, `--auto`) to commit and push. The pre-existing `received-review` and `commit-fixes` step entries (already visited before `pr`) are NOT involved — these dispatches are direct via the Agent tool. Cites R52.
+   **`status === "actionable"`** — directly dispatch `received-review-sdlc` (Agent tool, model gemini-3.5-flash-high) with `--pr <verdict.prNumber>` (and `--auto` when `flags.auto === true`). After the subagent completes, run `git status --porcelain` in the main context; if there are working-tree changes, directly dispatch `commit-sdlc` (Agent tool, model gemini-3.5-flash-medium, `--auto`) to commit and push. The pre-existing `received-review` and `commit-fixes` step entries (already visited before `pr`) are NOT involved — these dispatches are direct via the Agent tool. Cites R52.
 
    **`status === "approved-clean"`** — log `await-remote-review: APPROVED by <reviewer>` and proceed. Do NOT dispatch received-review-sdlc. Cites R53.
 
