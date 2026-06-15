@@ -218,91 +218,27 @@ Identify constraints: language, framework, existing conventions, testing approac
 - Use `tasks.md` as a coarse reference for decomposition — OpenSpec tasks are higher-level than plan-sdlc tasks, so decompose further rather than copying verbatim
 - When the OpenSpec artifacts provide sufficient scope, integration, and success criteria, skip the "Structured discovery" AskUserQuestion — the proposal and delta specs already answer those questions
 
-**Write to plan file:** After exploration, update the plan file:
-- Fill in Goal, Architecture, Verification header fields
-- Append a `## Requirements` section with numbered checklist (one bullet per requirement)
-
-**Re-anchor:** Before leaving Step 1, re-read the plan file's Requirements section. This counters attention drift after many exploration calls.
-
-## Step 2 (PLAN): Decompose Into Tasks
+## Step 2 (PLAN): Orchestrate Plan Generation
 
 **Scope check:** If requirements span independent subsystems with no shared state, use AskUserQuestion:
 > These requirements cover independent subsystems. Recommend splitting into N plans. Proceed as one plan or split?
 
 Wait for answer.
 
-**File structure mapping** — before writing tasks, map out:
-- Files to create (path + one-line responsibility)
-- Files to modify (path + what changes)
-- Test files (aligned with source files)
-
-**`fromOpenspecDirect` decomposition:** When `fromOpenspecDirect` is true:
-- Adopt the task structure from `tasks.md` as the starting skeleton
-- For each OpenSpec task: map to one plan task (or split if > 5 files), add Complexity/Risk/Depends on/Verify metadata, and expand the description to be self-contained for agent dispatch
-- If `tasks.md` is absent (prepare output shows `hasTasks: false`), fall back to standard decomposition from delta specs below
-
-**OpenSpec task annotation (implements R29 — Fixes #414):** When `fromOpenspecDirect` is true AND `openspecContext.tasks[]` is non-null in the prepare output, each plan task derived from one or more OpenSpec tasks MUST carry an `openspec-task:` block beneath its standard metadata fields. Format documented in `./resources/plan-format-reference.md`:
-
+**Orchestrator dispatch:**
+Dispatch the `sdlc:plan-generation-orchestrator` Agent exactly once with inputs:
 ```
-**openspec-task:**
-- change: <change-name>
-- ref: <kebab-slug-6char-hash from openspecContext.tasks[i].ref>
-- line: <openspecContext.tasks[i].line>
-- title: <openspecContext.tasks[i].title>
+USER_PROMPT: <verbatim user request>
+PLAN_FILE_PATH: <absolute path to plan file>
+BRIEF_FILE: <absolute path to discovery-brief.md, or "none">
+OPENSPEC_CONTEXT: <space-separated path list, or "none">
+PROJECT_ROOT: <cwd>
+FROM_OPENSPEC_DIRECT: <"true" or "false">
 ```
 
-Plan tasks NOT derived from any OpenSpec task MUST omit the field. N:1 mapping (multiple plan tasks → same `ref`) is allowed when one OpenSpec task expands into several plan tasks — copy the same `change`/`ref`/`line`/`title` quad on each.
+The `plan-generation-orchestrator` handles file mapping, task decomposition (with exact metadata formatting), Key Decisions writing, OpenSpec constraints validation, and writes the entire generated content to the plan file path.
 
-**Out-of-scope OpenSpec tasks (implements R30):** When the plan introduces a plan-only task with no OpenSpec source, the plan-author MUST also append (or extend) an `## Out-of-scope OpenSpec tasks` section listing each uncovered OpenSpec task title with a one-line rationale — OR add at least one plan task carrying that `ref`. Every entry from `openspecContext.tasks[]` must be either covered by ≥1 plan task's `openspec-task.ref` OR listed in `## Out-of-scope OpenSpec tasks`. This is enforced by G16 in Step 3.
-
-**Task decomposition rules:**
-- Each task = one independently completable unit with a clear deliverable
-- Each task touches 1–5 files (more than 5 → split)
-- Order: foundations → features → integration → polish
-- Dependencies explicit (task B names task A if it needs A's output)
-
-**OpenSpec-aware decomposition (when `openspecContext` is available):**
-- Map each ADDED and MODIFIED requirement from the delta specs to at least one task
-- In the Key Decisions section, note which OpenSpec `design.md` decisions were adopted and which (if any) were overridden with rationale
-- Set the plan header `**Source:**` field to `openspec/changes/<name>/` (not "conversation context")
-
-**Key decisions:** Note every decision where you chose between valid approaches. Focus on choices where a reasonable implementer might differ without the rationale. Skip obvious decisions.
-
-**Per-task metadata (required, consumed by execute-plan-sdlc):** Use the exact format from `./resources/plan-format-reference.md`:
-
-```markdown
-### Task N: [Component Name]
-
-**Complexity:** Trivial | Standard | Complex
-**Risk:** Low | Medium | High
-**Depends on:** Task X, Task Y (or "none")
-**Verify:** tests | build | lint | manual
-
-**Files:**
-- Create: `exact/path/to/file.ts`
-- Modify: `exact/path/to/existing.ts` — [what changes]
-- Test: `tests/exact/path/to/test.ts`
-
-**Description:**
-[What to implement, how it connects to existing code, expected behavior, edge cases.
-Complete enough that an agent with no codebase context can execute it.]
-
-**Acceptance criteria:**
-- [ ] [Specific, verifiable criterion]
-- [ ] [Another criterion]
-```
-
-**Verification strategy — match to task type:**
-- Feature/logic → TDD (write failing test, implement, pass)
-- Config/infrastructure → build verification
-- Documentation → manual review
-- Integration → integration test or E2E
-
-Do not mandate TDD for config, documentation, or infrastructure tasks.
-
-**Write to plan file:** Append Key Decisions section (if applicable) and all task blocks.
-
-**Post-write cleanup:** Remove the `## Requirements` working section from the plan file. Requirements are traceable through task acceptance criteria; the section was temporary scaffolding.
+**Wait for the orchestrator to finish** before proceeding to Step 3. The orchestrator returns a short summary upon writing the plan.
 
 ## Step 3 (CRITIQUE): Self-Review Plan — 5-Lane Parallel Gate Evaluation (R35, Fixes #418)
 
