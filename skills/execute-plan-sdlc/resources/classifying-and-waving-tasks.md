@@ -208,6 +208,7 @@ The orchestrator can provide more context, escalate to a more capable model, bre
 - Do NOT read the plan file — all task information is provided above
 - Do NOT modify files outside the "Files You May Touch" list
 - **Use the Edit tool exclusively for all file modifications.** Never use bash sed, awk, perl, Python scripts, Go programs, or any other indirect method to patch files. If a file needs changing, use Edit. No exceptions.
+- **Always run verification commands (tests, builds, linters) via the truncated wrapper script** to prevent context bloat: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`
 - If you encounter a genuine blocker, report it clearly rather than guessing or hallucinating an implementation
 - Do not add features, refactor, or clean up code beyond what the task requires
 
@@ -313,6 +314,7 @@ For each task, report:
 - Complete tasks in the listed order
 - Do NOT modify files outside each task's "Files you may touch" list
 - **Use the Edit tool exclusively for all file modifications.** Never use bash sed, awk, perl, Python scripts, Go programs, or any other indirect method to patch files. If a file needs changing, use Edit. No exceptions.
+- **Always run verification commands (tests, builds, linters) via the truncated wrapper script** to prevent context bloat: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`
 - If one task fails, continue to the next — do not stop the batch
 - Report per-task status even if some tasks fail
 - Do not add features, refactor, or clean up beyond what each task requires
