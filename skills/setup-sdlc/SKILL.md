@@ -588,7 +588,7 @@ Render `DIFF_JSON.changed[]` as a markdown table:
 ```text
 | path                      | before        | after         |
 |---------------------------|---------------|---------------|
-| pr.expectedAccount        | (unset)       | rnagrodzki    |
+| pr.expectedAccount        | (unset)       | dnichyparuk   |
 | version.tagPrefix         | v             | release/      |
 ```
 

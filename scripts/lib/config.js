@@ -33,9 +33,9 @@ function emitLegacyProjectWarningOnce() {
 }
 
 const PROJECT_SCHEMA_URL =
-  'https://raw.githubusercontent.com/rnagrodzki/sdlc-marketplace/main/schemas/sdlc-config.schema.json';
+  'https://raw.githubusercontent.com/dnichyparuk/antigravity-sdlc/main/schemas/sdlc-config.schema.json';
 const LOCAL_SCHEMA_URL =
-  'https://raw.githubusercontent.com/rnagrodzki/sdlc-marketplace/main/schemas/sdlc-local.schema.json';
+  'https://raw.githubusercontent.com/dnichyparuk/antigravity-sdlc/main/schemas/sdlc-local.schema.json';
 
 const PRESET_NAMES = ['full', 'balanced', 'minimal'];
 const LEGACY_PRESET_MAP = { A: 'full', B: 'balanced', C: 'minimal' };

@@ -33,7 +33,7 @@ To migrate explicitly without waiting for the next ship run, run `/setup-sdlc --
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rnagrodzki/sdlc-marketplace/main/schemas/sdlc-local.schema.json",
+  "$schema": "https://raw.githubusercontent.com/dnichyparuk/antigravity-sdlc/main/schemas/sdlc-local.schema.json",
   "schemaVersion": 4,
   "ship": {
     "steps": ["execute", "commit", "review", "version", "archive-openspec", "pr", "verify-pipeline", "await-remote-review", "learnings-commit"],
@@ -156,7 +156,7 @@ Skips the version step (manual version bump) and runs auto.
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rnagrodzki/sdlc-marketplace/main/schemas/sdlc-local.schema.json",
+  "$schema": "https://raw.githubusercontent.com/dnichyparuk/antigravity-sdlc/main/schemas/sdlc-local.schema.json",
   "schemaVersion": 4,
   "ship": {
     "steps": ["execute", "commit", "review", "archive-openspec", "pr"],
@@ -175,7 +175,7 @@ All canonical steps run; review threshold catches high-severity findings; PRs de
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rnagrodzki/sdlc-marketplace/main/schemas/sdlc-local.schema.json",
+  "$schema": "https://raw.githubusercontent.com/dnichyparuk/antigravity-sdlc/main/schemas/sdlc-local.schema.json",
   "schemaVersion": 4,
   "ship": {
     "steps": ["execute", "commit", "review", "version", "archive-openspec", "pr"],
@@ -194,7 +194,7 @@ Smallest step set with widest review threshold. Suitable for regulated environme
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rnagrodzki/sdlc-marketplace/main/schemas/sdlc-local.schema.json",
+  "$schema": "https://raw.githubusercontent.com/dnichyparuk/antigravity-sdlc/main/schemas/sdlc-local.schema.json",
   "schemaVersion": 4,
   "ship": {
     "steps": ["execute", "commit", "pr"],

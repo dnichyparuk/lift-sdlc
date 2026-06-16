@@ -25,7 +25,7 @@ const { resolveSdlcRoot } = require(path.join(LIB, 'config'));
 // lib/harden-surfaces.js, do NOT share with error-report-prepare.js::TARGET_REPO.
 // The two constants live independently in their own scripts so each script has
 // a single, locally-visible source of truth.
-const PLUGIN_REPO_URL = 'https://github.com/rnagrodzki/sdlc-marketplace';
+const PLUGIN_REPO_URL = 'https://github.com/dnichyparuk/antigravity-sdlc';
 
 // ---------------------------------------------------------------------------
 // CLI parsing — mirror error-report-prepare.js posture

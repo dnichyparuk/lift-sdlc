@@ -1,6 +1,6 @@
 ---
 name: error-report-sdlc
-description: "Internal skill invoked by other SDLC skills when they encounter an actionable error (script crash, CLI failure, persistent API error, build failure after retries). Proposes creating a GitHub issue in rnagrodzki/sdlc-marketplace to track the error with full context capture, two-gate user consent, and pre-flight verification. NOT user-invocable — only dispatched from within another skill's error handling path. When dispatched, follow ./resources/REFERENCE.md for the full procedure."
+description: "Internal skill invoked by other SDLC skills when they encounter an actionable error (script crash, CLI failure, persistent API error, build failure after retries). Proposes creating a GitHub issue in dnichyparuk/antigravity-sdlc to track the error with full context capture, two-gate user consent, and pre-flight verification. NOT user-invocable — only dispatched from within another skill's error handling path. When dispatched, follow ./resources/REFERENCE.md for the full procedure."
 user-invocable: false
 disable-model-invocation: true
 model: gemini-3.5-flash-medium
@@ -15,7 +15,7 @@ model: gemini-3.5-flash-medium
 
 Internal procedure invoked by SDLC skills when an actionable error occurs.
 Captures error context, verifies gh CLI availability, gets user consent, and
-creates a tracking issue in `rnagrodzki/sdlc-marketplace` using the gh CLI.
+creates a tracking issue in `dnichyparuk/antigravity-sdlc` using the gh CLI.
 
 The skill body runs in the main parent-model context. The heavy work — assembling
 the issue title and body from the error context and the `templates/ToolingError.md`
@@ -144,7 +144,7 @@ invoking `gh`.
 
 ```bash
 gh issue create \
-  --repo "rnagrodzki/sdlc-marketplace" \
+  --repo "dnichyparuk/antigravity-sdlc" \
   --title "$PROPOSAL_TITLE" \
   --body "$PROPOSAL_BODY" \
   --label "tooling-error" \
@@ -175,6 +175,6 @@ loop exit).
   tool. Posting MUST run in the main context.
 - Create a GitHub issue without both consent gates passing.
 - Block or replace the calling skill's normal error handling.
-- Create issues in a repository other than `rnagrodzki/sdlc-marketplace`.
+- Create issues in a repository other than `dnichyparuk/antigravity-sdlc`.
 - Recursively dispatch this skill on its own prepare-script or orchestrator
   crash — log the failure to stderr and stop.
