@@ -187,9 +187,9 @@ Each task is classified as **Trivial**, **Standard**, or **Complex** based on sc
 
 | Agent | Model | Notes |
 |---|---|---|
-| wave-runner | flash-low | Permanently locked — performs routing only |
-| spec compliance reviewer | flash-high | **Skipped on Speed tier** and on trivial-only waves |
-| plan-execution-validator | pro-low | Always pro-low |
+| **Plan execution orchestrator** | flash-low | Permanently locked — performs routing only. |
+| **Spec compliance reviewer** | flash-high | **Skipped on Speed tier** and on trivial-only waves. |
+| **Plan execution validator** | pro-low | Always pro-low. |
 
 ### Feature Differences by Tier
 
