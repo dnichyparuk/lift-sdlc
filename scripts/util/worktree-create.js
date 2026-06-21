@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * worktree-create.js
- * Collision-safe git worktree creation for LiftCD.
+ * Collision-safe git worktree creation for Lift-SDLC.
  *
  * Usage:
  *   node worktree-create.js --name <branch-name>

@@ -746,7 +746,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
   // step has status: "failed", `normal` otherwise.
   //
   // The path resolution is deferred to the skill (find ~/.gemini/config/plugins +
-  // fallback to plugins/liftcd/scripts/state/ship.js) — same pattern
+  // fallback to plugins/lift-sdlc/scripts/state/ship.js) — same pattern
   // as every other state-script invocation in SKILL.md. We pass the script
   // path placeholder `<state-ship>` here for documentation; the skill
   // substitutes `$SCRIPT` at runtime.

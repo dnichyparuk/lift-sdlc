@@ -1,12 +1,12 @@
 # Quality Tiers & Workflow Configuration Guide
 
-This guide explains how quality tiers work within LiftCD, the available options for model routing, and how to configure workflows to enforce different quality presets dynamically or via configuration files.
+This guide explains how quality tiers work within Lift-SDLC, the available options for model routing, and how to configure workflows to enforce different quality presets dynamically or via configuration files.
 
 ---
 
 ## 1. What are Quality Tiers?
 
-LiftCD uses a **quality-tier model routing system** to balance execution speed, correctness, and API cost. Instead of using a single global model for every action, orchestrators dispatch sub-agents using models tailored to the complexity and risk of each task.
+Lift-SDLC uses a **quality-tier model routing system** to balance execution speed, correctness, and API cost. Instead of using a single global model for every action, orchestrators dispatch sub-agents using models tailored to the complexity and risk of each task.
 
 Tasks are categorized as:
 - **Trivial / Standard Tasks**: Single-file changes, small edits (< 15 lines), or routine test writing.
@@ -93,7 +93,7 @@ Selecting an option will automatically save it to your local config file.
 
 ## 5. Code & Implementation References
 
-If you are developing LiftCD or updating the model definitions, refer to the following source files:
+If you are developing Lift-SDLC or updating the model definitions, refer to the following source files:
 
 *   **Configuration Schema**: [scripts/lib/ship-fields.js](scripts/lib/ship-fields.js) is the single source of truth defining the `quality` config field schema, option validations, and description text.
 *   **Resolution and Precedence**: [scripts/skill/ship.js](scripts/skill/ship.js) handles merging the config files with any command-line options and passes the resolved flag down.

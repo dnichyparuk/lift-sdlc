@@ -1,10 +1,10 @@
-# Model Usage & References in LiftCD
+# Model Usage & References in Lift-SDLC
 
-This document outlines how models are utilized across LiftCD, how the dynamic quality presets behave, and provides a reference map to simplify future model upgrades.
+This document outlines how models are utilized across Lift-SDLC, how the dynamic quality presets behave, and provides a reference map to simplify future model upgrades.
 
 ## Overview
 
-LiftCD uses a **quality-tier model routing system** to assign different models based on the complexity, risk, and size of the task. Instead of using a single global model for every action, orchestrators dispatch sub-agents dynamically. 
+Lift-SDLC uses a **quality-tier model routing system** to assign different models based on the complexity, risk, and size of the task. Instead of using a single global model for every action, orchestrators dispatch sub-agents dynamically. 
 
 - **Trivial/Standard Tasks:** Routed to `gemini-3.5-flash-low` or `gemini-3.5-flash-medium` to prioritize speed, low latency, and cost-efficiency.
 - **Complex/Architectural Tasks:** Routed to `gemini-3.1-pro-high` (or `gemini-3.1-pro-low` in full mode) to ensure maximum correctness and deep reasoning.
@@ -30,7 +30,7 @@ To upgrade to a new generation of models in the future, you must update the foll
 
 ### Inventory Mapping Table
 
-The following table summarizes the explicit model mappings across LiftCD skills, agents, and prompts, including the reasoning for their reasoning budget allocations.
+The following table summarizes the explicit model mappings across Lift-SDLC skills, agents, and prompts, including the reasoning for their reasoning budget allocations.
 
 | File Type | Component | Target Model | Reason |
 |-----------|-----------|--------------|--------|

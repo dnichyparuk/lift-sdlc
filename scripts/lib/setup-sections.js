@@ -514,7 +514,7 @@ const SETUP_SECTIONS = [
   {
     id: 'openspec-block',
     label: 'openspec-block',
-    purpose: 'Managed block injected into openspec/config.yaml that supplies LiftCD workflow guidance to OpenSpec-aware skills (/plan-sdlc, /execute-plan-sdlc, /ship-sdlc). Idempotent: re-running at the same plugin version is a no-op; version bumps update the block in place.',
+    purpose: 'Managed block injected into openspec/config.yaml that supplies Lift-SDLC workflow guidance to OpenSpec-aware skills (/plan-sdlc, /execute-plan-sdlc, /ship-sdlc). Idempotent: re-running at the same plugin version is a no-op; version bumps update the block in place.',
     configFile: 'openspec/config.yaml',
     configPath: '<managed-block>',
     consumedBy: ['plan-sdlc', 'execute-plan-sdlc', 'ship-sdlc'],

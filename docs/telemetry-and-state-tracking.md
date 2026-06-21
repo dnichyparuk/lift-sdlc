@@ -1,6 +1,6 @@
 # Telemetry and State Tracking
 
-This document describes LiftCD's built-in state tracking and session management system.
+This document describes Lift-SDLC's built-in state tracking and session management system.
 
 ## Overview
 
@@ -311,7 +311,7 @@ To prevent repeated permission prompts, add to `~/.gemini/antigravity-cli/settin
   "permissions": {
     "allow": [
       "command(node .*/\\.gemini/config/plugins/.*)",
-      "command(.*/\.gemini/config/plugins/liftcd/skills/.*/scripts/.*)"
+      "command(.*/\.gemini/config/plugins/lift-sdlc/skills/.*/scripts/.*)"
     ]
   }
 }

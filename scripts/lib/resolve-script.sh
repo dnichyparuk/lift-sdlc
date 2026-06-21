@@ -8,9 +8,9 @@
 #
 # Example:
 #   RESOLVER=$(find ~/.gemini/config/plugins -name "resolve-script.sh" -path "*/sdlc*/scripts/lib/resolve-script.sh" 2>/dev/null | sort -V | tail -1)
-#   [ -z "$RESOLVER" ] && [ -f "plugins/liftcd/scripts/lib/resolve-script.sh" ] && RESOLVER="plugins/liftcd/scripts/lib/resolve-script.sh"
+#   [ -z "$RESOLVER" ] && [ -f "plugins/lift-sdlc/scripts/lib/resolve-script.sh" ] && RESOLVER="plugins/lift-sdlc/scripts/lib/resolve-script.sh"
 #   [ -n "$RESOLVER" ] && . "$RESOLVER"
-#   SCRIPT=$(resolve_script "harden-prepare.js" "*/sdlc*/scripts/skill/harden-prepare.js" "plugins/liftcd/scripts/skill/harden-prepare.js")
+#   SCRIPT=$(resolve_script "harden-prepare.js" "*/sdlc*/scripts/skill/harden-prepare.js" "plugins/lift-sdlc/scripts/skill/harden-prepare.js")
 
 resolve_script() {
   local name="$1" pattern="$2" local_path="$3" found

@@ -128,7 +128,7 @@ function detect(projectRoot) {
   if (openspecConfigExists) {
     try {
       const configContent = fs.readFileSync(openspecConfigPath, 'utf8');
-      const beginMatch = /^# BEGIN MANAGED BY liftcd \(v(\d+)\)$/m.exec(configContent);
+      const beginMatch = /^# BEGIN MANAGED BY lift-sdlc \(v(\d+)\)$/m.exec(configContent);
       if (beginMatch) {
         openspecManagedBlockVersion = parseInt(beginMatch[1], 10);
       }

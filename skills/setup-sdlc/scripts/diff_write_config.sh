@@ -4,8 +4,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDLC_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 LIB_CONFIG="$SDLC_ROOT/scripts/lib/config.js"
-[ ! -f "$LIB_CONFIG" ] && { echo "ERROR: Could not locate scripts/lib/config.js. Is the LiftCD plugin installed?" >&2; exit 2; }
-[ -z "$LIB_CONFIG" ] && [ -f "plugins/liftcd/scripts/lib/config.js" ] && LIB_CONFIG="plugins/liftcd/scripts/lib/config.js"
+[ ! -f "$LIB_CONFIG" ] && { echo "ERROR: Could not locate scripts/lib/config.js. Is the Lift-SDLC plugin installed?" >&2; exit 2; }
+[ -z "$LIB_CONFIG" ] && [ -f "plugins/lift-sdlc/scripts/lib/config.js" ] && LIB_CONFIG="plugins/lift-sdlc/scripts/lib/config.js"
 
 # Write JSON snapshots to temp files to avoid shell quoting hazards with
 # embedded quotes and newlines inside $BEFORE_JSON / $AFTER_JSON.

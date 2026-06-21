@@ -35,7 +35,7 @@ const { execSync } = require('node:child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 const { writeOutput } = require(path.join(LIB, 'output'));
 
-const TARGET_REPO = 'dnichyparuk/liftcd';
+const TARGET_REPO = 'dnichyparuk/lift-sdlc';
 
 // ---------------------------------------------------------------------------
 // CLI parsing

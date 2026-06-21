@@ -92,7 +92,7 @@ Task tool (general-purpose):
     - **U5**: Trigger glob uses `**` but new files are outside the wildcard scope. Severity: medium.
     - **U6**: Plan adds ≥3 files to a path family where the dimension's trigger is a specific filename (not a glob). Severity: medium.
 
-    Suppression rule: do NOT fire UPDATE criteria for doc-only diffs where ALL plan paths match `docs/**`, `README*`, or `*.md` files outside the `plugins/liftcd/skills/` directory.
+    Suppression rule: do NOT fire UPDATE criteria for doc-only diffs where ALL plan paths match `docs/**`, `README*`, or `*.md` files outside the `plugins/lift-sdlc/skills/` directory.
 
     ### Step G — Evaluate UPDATE-behavior criteria (B1–B4)
 

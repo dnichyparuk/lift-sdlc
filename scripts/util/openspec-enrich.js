@@ -2,7 +2,7 @@
 /**
  * openspec-enrich.js
  * Idempotent enrichment of openspec/config.yaml with a managed block
- * pointing contributors to LiftCD skills.
+ * pointing contributors to Lift-SDLC skills.
  *
  * Usage:
  *   node openspec-enrich.js [--remove] [--project-root <path>] [--output-file]
@@ -29,12 +29,12 @@ const { resolveSdlcRoot } = require(path.join(__dirname, '..', 'lib', 'config'))
 
 const OPENSPEC_ENRICH_VERSION = 2;
 
-const BEGIN_RE = /^# BEGIN MANAGED BY liftcd \(v(\d+)\)$/m;
-const END_RE   = /^# END MANAGED BY liftcd \(v\d+\)$/m;
+const BEGIN_RE = /^# BEGIN MANAGED BY lift-sdlc \(v(\d+)\)$/m;
+const END_RE   = /^# END MANAGED BY lift-sdlc \(v\d+\)$/m;
 
-const BLOCK_TEMPLATE = `# BEGIN MANAGED BY liftcd (v${OPENSPEC_ENRICH_VERSION})
+const BLOCK_TEMPLATE = `# BEGIN MANAGED BY lift-sdlc (v${OPENSPEC_ENRICH_VERSION})
 context: |
-  SDLC workflow managed by LiftCD. Do not edit this block manually.
+  SDLC workflow managed by Lift-SDLC. Do not edit this block manually.
   To update: /setup-sdlc --openspec-enrich. To remove: /setup-sdlc --remove-openspec.
 
   Contributor workflow:
@@ -44,7 +44,7 @@ context: |
 
   Do not invoke \`openspec archive\` directly — /ship-sdlc handles archival
   as a conditional pipeline step after validation passes.
-# END MANAGED BY liftcd (v${OPENSPEC_ENRICH_VERSION})`;
+# END MANAGED BY lift-sdlc (v${OPENSPEC_ENRICH_VERSION})`;
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -174,7 +174,7 @@ function enrich(configPath, { remove } = {}) {
         version: OPENSPEC_ENRICH_VERSION,
         path: configPath,
         changed: false,
-        warning: 'Top-level context: key already present in openspec/config.yaml. Refusing to inject a duplicate. Manually fold LiftCD guidance into your existing context: value, then re-run --openspec-enrich.',
+        warning: 'Top-level context: key already present in openspec/config.yaml. Refusing to inject a duplicate. Manually fold Lift-SDLC guidance into your existing context: value, then re-run --openspec-enrich.',
       };
     }
     const separator = content.endsWith('\n') ? '\n' : '\n\n';
@@ -223,7 +223,7 @@ function enrich(configPath, { remove } = {}) {
       version: block.version,
       path: configPath,
       changed: false,
-      warning: 'Top-level context: key already present outside the managed block in openspec/config.yaml. Refusing to update — a duplicate context: key would result. Manually fold LiftCD guidance into your existing context: value, then re-run --openspec-enrich.',
+      warning: 'Top-level context: key already present outside the managed block in openspec/config.yaml. Refusing to update — a duplicate context: key would result. Manually fold Lift-SDLC guidance into your existing context: value, then re-run --openspec-enrich.',
     };
   }
 

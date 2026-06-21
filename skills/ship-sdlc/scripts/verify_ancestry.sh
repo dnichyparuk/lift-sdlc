@@ -5,8 +5,8 @@ SDLC_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # Post-version ancestry HARD GATE (R-post-version-ancestry, fixes #349)
 VERIFY_SCRIPT="$SDLC_ROOT/scripts/util/verify-tag-ancestry.js"
-[ ! -f "$VERIFY_SCRIPT" ] && { echo "ERROR: Could not locate scripts/util/verify-tag-ancestry.js. Is the LiftCD plugin installed?" >&2; exit 2; }
-[ -z "$VERIFY_SCRIPT" ] && [ -f "plugins/liftcd/scripts/util/verify-tag-ancestry.js" ] && VERIFY_SCRIPT="plugins/liftcd/scripts/util/verify-tag-ancestry.js"
+[ ! -f "$VERIFY_SCRIPT" ] && { echo "ERROR: Could not locate scripts/util/verify-tag-ancestry.js. Is the Lift-SDLC plugin installed?" >&2; exit 2; }
+[ -z "$VERIFY_SCRIPT" ] && [ -f "plugins/lift-sdlc/scripts/util/verify-tag-ancestry.js" ] && VERIFY_SCRIPT="plugins/lift-sdlc/scripts/util/verify-tag-ancestry.js"
 if [ -z "$VERIFY_SCRIPT" ]; then
   echo "WARNING: verify-tag-ancestry.js not found — post-version ancestry check skipped." >&2
 fi

@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDLC_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 SCRIPT="$SDLC_ROOT/scripts/skill/received-review.js"
-[ ! -f "$SCRIPT" ] && { echo "ERROR: Could not locate scripts/skill/received-review.js. Is the LiftCD plugin installed?" >&2; exit 2; }
+[ ! -f "$SCRIPT" ] && { echo "ERROR: Could not locate scripts/skill/received-review.js. Is the Lift-SDLC plugin installed?" >&2; exit 2; }
 
 if [ -n "$SCRIPT" ]; then
   MANIFEST_FILE=$(node "$SCRIPT" --output-file $ARGUMENTS)

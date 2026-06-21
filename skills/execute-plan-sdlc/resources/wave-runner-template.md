@@ -200,7 +200,7 @@ The WAVE_SUMMARY schema is unchanged: main context handles the per-wave `expecte
 ## Example WAVE_SUMMARY (2 tasks, both complete)
 
 ```
-WAVE_SUMMARY: {"wave":2,"status":"completed","tasks":[{"id":"3","status":"DONE","sha":null,"filesTouched":["plugins/liftcd/scripts/skill/ship.js"]},{"id":"4","status":"DONE","sha":null,"filesTouched":["plugins/liftcd/skills/execute-plan-sdlc/wave-runner-template.md"]}],"escalationsUsed":0}
+WAVE_SUMMARY: {"wave":2,"status":"completed","tasks":[{"id":"3","status":"DONE","sha":null,"filesTouched":["plugins/lift-sdlc/scripts/skill/ship.js"]},{"id":"4","status":"DONE","sha":null,"filesTouched":["plugins/lift-sdlc/skills/execute-plan-sdlc/wave-runner-template.md"]}],"escalationsUsed":0}
 ```
 
 Note: `name`, `complexity`, `risk`, `finalModel`, `attempts[]`, `filesChanged`, `verification` are **dropped** from the bounded schema (R-BOUNDED-RETURN, #432). Main context re-reads these from state by task ID. Use `filesTouched` (not `filesChanged`) in per-task entries.

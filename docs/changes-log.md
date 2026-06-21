@@ -5,7 +5,7 @@
 **Date:** 2026-06-13
 
 ### Overview
-We successfully transitioned LiftCD from a dynamic byte-budgeting model reasoning-depth approach to explicit, hardcoded static model assignments. 
+We successfully transitioned Lift-SDLC from a dynamic byte-budgeting model reasoning-depth approach to explicit, hardcoded static model assignments. 
 
 Previously, the plugin dynamically calculated byte budgets using `compute_context_suffix.js` and `dispatch-budget.js`, appending `-low`, `-medium`, or `-high` suffixes to models at runtime. This logic was deprecated because all models in the Antigravity 4 family now uniformly share a 1M token context window, meaning byte-based calculations for context limits are obsolete. The suffixes now purely control the model's reasoning/computation budget.
 

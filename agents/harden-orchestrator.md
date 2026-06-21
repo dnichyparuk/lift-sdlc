@@ -51,7 +51,7 @@ Decide exactly one of:
   triggers, etc.). Hardening the surfaces would prevent the same class of
   failure next time.
 - **`plugin-defect`** — the failure points at plugin code: a script crash inside
-  `plugins/liftcd/`, malformed JSON from a sibling agent, a prepare
+  `plugins/lift-sdlc/`, malformed JSON from a sibling agent, a prepare
   script exit code 2, or a runtime contract violation between sibling skills.
   In this case, hardening user-side surfaces is the wrong response — the
   issue belongs in the plugin's tracker.
@@ -64,7 +64,7 @@ or to a specific manifest field (an `id`, `name`, `severity`, etc.).
 
 When `classification == "ambiguous"`, `errorReportPayload` MAY be non-null **only
 if** the rationale cites plugin evidence: a script crash inside
-`plugins/liftcd/`, malformed JSON from a sibling agent, a prepare-script
+`plugins/lift-sdlc/`, malformed JSON from a sibling agent, a prepare-script
 exit code 2, or a comparable signal pointing at plugin code while user-side
 hardening could still independently apply. Pure user-code ambiguity (no plugin
 signal in the rationale) MUST emit `errorReportPayload: null`. The skill body
@@ -199,7 +199,7 @@ presence and the user's answer:
 ```json
 {
   "classification": "ambiguous",
-  "classificationRationale": "Failure text references plugins/liftcd/scripts/skill/ship.js but a user-side guardrail also matches the rationale.",
+  "classificationRationale": "Failure text references plugins/lift-sdlc/scripts/skill/ship.js but a user-side guardrail also matches the rationale.",
   "routeToErrorReport": false,
   "errorReportPayload": {
     "skill": "<failure.skill>",

@@ -7,8 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDLC_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 SCRIPT="$SDLC_ROOT/scripts/state/execute.js"
-if [ ! -f "$SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/liftcd/scripts/state/execute.js" ]; then
-  SCRIPT="$SDLC_ROOT/plugins/liftcd/scripts/state/execute.js"
+if [ ! -f "$SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/lift-sdlc/scripts/state/execute.js" ]; then
+  SCRIPT="$SDLC_ROOT/plugins/lift-sdlc/scripts/state/execute.js"
 fi
 
 if [ ! -f "$SCRIPT" ]; then

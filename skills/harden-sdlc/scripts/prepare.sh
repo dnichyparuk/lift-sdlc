@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDLC_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 SCRIPT="$SDLC_ROOT/scripts/skill/harden-prepare.js"
-[ ! -f "$SCRIPT" ] && { echo "ERROR: Could not locate scripts/skill/harden-prepare.js. Is the LiftCD plugin installed?" >&2; exit 2; }
+[ ! -f "$SCRIPT" ] && { echo "ERROR: Could not locate scripts/skill/harden-prepare.js. Is the Lift-SDLC plugin installed?" >&2; exit 2; }
 
 MANIFEST_FILE=$(node "$SCRIPT" \
   ${FAILURE_TEXT:+--failure-text "$FAILURE_TEXT"} \

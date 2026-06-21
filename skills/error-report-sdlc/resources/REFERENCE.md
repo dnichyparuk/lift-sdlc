@@ -54,7 +54,7 @@ REPO_URL=$(git remote get-url origin 2>/dev/null)
 
 If `REPO_URL` is empty or the command fails → skip proposal.
 
-Store `TARGET_REPO=dnichyparuk/liftcd` — this is the fixed repository for all tooling error reports.
+Store `TARGET_REPO=dnichyparuk/lift-sdlc` — this is the fixed repository for all tooling error reports.
 
 ---
 
@@ -148,7 +148,7 @@ If the user says `edit`: apply the requested changes, re-present. Loop until `ye
 
 ```bash
 gh issue create \
-  --repo "dnichyparuk/liftcd" \
+  --repo "dnichyparuk/lift-sdlc" \
   --title "<assembled title>" \
   --body "<filled template content>" \
   --label "tooling-error" \
@@ -158,8 +158,8 @@ gh issue create \
 If a label does not exist on the repository, `gh` will error. In that case, attempt to create the missing label first:
 
 ```bash
-gh label create "tooling-error" --repo "dnichyparuk/liftcd" --color "d93f0b" 2>/dev/null || true
-gh label create "<skill-name>" --repo "dnichyparuk/liftcd" --color "0075ca" 2>/dev/null || true
+gh label create "tooling-error" --repo "dnichyparuk/lift-sdlc" --color "d93f0b" 2>/dev/null || true
+gh label create "<skill-name>" --repo "dnichyparuk/lift-sdlc" --color "0075ca" 2>/dev/null || true
 ```
 
 Then retry `gh issue create`. If it still fails, proceed to 6c.

@@ -1,6 +1,6 @@
 /**
  * version.js
- * Shared version-file utilities for LiftCD scripts.
+ * Shared version-file utilities for Lift-SDLC scripts.
  * Zero external dependencies — Node.js built-ins only.
  *
  * Exports:

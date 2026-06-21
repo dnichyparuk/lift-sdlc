@@ -1,14 +1,14 @@
-# LiftCD — Antigravity Agentic SDLC Plugin
+# Lift-SDLC — Antigravity Agentic SDLC Plugin
 
 > 🚀 **Native SDLC pipeline for Antigravity agents** — plan, commit, review, PR, ship, all from chat. Take work from issue to shipped release without leaving your editor.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-LiftCD is a comprehensive suite of skills and commands for Software Development Lifecycle (SDLC) workflows — planning, execution, commits, code review, pull requests, CI verification, and releases — that run natively inside Google Antigravity. It is an Antigravity-native, cross-platform (POSIX and Windows) rewrite inspired by [`rnagrodzki/sdlc-marketplace`](https://github.com/rnagrodzki/sdlc-marketplace), rebuilt as a flat, single plugin for the Antigravity platform.
+Lift-SDLC is a comprehensive suite of skills and commands for Software Development Lifecycle (SDLC) workflows — planning, execution, commits, code review, pull requests, CI verification, and releases — that run natively inside Google Antigravity. It is an Antigravity-native, cross-platform (POSIX and Windows) rewrite inspired by [`rnagrodzki/sdlc-marketplace`](https://github.com/rnagrodzki/sdlc-marketplace), rebuilt as a flat, single plugin for the Antigravity platform.
 
 ## See It In Action
 
-Writing code and managing your release lifecycle has never been simpler. With LiftCD, you can go from an issue to a Pull Request by calling dedicated skills directly:
+Writing code and managing your release lifecycle has never been simpler. With Lift-SDLC, you can go from an issue to a Pull Request by calling dedicated skills directly:
 
 > **You:** `/github-sdlc view issue #42`
 > 
@@ -44,7 +44,7 @@ You can install this plugin either globally for all workspaces, or locally for a
 To make the plugin available in all your Antigravity workspaces, clone this repository into your global Antigravity plugins directory:
 
 ```bash
-git clone https://github.com/dnichyparuk/liftcd.git ~/.gemini/config/plugins/sdlc
+git clone https://github.com/dnichyparuk/lift-sdlc.git ~/.gemini/config/plugins/sdlc
 ```
 
 ### Workspace Installation
@@ -53,7 +53,7 @@ To install the plugin only for a specific workspace, navigate to the root of you
 
 ```bash
 mkdir -p .agents/plugins
-git clone https://github.com/dnichyparuk/liftcd.git .agents/plugins/sdlc
+git clone https://github.com/dnichyparuk/lift-sdlc.git .agents/plugins/sdlc
 ```
 
 > **Configuration note:** Permissions, plans directory, and other settings are documented in the [Appendix: Configuration](#appendix-configuration) section below.
@@ -246,20 +246,20 @@ When a coding agent fails, the wave-runner escalates one model tier per retry (m
 
 ## Contributing
 
-Contributions are welcome! Whether you're fixing a bug, improving documentation, or proposing a new skill, we'd love your help making LiftCD better.
+Contributions are welcome! Whether you're fixing a bug, improving documentation, or proposing a new skill, we'd love your help making Lift-SDLC better.
 
-- **Report issues:** Found a bug or have a feature idea? [Open an issue](https://github.com/dnichyparuk/liftcd/issues) and describe it as clearly as you can.
+- **Report issues:** Found a bug or have a feature idea? [Open an issue](https://github.com/dnichyparuk/lift-sdlc/issues) and describe it as clearly as you can.
 - **Submit changes:** Fork the repository, create a feature branch, and open a pull request. Keep changes focused and reference any related issue.
-- **Dogfood the workflow:** This plugin implements a complete SDLC pipeline — feel free to use the LiftCD skills (`/plan-sdlc`, `/commit-sdlc`, `/pr-sdlc`, and friends) to author your own contributions.
+- **Dogfood the workflow:** This plugin implements a complete SDLC pipeline — feel free to use the Lift-SDLC skills (`/plan-sdlc`, `/commit-sdlc`, `/pr-sdlc`, and friends) to author your own contributions.
 - **Be respectful:** Please keep discussions constructive and welcoming to contributors of all experience levels.
 
-Thanks for helping improve LiftCD!
+Thanks for helping improve Lift-SDLC!
 
 ---
 
 ## License
 
-LiftCD is released under the [MIT License](LICENSE), the same license as the [`rnagrodzki/sdlc-marketplace`](https://github.com/rnagrodzki/sdlc-marketplace) project it was inspired by. The upstream license at the time this work was derived is pinned at commit [`f0e3afc`](https://github.com/rnagrodzki/sdlc-marketplace/blob/f0e3afc219e6b9d53b840ff4051b4befbd14778c/LICENSE). See the [LICENSE](LICENSE) file for full terms.
+Lift-SDLC is released under the [MIT License](LICENSE), the same license as the [`rnagrodzki/sdlc-marketplace`](https://github.com/rnagrodzki/sdlc-marketplace) project it was inspired by. The upstream license at the time this work was derived is pinned at commit [`f0e3afc`](https://github.com/rnagrodzki/sdlc-marketplace/blob/f0e3afc219e6b9d53b840ff4051b4befbd14778c/LICENSE). See the [LICENSE](LICENSE) file for full terms.
 
 ---
 
@@ -267,11 +267,11 @@ LiftCD is released under the [MIT License](LICENSE), the same license as the [`r
 
 ### Permissions
 
-LiftCD runs internal helper scripts — Node.js utilities under the plugin's root `scripts/` folder and POSIX shell wrappers under `skills/<skill>/scripts/` — for planning, validation, and telemetry. Each invocation is a terminal `command`, so by default Antigravity prompts before running them. You can pre-approve them by adding `command(...)` rules to your **Allow** list.
+Lift-SDLC runs internal helper scripts — Node.js utilities under the plugin's root `scripts/` folder and POSIX shell wrappers under `skills/<skill>/scripts/` — for planning, validation, and telemetry. Each invocation is a terminal `command`, so by default Antigravity prompts before running them. You can pre-approve them by adding `command(...)` rules to your **Allow** list.
 
 Antigravity evaluates every sensitive operation as an `action(target)` resource across three lists, in strict priority **Deny > Ask > Allow** (see the [official Permissions docs](https://antigravity.google/docs/permissions)). For `command(...)`, each whitespace-separated token is matched as an *anchored* regex and the rule matches by token **prefix**, so trailing arguments are covered automatically. On Windows, Antigravity normalizes paths before matching (drive letter stripped, `\` → `/`), so the forward-slash rules below work cross-platform.
 
-> Scope the rules to the plugin's **install directory name** (`sdlc`, per the Installation steps above) — that is the path that appears in the executed command, *not* the plugin's internal manifest name (`liftcd`). Scoping to `sdlc` also avoids auto-approving unrelated plugins.
+> Scope the rules to the plugin's **install directory name** (`sdlc`, per the Installation steps above) — that is the path that appears in the executed command, *not* the plugin's internal manifest name (`lift-sdlc`). Scoping to `sdlc` also avoids auto-approving unrelated plugins.
 
 #### Antigravity 2.0 (IDE)
 
@@ -291,7 +291,7 @@ You can also simply click **Allow** on the first permission card for each script
 
 #### Antigravity CLI
 
-If you drive LiftCD through the Antigravity CLI instead of the IDE, place the same grants in the CLI settings file under `permissions.allow`. The plugin reads `plansDirectory` from `~/.gemini/antigravity-cli/settings.json`, which is the most likely location — verify the exact path/schema for your CLI version:
+If you drive Lift-SDLC through the Antigravity CLI instead of the IDE, place the same grants in the CLI settings file under `permissions.allow`. The plugin reads `plansDirectory` from `~/.gemini/antigravity-cli/settings.json`, which is the most likely location — verify the exact path/schema for your CLI version:
 
 ```json
 {

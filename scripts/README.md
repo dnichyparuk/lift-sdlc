@@ -1,6 +1,6 @@
 # Scripts Directory
 
-Helper scripts for the LiftCD plugin, organized by audience.
+Helper scripts for the Lift-SDLC plugin, organized by audience.
 
 ## Directory Structure
 
@@ -58,7 +58,7 @@ Skills locate scripts using a two-step pattern:
 SCRIPT=$(find ~/.gemini/config/plugins -name "<name>.js" -path "*/sdlc*/scripts/<subdir>/<name>.js" 2>/dev/null | sort -V | tail -1)
 
 # 2. Development fallback (relative to repo root)
-[ -z "$SCRIPT" ] && [ -f "plugins/liftcd/scripts/<subdir>/<name>.js" ] && SCRIPT="plugins/liftcd/scripts/<subdir>/<name>.js"
+[ -z "$SCRIPT" ] && [ -f "plugins/lift-sdlc/scripts/<subdir>/<name>.js" ] && SCRIPT="plugins/lift-sdlc/scripts/<subdir>/<name>.js"
 ```
 
 All scripts use `__dirname`-based resolution for `lib/` imports:

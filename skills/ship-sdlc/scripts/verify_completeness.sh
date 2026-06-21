@@ -24,8 +24,8 @@ if [ -z "$STATE_FILE" ] || [ -z "$PLAN_FILE" ]; then
 fi
 
 EXECUTE_STATE_SCRIPT="$SDLC_ROOT/scripts/state/execute.js"
-if [ ! -f "$EXECUTE_STATE_SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/liftcd/scripts/state/execute.js" ]; then
-  EXECUTE_STATE_SCRIPT="$SDLC_ROOT/plugins/liftcd/scripts/state/execute.js"
+if [ ! -f "$EXECUTE_STATE_SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/lift-sdlc/scripts/state/execute.js" ]; then
+  EXECUTE_STATE_SCRIPT="$SDLC_ROOT/plugins/lift-sdlc/scripts/state/execute.js"
 fi
 
 if [ ! -f "$EXECUTE_STATE_SCRIPT" ]; then

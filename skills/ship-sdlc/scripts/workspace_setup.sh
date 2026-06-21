@@ -81,8 +81,8 @@ EXECUTE_BRANCH=$(LOGICAL_TYPE="$LOGICAL_TYPE" DERIVED_SLUG="$DERIVED_SLUG" node 
 
 # 5. Pre-execute ship state migration
 STATE_SCRIPT="$SDLC_ROOT/scripts/state/ship.js"
-if [ ! -f "$STATE_SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/liftcd/scripts/state/ship.js" ]; then
-  STATE_SCRIPT="$SDLC_ROOT/plugins/liftcd/scripts/state/ship.js"
+if [ ! -f "$STATE_SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/lift-sdlc/scripts/state/ship.js" ]; then
+  STATE_SCRIPT="$SDLC_ROOT/plugins/lift-sdlc/scripts/state/ship.js"
 fi
 
 if [ -f "$STATE_SCRIPT" ]; then
@@ -100,8 +100,8 @@ if [ "$WORKSPACE_MODE" = "branch" ]; then
   git checkout "$EXECUTE_BRANCH" >/dev/null 2>&1 || git checkout -b "$EXECUTE_BRANCH" >/dev/null 2>&1
 elif [ "$WORKSPACE_MODE" = "worktree" ]; then
   WORKTREE_CREATE_SCRIPT="$SDLC_ROOT/scripts/util/worktree-create.js"
-  if [ ! -f "$WORKTREE_CREATE_SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/liftcd/scripts/util/worktree-create.js" ]; then
-    WORKTREE_CREATE_SCRIPT="$SDLC_ROOT/plugins/liftcd/scripts/util/worktree-create.js"
+  if [ ! -f "$WORKTREE_CREATE_SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/lift-sdlc/scripts/util/worktree-create.js" ]; then
+    WORKTREE_CREATE_SCRIPT="$SDLC_ROOT/plugins/lift-sdlc/scripts/util/worktree-create.js"
   fi
   if [ ! -f "$WORKTREE_CREATE_SCRIPT" ]; then
     echo '{"status": "error", "error": "Could not locate scripts/util/worktree-create.js"}'

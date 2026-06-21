@@ -28,7 +28,7 @@ class ConfigVersionTooNewError extends ConfigVersionError {
   constructor(role, found, max, pluginVersion) {
     super(
       `Config ${role} schemaVersion=${found} exceeds max supported version ${max} ` +
-      `(plugin ${pluginVersion}). Upgrade the LiftCD plugin.`,
+      `(plugin ${pluginVersion}). Upgrade the Lift-SDLC plugin.`,
       'CONFIG_VERSION_TOO_NEW'
     );
     this.role = role;

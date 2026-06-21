@@ -59,8 +59,8 @@ const RE_FIND_SCRIPT = /find\s[^`\n]*?-name\s+["']([^"'<>]+\.js)["']/g;
 const RE_PATH_SCRIPT = /-path\s+["']\*\/sdlc\*\/scripts\/([^\s"'<>]+\.js)["']/g;
 
 // Extract script filenames from direct-path fallback pattern:
-// plugins/liftcd/scripts/<subdir>/<script>.js
-const RE_DIRECT_SCRIPT = /plugins\/liftcd\/scripts\/([^\s"'<>]+\.js)/g;
+// plugins/lift-sdlc/scripts/<subdir>/<script>.js
+const RE_DIRECT_SCRIPT = /plugins\/lift-sdlc\/scripts\/([^\s"'<>]+\.js)/g;
 
 function extractScriptRefs(content) {
   const names = new Set();
@@ -327,7 +327,7 @@ function checkPD7(projectRoot) {
 }
 
 function checkPD8(projectRoot) {
-  // Accept both plugin-root hooks.json (Antigravity spec) and hooks/hooks.json (liftcd convention)
+  // Accept both plugin-root hooks.json (Antigravity spec) and hooks/hooks.json (lift-sdlc convention)
   const hooksRoot  = path.join(projectRoot, 'hooks.json');
   const hooksSubdir = path.join(projectRoot, 'hooks', 'hooks.json');
   const hooksPath  = isFile(hooksRoot) ? hooksRoot : isFile(hooksSubdir) ? hooksSubdir : null;

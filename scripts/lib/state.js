@@ -2,7 +2,7 @@
 
 /**
  * state.js
- * Shared execution-state file utilities for LiftCD scripts.
+ * Shared execution-state file utilities for Lift-SDLC scripts.
  * Used by both ship-state.js and execute-state.js.
  *
  * Zero npm dependencies — Node.js built-ins only.

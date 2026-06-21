@@ -19,7 +19,7 @@
  *   2 — parse / IO error
  *
  * Reuses extractFrontmatter + parseSimpleYaml from
- * `plugins/liftcd/scripts/lib/dimensions.js` per the dry guardrail.
+ * `plugins/lift-sdlc/scripts/lib/dimensions.js` per the dry guardrail.
  */
 
 'use strict';
@@ -62,7 +62,7 @@ function parseArgs(argv) {
 
 function resolveSkillsDir(root) {
   // Real repo layout
-  const real = path.join(root, 'plugins', 'liftcd', 'skills');
+  const real = path.join(root, 'plugins', 'lift-sdlc', 'skills');
   if (fs.existsSync(real)) return real;
   // Fixture layout — flat <root>/skills
   const flat = path.join(root, 'skills');
@@ -71,7 +71,7 @@ function resolveSkillsDir(root) {
 }
 
 function resolveAgentsDir(root) {
-  const real = path.join(root, 'plugins', 'liftcd', 'agents');
+  const real = path.join(root, 'plugins', 'lift-sdlc', 'agents');
   if (fs.existsSync(real)) return real;
   const flat = path.join(root, 'agents');
   if (fs.existsSync(flat)) return flat;

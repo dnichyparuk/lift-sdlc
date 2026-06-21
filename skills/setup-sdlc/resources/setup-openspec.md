@@ -36,7 +36,7 @@ Parse the JSON output from `$PREPARE_OUTPUT_FILE`. Report the result:
 - `action: "unchanged"` — "openspec/config.yaml already at current version — no changes needed."
 - `action: "removed"` — "Managed block removed from openspec/config.yaml."
 - `action: "missing"` — "openspec/config.yaml not found. Initialize OpenSpec first (`openspec init`)."
-- `action: "skipped-existing-context"` — "openspec/config.yaml already declares a top-level `context:` key. The managed block was not appended to avoid creating a duplicate YAML key. Manually fold LiftCD guidance into your existing `context:` value, then re-run."
+- `action: "skipped-existing-context"` — "openspec/config.yaml already declares a top-level `context:` key. The managed block was not appended to avoid creating a duplicate YAML key. Manually fold Lift-SDLC guidance into your existing `context:` value, then re-run."
 
 If a `warning` field is present, display it.
 

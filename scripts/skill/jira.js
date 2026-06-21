@@ -244,7 +244,7 @@ function resolveTemplatesDir(overridePath) {
   const installs = findPluginInstalls();
   if (installs.length > 0) return installs[0];
 
-  return path.join(process.cwd(), 'plugins', 'liftcd', 'skills', 'jira-sdlc', 'templates');
+  return path.join(process.cwd(), 'plugins', 'lift-sdlc', 'skills', 'jira-sdlc', 'templates');
 }
 
 // ---------------------------------------------------------------------------

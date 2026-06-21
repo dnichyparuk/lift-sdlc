@@ -12,8 +12,8 @@ tmp/
 # Node.js
 node_modules/
 
-# >>> liftcd managed (do not edit) — transient skill artifacts
+# >>> lift-sdlc managed (do not edit) — transient skill artifacts
 *-context-*.json
 *-manifest-*.json
 *-prepare-*.json
-# <<< liftcd managed
+# <<< lift-sdlc managed

@@ -61,8 +61,8 @@ if [ "$WORKSPACE_MODE" = "branch" ] && [ -n "$EXECUTE_BRANCH" ]; then
   git checkout "$EXECUTE_BRANCH" >/dev/null 2>&1 || git checkout -b "$EXECUTE_BRANCH" >/dev/null 2>&1
 elif [ "$WORKSPACE_MODE" = "worktree" ] && [ -n "$EXECUTE_BRANCH" ]; then
   WORKTREE_CREATE_SCRIPT="$SDLC_ROOT/scripts/util/worktree-create.js"
-  if [ ! -f "$WORKTREE_CREATE_SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/liftcd/scripts/util/worktree-create.js" ]; then
-    WORKTREE_CREATE_SCRIPT="$SDLC_ROOT/plugins/liftcd/scripts/util/worktree-create.js"
+  if [ ! -f "$WORKTREE_CREATE_SCRIPT" ] && [ -f "$SDLC_ROOT/plugins/lift-sdlc/scripts/util/worktree-create.js" ]; then
+    WORKTREE_CREATE_SCRIPT="$SDLC_ROOT/plugins/lift-sdlc/scripts/util/worktree-create.js"
   fi
   if [ ! -f "$WORKTREE_CREATE_SCRIPT" ]; then
     echo '{"status": "error", "error": "Could not locate scripts/util/worktree-create.js"}'

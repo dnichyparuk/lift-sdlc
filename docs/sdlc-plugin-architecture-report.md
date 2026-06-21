@@ -1,12 +1,12 @@
 # SDLC Plugin Architecture & Agents Relation Report
 
-This document provides a comprehensive analysis of the architecture, agent structure, inter-component relations, and model routing strategy within LiftCD.
+This document provides a comprehensive analysis of the architecture, agent structure, inter-component relations, and model routing strategy within Lift-SDLC.
 
 ---
 
 ## 1. Architectural Overview
 
-LiftCD is structured as a hierarchical multi-agent system designed to isolate heavy context processing from the main user-facing chat session. It splits responsibilities into four distinct layers:
+Lift-SDLC is structured as a hierarchical multi-agent system designed to isolate heavy context processing from the main user-facing chat session. It splits responsibilities into four distinct layers:
 
 ```mermaid
 graph TD
@@ -193,7 +193,7 @@ For agent dispatches, computational reasoning limits are assigned statically via
 
 ## 4. State Persistence, Telemetry, and Resume Patterns
 
-LiftCD operates a **local-only** session tracking system. No telemetry data leaves the developer's computer.
+Lift-SDLC operates a **local-only** session tracking system. No telemetry data leaves the developer's computer.
 
 ### A. State Files
 State files are written atomically (`temp write` + `rename` pattern) in the main worktree directory under `.sdlc/execution/`.

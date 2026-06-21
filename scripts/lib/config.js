@@ -16,9 +16,9 @@ const PROJECT_CONFIG_PATH = path.join('.sdlc', 'config.json');
 const LOCAL_CONFIG_PATH = path.join('.sdlc', 'local.json');
 
 const PROJECT_SCHEMA_URL =
-  'https://raw.githubusercontent.com/dnichyparuk/liftcd/main/schemas/sdlc-config.schema.json';
+  'https://raw.githubusercontent.com/dnichyparuk/lift-sdlc/main/schemas/sdlc-config.schema.json';
 const LOCAL_SCHEMA_URL =
-  'https://raw.githubusercontent.com/dnichyparuk/liftcd/main/schemas/sdlc-local.schema.json';
+  'https://raw.githubusercontent.com/dnichyparuk/lift-sdlc/main/schemas/sdlc-local.schema.json';
 
 const PRESET_NAMES = ['full', 'balanced', 'minimal'];
 
@@ -412,8 +412,8 @@ const SDLC_GITIGNORE_PATTERNS = [
   '!review-dimensions/',
   '!review-dimensions/**',
 ];
-const SDLC_GITIGNORE_BEGIN = '# >>> liftcd managed (do not edit) — selective ignores';
-const SDLC_GITIGNORE_END   = '# <<< liftcd managed';
+const SDLC_GITIGNORE_BEGIN = '# >>> lift-sdlc managed (do not edit) — selective ignores';
+const SDLC_GITIGNORE_END   = '# <<< lift-sdlc managed';
 
 /**
  * Create `.sdlc/` directory and `.sdlc/.gitignore` with selective ignore
@@ -522,8 +522,8 @@ const ROOT_GITIGNORE_PATTERNS = [
   '*-prepare-*.json',
 ];
 
-const ROOT_GITIGNORE_BEGIN = '# >>> liftcd managed (do not edit) — transient skill artifacts';
-const ROOT_GITIGNORE_END   = '# <<< liftcd managed';
+const ROOT_GITIGNORE_BEGIN = '# >>> lift-sdlc managed (do not edit) — transient skill artifacts';
+const ROOT_GITIGNORE_END   = '# <<< lift-sdlc managed';
 
 /**
  * Append (or update in place) a managed block to the consumer project root
