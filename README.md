@@ -165,6 +165,47 @@ These agents have no file in `agents/` and are dispatched as `general-purpose` u
 
 > **Model escalation (coding agents):** On failure, the wave-runner escalates the task's model one tier per retry, up to 2 retries, along the fixed ladder `flash-low → flash-medium → flash-high → pro-low → pro-high`: `flash-low → flash-medium → flash-high`, `flash-medium → flash-high → pro-low`, `flash-high → pro-low → pro-high`, `pro-low → pro-high → pro-high + context`.
 
+## Multi-Dimension Code Review
+
+The `/review-sdlc` skill implements a sophisticated "scatter-gather" review architecture designed to maximize thoroughness while minimizing noise, hallucinations, and context window exhaustion.
+
+```mermaid
+flowchart TD
+    ReviewCmd["/review-sdlc<br/>(Extracts Diff)"]
+    
+    subgraph Dimensions ["Parallel Dispatch (Scatter)"]
+        Security["Security Dimension<br/>(Subagent)"]
+        Perf["Performance Dimension<br/>(Subagent)"]
+        Docs["Docs Dimension<br/>(Subagent)"]
+    end
+    
+    ReviewCmd -. "Targeted Diff Hunks" .-> Security
+    ReviewCmd -. "Targeted Diff Hunks" .-> Perf
+    ReviewCmd -. "Targeted Diff Hunks" .-> Docs
+    
+    Security --> Findings["Raw Findings"]
+    Perf --> Findings
+    Docs --> Findings
+    
+    subgraph Orchestration ["Gather & Critique"]
+        Orchestrator["Review Orchestrator"]
+        Dedupe["Deduplication & Recalibration"]
+        Verdict["Compute Deterministic Verdict"]
+        
+        Orchestrator --> Dedupe --> Verdict
+    end
+    
+    Findings --> Orchestrator
+    
+    Verdict --> Output["Consolidated Review Comment<br/>(e.g., CHANGES REQUESTED)"]
+```
+
+- **Project-Defined Dimensions:** Code reviews are driven by project-specific dimensions (e.g., Security, Performance, API Contracts). Each dimension specifies file-matching globs and exact review instructions.
+- **Parallel Dispatch:** For a given diff, the orchestrator concurrently spawns multiple specialized subagents. This parallelization significantly reduces overall review time.
+- **Targeted Diff Scoping:** A subagent does not read the entire codebase or even the full PR diff. It is strictly scoped to receive only the diff hunks for files matching its dimension's triggers. This precise scoping prevents subagents from getting distracted by unrelated changes.
+- **Orchestrator Deduplication:** Once subagents complete, a central orchestrator merges the findings. It intelligently deduplicates issues flagged on the same line across different dimensions (keeping the highest severity) and catches contradictory recommendations.
+- **Deterministic Verdicts:** The final PR verdict (`CHANGES REQUESTED`, `APPROVED WITH NOTES`, or `APPROVED`) is not an arbitrary LLM guess—it is mathematically computed based on the quantity and severity of the deduplicated findings (e.g., 1 Critical or 3 Highs strictly enforce a `CHANGES REQUESTED` state).
+
 ## Quality Modes (`/execute-plan-sdlc`)
 
 When executing a plan, `/execute-plan-sdlc` asks you to select a **quality tier** that controls which model each coding agent runs on. The tier balances speed and cost against correctness.
