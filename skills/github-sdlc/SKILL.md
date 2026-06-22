@@ -25,7 +25,7 @@ close, or reopen — using the GitHub CLI (`gh issue`).
 
 Verify that the `gh` CLI is installed and authenticated.
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin). Do NOT prepend `bash` or `sh`.
+> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`.
 
 ```bash
 gh auth status >/dev/null 2>&1

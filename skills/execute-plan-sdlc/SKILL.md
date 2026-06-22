@@ -68,7 +68,7 @@ Wait for the subagent's JSON response. If `status` is "failed", present the issu
 
 **Guardrail loading:** Load execution guardrails from project config:
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin). Do NOT prepend `bash` or `sh`.
+> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`.
 
 ```shell
 <PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/context_advisory.sh

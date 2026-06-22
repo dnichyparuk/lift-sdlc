@@ -49,7 +49,7 @@ Pass `--from-issue "$ISSUE_NUM"` to the prepare script invocation in Step 1.
 
 ## Step 1 — CONSUME: Run the Prepare Script (R4, R13, C5–C8)
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
 
 ```shell
 <PLUGIN_ROOT>/skills/harden-sdlc/scripts/prepare.sh

@@ -88,7 +88,7 @@ To prevent context bloat and token exhaustion:
 
 **Context detection and guardrail loading (skill/plan.js):**
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin). Do NOT prepend `bash` or `sh`.
+> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`.
 
 ```shell
 <PLUGIN_ROOT>/skills/plan-sdlc/scripts/prepare.sh

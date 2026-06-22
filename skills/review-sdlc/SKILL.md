@@ -17,7 +17,7 @@ Thin dispatcher — runs the prepare script, then delegates everything to the
 
 ## Step 0 — Resolve and Run skill/review.js
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
 
 ```shell
 <PLUGIN_ROOT>/skills/review-sdlc/scripts/prepare.sh
