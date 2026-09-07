@@ -44,3 +44,24 @@ test('pre-tool-git-guard: legacy args.command fallback still denies git push --f
   assert.strictEqual(output.decision, 'deny');
   assert.ok(output.reason && output.reason.length > 0);
 });
+
+test('pre-tool-git-guard: git add -A without exclusions is denied', () => {
+  const input = JSON.stringify({ toolCall: { name: 'run_command', args: { CommandLine: 'git add -A' } } });
+  const output = runHook(input);
+  assert.strictEqual(output.decision, 'deny');
+  assert.ok(output.reason.includes('git add -A may stage internal state files'));
+});
+
+test('pre-tool-git-guard: git add -A with exclusions is allowed', () => {
+  const input = JSON.stringify({ toolCall: { name: 'run_command', args: { CommandLine: 'git add -A -- ":!.sdlc/"' } } });
+  const output = runHook(input);
+  assert.strictEqual(output.decision, 'allow');
+});
+
+test('pre-tool-git-guard: force push to protected branch is denied', () => {
+  const input = JSON.stringify({ toolCall: { name: 'run_command', args: { CommandLine: 'git push origin main --force' } } });
+  const output = runHook(input);
+  assert.strictEqual(output.decision, 'deny');
+  assert.ok(output.reason.includes('force push to protected branch') || output.reason.includes('git push --force'));
+});
+

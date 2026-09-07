@@ -143,17 +143,43 @@ If `step.status === "conditional"`:
 
 ---
 
-## Step 5 — Terminal Cleanup
+### 4d. Tiered Autonomy & Question Governance
 
-Run terminal pipeline cleanup:
-- If all steps succeeded:
-  ```shell
-  node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" cleanup-pipeline
-  ```
-- If any step failed:
-  ```shell
-  node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" cleanup-pipeline --force
-  ```
+When a dispatched agent or step encounters ambiguity in `--auto` mode, resolve it using the **5-Rung Autonomous Ladder**:
+1. **Rung 1 (State Context):** Check existing config, plan, and state metadata.
+2. **Rung 2 (Repository Conventions):** Inspect surrounding code, recent commits, and established patterns.
+3. **Rung 3 (Documented Defaults):** For implementation choices (**Q3**), select the standard Lift-SDLC default and record it:
+   ```shell
+   node "<PLUGIN_ROOT>/scripts/util/record-assumption.js" --state-file "$STATE_FILE" --step "<step.name>" --question-class "Q3" --decision "<choice>" --rationale "<reason>"
+   ```
+4. **Rung 4 (Safe Branch Fallback):** For destructive operations (**Q6**), choose non-destructive alternatives (safe rebase instead of merge).
+5. **Rung 5 (Structured Suspension):** For hard blockers (**Q1/Q2** — missing credentials, external API reachability), do NOT ask interactive questions. Transition step to `needs_input`:
+   ```shell
+   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" suspend --step "<step.name>" --question '<question_json>'
+   ```
+   Halt the turn so the user can address the blocker.
+
+*Proxy Questions Cap:* An agent is restricted to at most 2 rounds of clarifications. If ambiguity persists after 2 rounds, force a Rung 5 suspension.
+
+---
+
+## Step 5 — Generate Run Audit & Terminal Cleanup
+
+1. **Generate Run Audit Ledger**:
+   Before deleting the state file, compile the permanent human-readable execution audit:
+   ```shell
+   node "<PLUGIN_ROOT>/scripts/util/generate-run-audit.js" --state-file "$STATE_FILE"
+   ```
+
+2. **Run terminal pipeline cleanup**:
+   - If all steps succeeded:
+     ```shell
+     node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" cleanup-pipeline
+     ```
+   - If any step failed:
+     ```shell
+     node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" cleanup-pipeline --force
+     ```
 
 ---
 
@@ -163,4 +189,5 @@ Print the final execution summary to the user:
 - Pipeline status (SUCCESS or FAILED)
 - Summary of executed steps and durations
 - Artifacts produced (commits, tags, pull requests)
+- Links to audit ledgers (`RUN_AUDIT_<runId>.md` and `ASSUMPTIONS_<runId>.md`)
 - Any deferred findings or warnings

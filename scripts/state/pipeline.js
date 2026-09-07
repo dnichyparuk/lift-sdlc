@@ -179,6 +179,8 @@ function cmdInit(opts) {
     steps,
     decisions: [],
     deferredFindings: [],
+    assumptions: [],
+    ledgers: {},
   };
 
   try {
@@ -186,6 +188,14 @@ function cmdInit(opts) {
     const prunedOrphans = pruneStateFiles(opts.pipeline, branchSlug);
 
     const filePath = initState(opts.pipeline, opts.branch, data);
+    const m = path.basename(filePath).match(/-(\d{8}T\d{6}Z)\.json$/);
+    if (m) {
+      data.ledgers = {
+        assumptions: `ASSUMPTIONS_${m[1]}.md`,
+        runAudit: `RUN_AUDIT_${m[1]}.md`,
+      };
+      writeState(filePath, data);
+    }
     process.stdout.write(JSON.stringify({ filePath, prunedOrphans }) + '\n');
     process.exit(0);
   } catch (e) {
