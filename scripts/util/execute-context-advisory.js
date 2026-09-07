@@ -30,7 +30,7 @@
 const path = require('node:path');
 const LIB = path.join(__dirname, '..', 'lib');
 
-const { readSection }  = require(path.join(LIB, 'config'));
+const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
 const { getAdvisory }  = require(path.join(LIB, 'context-advisory'));
 const { writeJsonLine } = require(path.join(LIB, 'output'));
 
@@ -81,7 +81,8 @@ function runExecuteContextAdvisory(cwd, { readSectionFn = readSection, getAdviso
 
 function main(argv) {
   parseArgs(argv);
-  const { guardrails, advisory } = runExecuteContextAdvisory(process.cwd());
+  const root = resolveSdlcRoot() || process.cwd();
+  const { guardrails, advisory } = runExecuteContextAdvisory(root);
   if (advisory) process.stderr.write(advisory + '\n');
   writeJsonLine(guardrails);
 }

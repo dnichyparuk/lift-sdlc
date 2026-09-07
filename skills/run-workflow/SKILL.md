@@ -32,7 +32,7 @@ echo "STATUS: $EXIT_CODE"
 
 1. If `EXIT_CODE` is non-zero, read errors from `$PREPARE_OUTPUT_FILE`, display them to the user, and stop.
 2. Parse the JSON manifest from `$PREPARE_OUTPUT_FILE`.
-3. Extract `pipeline`, `version`, `steps[]`, `flags`, and `validation`.
+3. Extract `pipeline`, `version`, `steps[]`, `flags`, and `validation`. Extract `<branch>` from `context.currentBranch` (or `git branch --show-current`). Retain `statePrefix` / `pipeline` from `pipeline.json` for state CLI calls.
 4. Clean up: `rm -f "$PREPARE_OUTPUT_FILE"`.
 
 ---
@@ -68,7 +68,7 @@ Initialize the execution state file via the state CLI:
 node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" init --branch "<branch>" --flags '<flags_json>' --steps '<steps_json>'
 ```
 
-Extract the created `stateFile` path from stdout.
+Extract the created `stateFile` path from stdout (`const stateFile = JSON.parse(stdout).filePath;`).
 
 ---
 

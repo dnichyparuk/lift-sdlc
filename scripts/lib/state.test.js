@@ -161,3 +161,35 @@ test('pipelineAdvancing: returns advancing: false when all steps are completed o
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('pipelineAdvancing: returns advancing: true and step: null when auto pipeline has pending steps', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'state-test-'));
+  const prevOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
+  process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
+
+  try {
+    const branch = 'feature-auto-pending';
+    const filePath = initState('ship', branch, {
+      branch,
+      flags: { auto: true },
+      steps: [
+        { name: 'execute', status: 'completed' },
+        { name: 'review', status: 'pending' },
+      ],
+    });
+
+    const res = pipelineAdvancing({ branch });
+    assert.strictEqual(res.advancing, true);
+    assert.strictEqual(res.prefix, 'ship');
+    assert.strictEqual(res.step, null);
+    assert.strictEqual(res.auto, true);
+    assert.strictEqual(res.stateFile, filePath);
+  } finally {
+    if (prevOverride !== undefined) {
+      process.env.SDLC_STATE_DIR_OVERRIDE = prevOverride;
+    } else {
+      delete process.env.SDLC_STATE_DIR_OVERRIDE;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

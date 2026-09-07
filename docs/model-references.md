@@ -65,47 +65,50 @@ The following tables map exactly where specific models are hardcoded or referenc
 
 | Agent Name | File Path | Models Referenced |
 |------------|-----------|-------------------|
-| `commit-orchestrator` | [agents/commit-orchestrator.md](agents/commit-orchestrator.md) | `gemini-3.8-flash-low` |
-| `error-report-orchestrator` | [agents/error-report-orchestrator.md](agents/error-report-orchestrator.md) | `gemini-3.8-flash-low` |
-| `harden-orchestrator` | [agents/harden-orchestrator.md](agents/harden-orchestrator.md) | `gemini-3.8-flash-low` |
-| `plan-explore-orchestrator` | [agents/plan-explore-orchestrator.md](agents/plan-explore-orchestrator.md) | `gemini-3.8-flash-low` |
-| `review-orchestrator` | [agents/review-orchestrator.md](agents/review-orchestrator.md) | `gemini-3.8-flash-low` |
+| `commit-orchestrator` | [agents/commit-orchestrator.md](../agents/commit-orchestrator.md) | `gemini-3.8-flash-low` |
+| `error-report-orchestrator` | [agents/error-report-orchestrator.md](../agents/error-report-orchestrator.md) | `gemini-3.8-flash-low` |
+| `harden-orchestrator` | [agents/harden-orchestrator.md](../agents/harden-orchestrator.md) | `gemini-3.8-flash-low` |
+| `plan-execution-validator` | [agents/plan-execution-validator.md](../agents/plan-execution-validator.md) | `gemini-3.1-pro-low` |
+| `plan-explore-orchestrator` | [agents/plan-explore-orchestrator.md](../agents/plan-explore-orchestrator.md) | `gemini-3.8-flash-low` |
+| `plan-generation-orchestrator` | [agents/plan-generation-orchestrator.md](../agents/plan-generation-orchestrator.md) | `gemini-3.1-pro-high` |
+| `review-orchestrator` | [agents/review-orchestrator.md](../agents/review-orchestrator.md) | `gemini-3.8-flash-low` |
 
 ### Skills
 *User-facing skills and their associated Markdown templates/documentation.*
 
 | Skill Name | File Path | Models Referenced |
 |------------|-----------|-------------------|
-| `commit-sdlc` | [skills/commit-sdlc/SKILL.md](skills/commit-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `error-report-sdlc` | [skills/error-report-sdlc/SKILL.md](skills/error-report-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/SKILL.md](skills/execute-plan-sdlc/SKILL.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/classifying-and-waving-tasks.md](skills/execute-plan-sdlc/classifying-and-waving-tasks.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/recovering-from-failures.md](skills/execute-plan-sdlc/recovering-from-failures.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/spec-compliance-reviewer.md](skills/execute-plan-sdlc/spec-compliance-reviewer.md) | `gemini-3.8-flash-medium` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/wave-runner-template.md](skills/execute-plan-sdlc/wave-runner-template.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `github-sdlc` | [skills/github-sdlc/SKILL.md](skills/github-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `harden-sdlc` | [skills/harden-sdlc/SKILL.md](skills/harden-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
-| `jira-sdlc` | [skills/jira-sdlc/SKILL.md](skills/jira-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `plan-sdlc` | [skills/plan-sdlc/SKILL.md](skills/plan-sdlc/SKILL.md) | `gemini-3.8-flash-medium`, `gemini-3.1-pro-low` |
-| `pr-sdlc` | [skills/pr-sdlc/SKILL.md](skills/pr-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
-| `received-review-sdlc` | [skills/received-review-sdlc/SKILL.md](skills/received-review-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
-| `review-sdlc` | [skills/review-sdlc/EXAMPLES.md](skills/review-sdlc/EXAMPLES.md) | `gemini-3.8-flash-medium` |
-| `review-sdlc` | [skills/review-sdlc/REFERENCE.md](skills/review-sdlc/REFERENCE.md) | `gemini-3.1-pro-low`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium` |
-| `review-sdlc` | [skills/review-sdlc/SKILL.md](skills/review-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `setup-sdlc` | [skills/setup-sdlc/SKILL.md](skills/setup-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `ship-sdlc` | [skills/ship-sdlc/SKILL.md](skills/ship-sdlc/SKILL.md) | `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `verify-pipeline-sdlc` | [skills/verify-pipeline-sdlc/SKILL.md](skills/verify-pipeline-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
-| `version-sdlc` | [skills/version-sdlc/SKILL.md](skills/version-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
+| `commit-sdlc` | [skills/commit-sdlc/SKILL.md](../skills/commit-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
+| `error-report-sdlc` | [skills/error-report-sdlc/SKILL.md](../skills/error-report-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
+| `execute-plan-sdlc` | [skills/execute-plan-sdlc/SKILL.md](../skills/execute-plan-sdlc/SKILL.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
+| `execute-plan-sdlc` | [skills/execute-plan-sdlc/resources/classifying-and-waving-tasks.md](../skills/execute-plan-sdlc/resources/classifying-and-waving-tasks.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
+| `execute-plan-sdlc` | [skills/execute-plan-sdlc/resources/recovering-from-failures.md](../skills/execute-plan-sdlc/resources/recovering-from-failures.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
+| `execute-plan-sdlc` | [skills/execute-plan-sdlc/resources/spec-compliance-reviewer.md](../skills/execute-plan-sdlc/resources/spec-compliance-reviewer.md) | `gemini-3.8-flash-medium` |
+| `execute-plan-sdlc` | [skills/execute-plan-sdlc/resources/wave-runner-template.md](../skills/execute-plan-sdlc/resources/wave-runner-template.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
+| `github-sdlc` | [skills/github-sdlc/SKILL.md](../skills/github-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
+| `harden-sdlc` | [skills/harden-sdlc/SKILL.md](../skills/harden-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
+| `jira-sdlc` | [skills/jira-sdlc/SKILL.md](../skills/jira-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
+| `plan-sdlc` | [skills/plan-sdlc/SKILL.md](../skills/plan-sdlc/SKILL.md) | `gemini-3.8-flash-medium`, `gemini-3.1-pro-low` |
+| `pr-sdlc` | [skills/pr-sdlc/SKILL.md](../skills/pr-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
+| `received-review-sdlc` | [skills/received-review-sdlc/SKILL.md](../skills/received-review-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
+| `review-sdlc` | [skills/review-sdlc/resources/EXAMPLES.md](../skills/review-sdlc/resources/EXAMPLES.md) | `gemini-3.8-flash-medium` |
+| `review-sdlc` | [skills/review-sdlc/resources/REFERENCE.md](../skills/review-sdlc/resources/REFERENCE.md) | `gemini-3.1-pro-low`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium` |
+| `review-sdlc` | [skills/review-sdlc/SKILL.md](../skills/review-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
+| `run-workflow` | [skills/run-workflow/SKILL.md](../skills/run-workflow/SKILL.md) | `gemini-3.8-flash-medium` |
+| `setup-sdlc` | [skills/setup-sdlc/SKILL.md](../skills/setup-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
+| `ship-sdlc` | [skills/ship-sdlc/SKILL.md](../skills/ship-sdlc/SKILL.md) | `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
+| `verify-pipeline-sdlc` | [skills/verify-pipeline-sdlc/SKILL.md](../skills/verify-pipeline-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
+| `version-sdlc` | [skills/version-sdlc/SKILL.md](../skills/version-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 
 ### Scripts & Libraries
 *JavaScript utility files that handle budget allocation and dynamic model routing.*
 
 | Script Name | File Path | Models Referenced |
 |-------------|-----------|-------------------|
-| `dispatch-budget.js` | [scripts/lib/dispatch-budget.js](scripts/lib/dispatch-budget.js) | `gemini-3.1-pro`, `gemini-3.8-flash` variants (suffixes stripped at runtime) |
-| `plan.js` | [scripts/skill/plan.js](scripts/skill/plan.js) | `gemini-3.8-flash-low`, `gemini-3.8-flash-medium` |
-| `review.js` | [scripts/skill/review.js](scripts/skill/review.js) | `gemini-3.8-flash-medium` |
-| `ship.js` | [scripts/skill/ship.js](scripts/skill/ship.js) | `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
+| `dispatch-budget.js` | [scripts/lib/dispatch-budget.js](../scripts/lib/dispatch-budget.js) | `gemini-3.1-pro`, `gemini-3.8-flash` variants (suffixes stripped at runtime) |
+| `plan.js` | [scripts/skill/plan.js](../scripts/skill/plan.js) | `gemini-3.8-flash-low`, `gemini-3.8-flash-medium` |
+| `review.js` | [scripts/skill/review.js](../scripts/skill/review.js) | `gemini-3.8-flash-medium` |
+| `ship.js` | [scripts/skill/ship.js](../scripts/skill/ship.js) | `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
 
 ---
 

@@ -21,6 +21,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { writeJsonLine } = require('../lib/output');
+const { parseStateFilename } = require('../lib/state');
+
 function parseArgs(argv) {
   const args = argv.slice(2);
   let stateFile = null;
@@ -33,9 +36,8 @@ function parseArgs(argv) {
 }
 
 function extractRunId(stateFilePath) {
-  const base = path.basename(stateFilePath);
-  const m = base.match(/-(\d{8}T\d{6}Z)\.json$/);
-  if (m) return m[1];
+  const parsed = parseStateFilename(path.basename(stateFilePath));
+  if (parsed && parsed.timestamp) return parsed.timestamp;
   return 'default';
 }
 
@@ -116,7 +118,7 @@ function main() {
   }
 
   fs.writeFileSync(auditFile, md, 'utf8');
-  process.stdout.write(JSON.stringify({ generated: true, auditFile }) + '\n');
+  writeJsonLine({ generated: true, auditFile });
   process.exit(0);
 }
 

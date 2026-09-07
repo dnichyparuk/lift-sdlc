@@ -473,6 +473,21 @@ function pipelineAdvancing(opts = {}) {
             data,
           };
         }
+
+        const isAuto = Boolean(data.flags && data.flags.auto === true);
+        if (isAuto) {
+          const hasPending = data.steps.some(s => s.status === 'pending');
+          if (hasPending) {
+            return {
+              advancing: true,
+              prefix,
+              step: null,
+              auto: true,
+              stateFile: state.filePath,
+              data,
+            };
+          }
+        }
       }
     }
   } catch (_) {

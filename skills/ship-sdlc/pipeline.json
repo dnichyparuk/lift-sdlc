@@ -14,7 +14,7 @@
       "defaultModel": "gemini-3.8-flash-medium",
       "isolation": null,
       "postGates": [
-        { "script": "scripts/util/verify-completeness.js", "haltExitCode": 65 },
+        { "script": "scripts/util/verify-completeness.js", "args": "--state-file $STATE_FILE --plan-file $PLAN_FILE", "haltExitCode": 65 },
         { "script": "scripts/util/ship-git-ops.js", "args": "stage-post-execute" }
       ]
     },

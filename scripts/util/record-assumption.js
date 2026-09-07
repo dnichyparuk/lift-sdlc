@@ -21,6 +21,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+const { writeJsonLine } = require('../lib/output');
+const { parseStateFilename } = require('../lib/state');
+
 const VALID_CLASSES = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6'];
 
 function parseArgs(argv) {
@@ -46,10 +49,8 @@ function parseArgs(argv) {
 }
 
 function extractRunId(stateFilePath) {
-  const base = path.basename(stateFilePath);
-  // Match trailing timestamp: \d{8}T\d{6}Z
-  const m = base.match(/-(\d{8}T\d{6}Z)\.json$/);
-  if (m) return m[1];
+  const parsed = parseStateFilename(path.basename(stateFilePath));
+  if (parsed && parsed.timestamp) return parsed.timestamp;
   return 'default';
 }
 
@@ -87,7 +88,12 @@ function main() {
 
   content += `| ${now} | ${opts.step} | ${opts.questionClass} | ${cleanDecision} | ${cleanRationale} |\n`;
 
-  fs.appendFileSync(ledgerFile, content, 'utf8');
+  try {
+    fs.appendFileSync(ledgerFile, content, 'utf8');
+  } catch (err) {
+    process.stderr.write(`Error: could not write to ledger file '${ledgerFile}': ${err.message}\n`);
+    process.exit(2);
+  }
 
   // Also record into state file if it exists and is writable
   try {
@@ -104,11 +110,11 @@ function main() {
       });
       fs.writeFileSync(opts.stateFile, JSON.stringify(state, null, 2) + '\n', 'utf8');
     }
-  } catch (_) {
-    // Non-fatal if state file write fails
+  } catch (err) {
+    process.stderr.write(`Warning: could not update state file with assumption: ${err.message}\n`);
   }
 
-  process.stdout.write(JSON.stringify({ recorded: true, ledgerFile }) + '\n');
+  writeJsonLine({ recorded: true, ledgerFile });
   process.exit(0);
 }
 

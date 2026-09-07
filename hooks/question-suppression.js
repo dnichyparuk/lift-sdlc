@@ -48,8 +48,17 @@ try {
 
   if (adv && adv.advancing && adv.auto) {
     const toolCall = input.toolCall || {};
+    if (toolCall.name && toolCall.name !== 'ask_question') {
+      process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
+      process.exit(0);
+    }
+
     const args = toolCall.args || {};
     const questions = Array.isArray(args.questions) ? args.questions : [];
+    if (questions.length === 0) {
+      process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
+      process.exit(0);
+    }
 
     let isApprovalGate = false;
     for (const q of questions) {

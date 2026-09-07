@@ -95,8 +95,8 @@ Selecting an option will automatically save it to your local config file.
 
 If you are developing Lift-SDLC or updating the model definitions, refer to the following source files:
 
-*   **Configuration Schema**: [scripts/lib/ship-fields.js](scripts/lib/ship-fields.js) is the single source of truth defining the `quality` config field schema, option validations, and description text.
-*   **Resolution and Precedence**: [scripts/skill/ship.js](scripts/skill/ship.js) handles merging the config files with any command-line options and passes the resolved flag down.
-*   **Orchestration Logic**: [skills/execute-plan-sdlc/SKILL.md](skills/execute-plan-sdlc/SKILL.md) defines how the executing agent reads the `--quality` flag and dynamically maps tasks to model engines (e.g., `gemini-3.8-flash-low` vs `gemini-3.1-pro-low`).
+*   **Configuration Schema**: [scripts/lib/ship-fields.js](../scripts/lib/ship-fields.js) is the single source of truth defining the `quality` config field schema, option validations, and description text.
+*   **Resolution and Precedence**: [scripts/skill/ship.js](../scripts/skill/ship.js) handles merging the config files with any command-line options and passes the resolved flag down.
+*   **Orchestration Logic**: [skills/execute-plan-sdlc/SKILL.md](../skills/execute-plan-sdlc/SKILL.md) defines how the executing agent reads the `--quality` flag and dynamically maps tasks to model engines (e.g., `gemini-3.8-flash-low` vs `gemini-3.1-pro-low`).
 *   **Architecture & Agent Relations**: For a comprehensive view of how quality tiers integrate across all agent layers, see the [SDLC Plugin Architecture Report](./sdlc-plugin-architecture-report.md).
 

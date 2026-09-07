@@ -187,4 +187,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { MANIFEST, extractVersion };
+module.exports = { MANIFEST, extractVersion, parseArgs };

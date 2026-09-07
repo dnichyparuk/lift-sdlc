@@ -124,9 +124,9 @@ The shipping pipeline integrates a dedicated `archive-openspec` step between the
 ### 5. Setup & Onboarding (`/setup-sdlc`)
 To ease developer onboarding, running `/setup-sdlc --openspec-enrich` (configured in [setup-openspec.md](file://~/.gemini/config/plugins/sdlc/skills/setup-sdlc/resources/setup-openspec.md)) executes [openspec-enrich.js](file://~/.gemini/config/plugins/sdlc/scripts/util/openspec-enrich.js) to inject a managed documentation block into the top-level `openspec/config.yaml`:
 ```yaml
-# BEGIN MANAGED BY sdlc-utilities (v2)
+# BEGIN MANAGED BY lift-sdlc (v2)
 context: |
-  SDLC workflow managed by sdlc-utilities. Do not edit this block manually.
+  SDLC workflow managed by Lift-SDLC. Do not edit this block manually.
   To update: /setup-sdlc --openspec-enrich. To remove: /setup-sdlc --remove-openspec.
 
   Contributor workflow:
@@ -136,7 +136,7 @@ context: |
 
   Do not invoke `openspec archive` directly — /ship-sdlc handles archival
   as a conditional pipeline step after validation passes.
-# END MANAGED BY sdlc-utilities (v2)
+# END MANAGED BY lift-sdlc (v2)
 ```
 
 ---

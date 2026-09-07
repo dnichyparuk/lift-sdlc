@@ -40,6 +40,7 @@ const {
   listBranches, readTtlDaysFromConfig,
   registerStatePrefix, getRegisteredPrefixes,
 } = require(path.join(LIB, 'state'));
+const { DAY_MS } = require(path.join(LIB, 'time-constants'));
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -86,7 +87,7 @@ function parseArgs(argv) {
       result.title = args[++i];
     } else if (a === '--ttl-days' && args[i + 1]) {
       const val = parseInt(args[++i], 10);
-      if (isNaN(val)) { process.stderr.write(`Error: --ttl-days requires a number, got "${args[i]}"\n`); process.exit(2); }
+      if (isNaN(val)) { process.stderr.write(`Error: --ttl-days requires a number, got "${args[i]}"\n`); process.exit(1); }
       result.ttlDays = val;
     } else if (a === '--dry-run') {
       result.dryRun = true;
@@ -112,7 +113,7 @@ function resolveBranchOrExit(argBranch) {
     return resolveBranch(argBranch);
   } catch (e) {
     process.stderr.write(`Error: ${e.message}\n`);
-    process.exit(2);
+    process.exit(1);
   }
 }
 
@@ -137,7 +138,7 @@ const DEFAULT_SHIP_STEPS = [
 function cmdInit(opts) {
   if (!opts.branch) {
     process.stderr.write('Error: --branch is required for init\n');
-    process.exit(2);
+    process.exit(1);
   }
 
   registerStatePrefix(opts.pipeline);
@@ -147,7 +148,7 @@ function cmdInit(opts) {
     flags = opts.flags ? JSON.parse(opts.flags) : {};
   } catch (e) {
     process.stderr.write(`Error: --flags is not valid JSON: ${e.message}\n`);
-    process.exit(2);
+    process.exit(1);
   }
 
   let steps = DEFAULT_SHIP_STEPS;
@@ -166,7 +167,7 @@ function cmdInit(opts) {
       }
     } catch (e) {
       process.stderr.write(`Error: --steps is not valid JSON: ${e.message}\n`);
-      process.exit(2);
+      process.exit(1);
     }
   }
 
@@ -207,7 +208,7 @@ function cmdInit(opts) {
 function findActiveStep(opts) {
   if (!opts.step) {
     process.stderr.write('Error: --step is required\n');
-    process.exit(2);
+    process.exit(1);
   }
 
   registerStatePrefix(opts.pipeline);
@@ -297,11 +298,11 @@ function cmdResume(opts) {
 function cmdDecide(opts) {
   if (!opts.step) {
     process.stderr.write('Error: --step is required\n');
-    process.exit(2);
+    process.exit(1);
   }
   if (!opts.text) {
     process.stderr.write('Error: --text is required\n');
-    process.exit(2);
+    process.exit(1);
   }
 
   registerStatePrefix(opts.pipeline);
@@ -328,7 +329,7 @@ function cmdDecide(opts) {
 function cmdDefer(opts) {
   if (!opts.severity || !opts.file || !opts.title) {
     process.stderr.write('Error: --severity, --file, and --title are required for defer\n');
-    process.exit(2);
+    process.exit(1);
   }
 
   registerStatePrefix(opts.pipeline);
@@ -458,7 +459,7 @@ function cmdGc(opts) {
     const stateDir = resolveStateDir();
     const liveSlugs = new Set(knownBranches.map(slugifyBranch));
     const now = Date.now();
-    const ttlMs = ttlDays * 86400000;
+    const ttlMs = ttlDays * DAY_MS;
 
     const out = {};
     for (const p of prefixes) {
@@ -503,7 +504,7 @@ function cmdGc(opts) {
 function cmdMigrate(opts) {
   if (!opts.from || !opts.to) {
     process.stderr.write('Error: --from <slug> and --to <branch> are required for migrate\n');
-    process.exit(2);
+    process.exit(1);
   }
 
   registerStatePrefix(opts.pipeline);
@@ -537,7 +538,7 @@ try {
     default:
       process.stderr.write(`Error: unknown subcommand "${opts.subcommand}"\n`);
       process.stderr.write('Usage: node pipeline.js [--pipeline <id>] <init|start|complete|skip|fail|suspend|resume|decide|defer|read|cleanup|cleanup-pipeline|gc|migrate> [options]\n');
-      process.exit(2);
+      process.exit(1);
   }
 } catch (e) {
   process.stderr.write(`Unexpected error: ${e.message}\n`);

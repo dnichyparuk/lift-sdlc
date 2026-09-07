@@ -61,3 +61,40 @@ test('stop-block: blocks stop with continue when a step is in_progress', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('stop-block: blocks stop with continue between steps in auto mode', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stop-block-test-'));
+  const prevOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
+  process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
+
+  try {
+    const branch = exec('git branch --show-current');
+    if (!branch) return;
+
+    initState('ship', branch, {
+      branch,
+      flags: { auto: true },
+      steps: [
+        { name: 'execute', status: 'completed' },
+        { name: 'review', status: 'pending' },
+      ],
+    });
+
+    const res = spawnSync(process.execPath, [HOOK_PATH], {
+      encoding: 'utf8',
+      env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir },
+    });
+    assert.strictEqual(res.status, 0);
+    const json = JSON.parse(res.stdout.trim());
+    assert.strictEqual(json.decision, 'continue');
+    assert.ok(json.reason.includes('auto mode'));
+  } finally {
+    if (prevOverride !== undefined) {
+      process.env.SDLC_STATE_DIR_OVERRIDE = prevOverride;
+    } else {
+      delete process.env.SDLC_STATE_DIR_OVERRIDE;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
