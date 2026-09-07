@@ -1093,6 +1093,8 @@ function main() {
     }
     const { filePath, prunedOrphans } = JSON.parse(result.stdout);
     writeOutput({
+      pipeline: 'ship-sdlc',
+      version: 1,
       flags: { ...flags, planModeBlocked: true },
       stateFile: filePath,
       prunedOrphans,
@@ -1373,6 +1375,8 @@ function main() {
   }
 
   const result = {
+    pipeline: 'ship-sdlc',
+    version: 1,
     errors,
     warnings,
     config: {

@@ -92,6 +92,20 @@ Print one line per file:
 
 Run `rm -f "$PREPARE_OUTPUT_FILE"` to clean up the temp output file. Then stop. Do not proceed to step 1b. The pipeline does not run.
 
+### 1a-engine. Generic Workflow Engine Delegation
+
+Unless `ship.engine` is explicitly set to `"legacy"` in `.sdlc/local.json`, `ship-sdlc` delegates pipeline execution directly to the generic workflow engine:
+
+1. Check `.sdlc/local.json` for `ship.engine === "legacy"`.
+2. If `ship.engine !== "legacy"`:
+   Announce:
+   > Delegating to generic workflow engine (`run-workflow`) with manifest `skills/ship-sdlc/pipeline.json`.
+
+   Invoke `/run-workflow --manifest skills/ship-sdlc/pipeline.json $ARGUMENTS` using the Skill tool.
+   Stop here — `run-workflow` executes the pipeline steps, manages state, and renders summary reports.
+3. If `ship.engine === "legacy"`:
+   Proceed to legacy step 1b below.
+
 ### 1b. Load ship config
 
 **Hook context fast-path:** If the session-start system-reminder contains a `Ship config:` line, note it for display. The prepare script (`skill/ship.js`) remains the authoritative source for config values — the hook line is a user-facing heads-up, not a data source.

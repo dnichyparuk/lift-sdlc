@@ -93,27 +93,34 @@ try {
 const resumeLines = [];
 
 try {
-  const { slugifyBranch, findStateFile, readState } = require('../scripts/lib/state');
+  const { slugifyBranch, findStateFile, readState, getRegisteredPrefixes } = require('../scripts/lib/state');
   const { exec } = require('../scripts/lib/git');
   const branch = exec('git branch --show-current');
   if (branch) {
     const branchSlug = slugifyBranch(branch);
 
-    // Check for ship state file
-    const shipFound = findStateFile('ship', branchSlug);
-    if (shipFound) {
-      const shipState = readState('ship', branchSlug);
-      if (shipState && shipState.data && Array.isArray(shipState.data.steps)) {
-        const steps = shipState.data.steps;
-        const inProgress = steps.find(s => s.status === 'in_progress');
-        const lastCompleted = [...steps].reverse().find(s => s.status === 'completed');
-        const currentStep = inProgress || lastCompleted;
-        if (currentStep) {
-          const stepIndex = steps.indexOf(currentStep) + 1;
-          const stepName = currentStep.name || currentStep.id || 'unknown';
-          const label = inProgress ? `paused at step ${stepIndex}: ${stepName}` : `last completed step ${stepIndex}: ${stepName}`;
-          resumeLines.push(`Active pipeline: ship-sdlc on ${branch} (${label})`);
-          resumeLines.push('  Resume with: /ship-sdlc --resume');
+    // Check for registered pipeline state files (ship, run-workflow, etc.)
+    const prefixes = typeof getRegisteredPrefixes === 'function'
+      ? getRegisteredPrefixes().filter(p => p !== 'execute')
+      : ['ship', 'run-workflow'];
+
+    for (const prefix of prefixes) {
+      const found = findStateFile(prefix, branchSlug);
+      if (found) {
+        const state = readState(prefix, branchSlug);
+        if (state && state.data && Array.isArray(state.data.steps)) {
+          const steps = state.data.steps;
+          const inProgress = steps.find(s => s.status === 'in_progress');
+          const lastCompleted = [...steps].reverse().find(s => s.status === 'completed');
+          const currentStep = inProgress || lastCompleted;
+          if (currentStep) {
+            const stepIndex = steps.indexOf(currentStep) + 1;
+            const stepName = currentStep.name || currentStep.id || 'unknown';
+            const label = inProgress ? `paused at step ${stepIndex}: ${stepName}` : `last completed step ${stepIndex}: ${stepName}`;
+            const skillName = prefix === 'ship' ? 'ship-sdlc' : prefix;
+            resumeLines.push(`Active pipeline: ${skillName} on ${branch} (${label})`);
+            resumeLines.push(`  Resume with: /${skillName} --resume`);
+          }
         }
       }
     }
@@ -203,6 +210,11 @@ try {
         } else if (recovery.pipeline === 'execute-plan-sdlc') {
           resumeLines.push(`  Pipeline: execute-plan-sdlc on ${recovery.branch}`);
           resumeLines.push(`  Progress: wave ${recovery.completedWaves} of ${recovery.totalWaves} complete`);
+        } else if (recovery.pipeline) {
+          resumeLines.push(`  Pipeline: ${recovery.pipeline} on ${recovery.branch}`);
+          if (recovery.currentStep) {
+            resumeLines.push(`  Current step: ${recovery.currentStep}`);
+          }
         }
       }
 
