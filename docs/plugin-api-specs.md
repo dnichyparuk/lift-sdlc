@@ -107,15 +107,73 @@ Followed by explicit agent instructions in the body. Skills auto-convert to slas
 (e.g. `/skill-identifier`) — the same effective shape as a Claude Code `SKILL.md`'s `name` +
 `description` frontmatter pair.
 
-### Documented gaps (confirmed absent from the official page, not merely unread)
+### Confirmed Antigravity Schemas and Conventions (verified via `agy plugin validate` & binary inspection)
 
-The official docs do **not** specify, as of this fetch:
-- `hooks.json` schema/structure
-- `mcp_config.json` detailed format
-- `agents/` directory specification (format of an Antigravity subagent file)
-- `rules/` file format
-- Valid model identifiers or a model-tier selection mechanism
-- Any explicit statement of Claude Code plugin-format compatibility (or incompatibility)
+1. **`agents/` directory specification:**
+   Each agent is a `.md` file with YAML frontmatter:
+   ```yaml
+   ---
+   name: my-orchestrator
+   description: Brief role summary
+   subagent: true
+   tools: view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command, invoke_subagent
+   model: gemini-3.8-flash-low
+   ---
+   ```
+   Validated by `agy plugin validate <dir>` (reports `✔ agents: N processed`).
+
+2. **Native Tool Names:**
+   Antigravity uses snake_case native tools rather than Claude Code tools:
+   - `view_file` (replaces `Read`)
+   - `write_to_file` (replaces `Write`)
+   - `replace_file_content` (replaces `Edit` — uses `StartLine`, `EndLine`, `TargetContent`, `ReplacementContent`)
+   - `find_by_name` (replaces `Glob`)
+   - `grep_search` (replaces `Grep`)
+   - `run_command` (replaces `Bash`)
+   - `invoke_subagent` (replaces `Agent tool` / `subagent_type`)
+   - `ask_question` (replaces `AskUserQuestion`)
+   - `search_web` (replaces `WebSearch`)
+   - `read_url_content` (replaces `WebFetch`)
+   - `TodoWrite` is NOT present in Antigravity; progress is tracked via stdout markers, chat status, and persistent state files.
+
+3. **`invoke_subagent` schema:**
+   ```json
+   {
+     "Subagents": [
+       {
+         "TypeName": "research",
+         "Role": "Codebase Researcher",
+         "Model": "flash",
+         "Workspace": "inherit",
+         "Prompt": "..."
+       }
+     ]
+   }
+   ```
+   Built-in subagents: `self` and `research`. Custom agents declared in `agents/` are invoked by their `name`.
+
+4. **`ask_question` schema:**
+   ```json
+   {
+     "questions": [
+       {
+         "question": "Choose an option:",
+         "options": ["Option A", "Option B"],
+         "is_multi_select": false
+       }
+     ]
+   }
+   ```
+
+5. **`hooks.json` schema:**
+   Event-keyed array:
+   ```json
+   {
+     "SessionStart": [{ "matcher": "*", "hooks": [{ "command": "node ./hooks/session-start.js" }] }],
+     "PreToolUse": [{ "matcher": "run_command|ask_question", "hooks": [{ "command": "node ./hooks/pre-tool-use.js" }] }]
+   }
+   ```
+   Validated by `agy plugin validate <dir>` (reports `✔ hooks: N processed`).
 
 ---
 
@@ -128,40 +186,20 @@ The official docs do **not** specify, as of this fetch:
   `description`, body = instructions to the invoking LLM. A `SKILL.md` written with only `name`
   and `description` in its frontmatter (no Claude-specific extra fields) should parse under both
   systems' minimum requirements.
+- `skills/` at the plugin root is supported and discovered by both Claude Code and Antigravity.
 
 **What's confirmed to differ:**
-- Directory location for skills: Claude Code plugins bundle `skills/*/SKILL.md` (one directory
-  per skill) at the plugin root; Antigravity's documented workspace-skill location is
-  `.agents/skills/` (flat `.md` files, not necessarily one-directory-per-skill) or a global path
-  under `~/.gemini/`. A plugin intended for both should not assume the consuming host's directory
-  convention — ship skills at the plugin-relative path documented for plugins in each host
-  (`skills/` is listed as valid for an Antigravity plugin's own bundle, per §2's plugin layout).
-- `plugin.json`'s validated field set: Antigravity's is minimal (`name` required, `description`
-  optional, `$schema` optional); Claude Code plugins in this session's research always additionally
-  carry `version` and `author`. Recommendation: keep both — Antigravity's docs don't say extra
-  fields are rejected, and Claude Code plugins commonly rely on `version`.
-
-**Genuinely unknown — do not assume, verify before depending on it:**
-- Whether Antigravity's `agents/` subagent file format matches Claude Code's (`name`/`description`/
-  `tools`/`model` frontmatter + role/Rules body) — undocumented on the official page fetched this
-  session.
-- Whether Antigravity's `hooks.json` uses the same event-keyed-array shape as Claude Code's.
-- Model identifiers: Claude Code plugins name models by tier (`haiku`/`sonnet`/`opus`) or, when a
-  plugin explicitly targets Antigravity (as `lift-sdlc` does — confirmed via its own model-tier
-  strings being Gemini-specific, e.g. `gemini-3.8-flash-high/medium`), by a Gemini model string.
-  Antigravity's own docs don't publish a canonical model-identifier list or tier-selection
-  mechanism as of this fetch.
+- **Tool APIs:** Claude Code tools (`AskUserQuestion`, `Agent`, `Edit`, `Write`, `Read`, `Glob`, `Grep`, `Bash`, `TodoWrite`) do not exist or differ from Antigravity native tools (`ask_question`, `invoke_subagent`, `replace_file_content`, `write_to_file`, `view_file`, `find_by_name`, `grep_search`, `run_command`).
+- **Subagent Dispatch:** Antigravity dispatches subagents with `invoke_subagent` with structured `Subagents: [...]` array, whereas Claude Code uses `Agent` with `subagent_type`.
+- **User Prompts:** Claude Code uses `AskUserQuestion(question: "...")`, while Antigravity uses `ask_question(questions: [{question, options, is_multi_select}])`.
 
 **Recommendation for `lift-fix-price`'s future skills/agents layer** (out of scope for the current
 engine-foundation phase, but binding for whoever plans it next):
 1. Keep `SKILL.md` frontmatter to the common subset (`name`, `description`) wherever possible;
    treat Claude-Code-only fields (`user-invocable`, `argument-hint`) as additive, not load-bearing.
-2. Do not hardcode a Claude-specific model string (`sonnet`/`opus`) in frontmatter — use a
-   config-driven model-tier abstraction (mirroring `lift-sdlc`'s own quality-tier indirection) so
-   the same skill file resolves to the right model identifier under either host.
-3. Before shipping `agents/*.md` or `hooks.json`, re-verify their Antigravity shape directly
-   (the official docs had no schema for either as of this session) rather than assuming the
-   Claude Code shape transfers unchanged.
+2. In all skill instructions and agent prompts, strictly reference Antigravity native tools (`ask_question`, `invoke_subagent`, `view_file`, `replace_file_content`, `write_to_file`, `find_by_name`, `grep_search`, `run_command`).
+3. For subagent fan-outs, use `invoke_subagent` with `TypeName: "self"`, `TypeName: "research"`, or custom agents registered in `agents/*.md`.
+4. Run `agy plugin validate <plugin-dir>` to ensure full schema compliance.
 
 ---
 
