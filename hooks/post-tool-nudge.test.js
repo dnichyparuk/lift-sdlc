@@ -50,6 +50,7 @@ test('post-tool-nudge: outputs injectSteps when a step is in_progress', () => {
     const json = JSON.parse(res.stdout.trim());
     assert.ok(Array.isArray(json.injectSteps));
     assert.strictEqual(json.injectSteps[0].type, 'ephemeralMessage');
+    assert.strictEqual(json.injectSteps[0].ephemeralMessage, json.injectSteps[0].content);
     assert.ok(json.injectSteps[0].content.includes('commit'));
   } finally {
     if (prevOverride !== undefined) {

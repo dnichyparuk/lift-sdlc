@@ -232,7 +232,7 @@ Third-party manifests (a `prepareScript`'s emitted `steps[]`, e.g. a plugin's ow
 **`dispatchMode`** — `"agent"` or `null` (Step 4c.2). `"agent"` dispatches the step via the Agent tool with `model: step.model` and `isolation: step.isolation` (omitted when null), invoking `/<step.skill> <step.args>`. `null` (or omitted) runs the step inline in the orchestrator's own context (Case B).
 
 **`inlineHandler` + `handlerSpec`** — For a `dispatchMode: null` step, Case B names four built-in handlers with concrete, engine-defined execution:
-- `archive-openspec` — `node "<PLUGIN_ROOT>/scripts/util/openspec-archive.js" '<name>'`
+- `archive-openspec` — `ARCHIVED_PATH=$(node "<PLUGIN_ROOT>/scripts/util/openspec-archive.js" '<name>')`
 - `verify-pipeline` — `node "<PLUGIN_ROOT>/scripts/util/verify-pipeline.js"`
 - `await-remote-review` — `node "<PLUGIN_ROOT>/scripts/util/await-review.js"`
 - `learnings-commit` — `node "<PLUGIN_ROOT>/scripts/util/ship-git-ops.js" commit-learnings`

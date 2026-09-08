@@ -1,6 +1,7 @@
 ---
 name: review-orchestrator
 description: Orchestrates multi-dimension code review. Reads manifest from a temp file, resolves REFERENCE.md, dispatches dimension review subagents in parallel, critiques and deduplicates findings, and persists the consolidated comment body to disk for the skill to post.
+subagent: true
 tools: Read, Write, Glob, Grep, Bash, Agent
 model: gemini-3.8-flash-low
 ---

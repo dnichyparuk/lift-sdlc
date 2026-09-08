@@ -153,6 +153,85 @@ test('question-suppression: allows questions containing approval gate markers ev
   }
 });
 
+test('question-suppression: denies non-approval ask_question in auto mode', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'q-supp-test-'));
+  const prevOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
+  process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
+
+  try {
+    const branch = exec('git branch --show-current') || 'feature/test';
+
+    initState('ship', branch, {
+      branch,
+      flags: { auto: true },
+      steps: [{ name: 'review', status: 'in_progress' }],
+    });
+
+    const payload = JSON.stringify({
+      toolCall: {
+        name: 'ask_question',
+        args: { questions: [{ question: 'Which style?', options: ['Style1', 'Style2'] }] },
+      },
+    });
+
+    const res = spawnSync(process.execPath, [HOOK_PATH], {
+      input: payload,
+      encoding: 'utf8',
+      env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir, SDLC_BRANCH_OVERRIDE: branch },
+    });
+    assert.strictEqual(res.status, 0);
+    const json = JSON.parse(res.stdout.trim());
+    assert.strictEqual(json.decision, 'deny');
+    assert.ok(json.reason.includes('review'));
+  } finally {
+    if (prevOverride !== undefined) {
+      process.env.SDLC_STATE_DIR_OVERRIDE = prevOverride;
+    } else {
+      delete process.env.SDLC_STATE_DIR_OVERRIDE;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('question-suppression: allows ask_question with approval marker in auto mode', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'q-supp-test-'));
+  const prevOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
+  process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
+
+  try {
+    const branch = exec('git branch --show-current') || 'feature/test';
+
+    initState('ship', branch, {
+      branch,
+      flags: { auto: true },
+      steps: [{ name: 'version', status: 'in_progress' }],
+    });
+
+    const payload = JSON.stringify({
+      toolCall: {
+        name: 'ask_question',
+        args: { questions: [{ question: 'Do you approve and wish to proceed with the release?', options: ['Yes', 'No'] }] },
+      },
+    });
+
+    const res = spawnSync(process.execPath, [HOOK_PATH], {
+      input: payload,
+      encoding: 'utf8',
+      env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir, SDLC_BRANCH_OVERRIDE: branch },
+    });
+    assert.strictEqual(res.status, 0);
+    const json = JSON.parse(res.stdout.trim());
+    assert.strictEqual(json.decision, 'allow');
+  } finally {
+    if (prevOverride !== undefined) {
+      process.env.SDLC_STATE_DIR_OVERRIDE = prevOverride;
+    } else {
+      delete process.env.SDLC_STATE_DIR_OVERRIDE;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('question-suppression: fails closed (deny) on malformed or unparseable stdin', () => {
   const res = spawnSync(process.execPath, [HOOK_PATH], {
     input: '{ not-json',
@@ -163,3 +242,4 @@ test('question-suppression: fails closed (deny) on malformed or unparseable stdi
   assert.strictEqual(json.decision, 'deny');
   assert.ok(json.reason.includes('fail-closed'));
 });
+

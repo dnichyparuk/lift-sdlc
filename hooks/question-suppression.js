@@ -49,7 +49,7 @@ try {
 
   if (adv && adv.advancing && adv.auto) {
     const toolCall = input.toolCall || {};
-    if (toolCall.name && toolCall.name !== 'AskUserQuestion') {
+    if (toolCall.name && toolCall.name !== 'AskUserQuestion' && toolCall.name !== 'ask_question') {
       process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
       process.exit(0);
     }

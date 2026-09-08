@@ -20,11 +20,13 @@ try {
 
   if (adv && adv.advancing && adv.step) {
     const pipelineName = adv.prefix || 'pipeline';
+    const reminderMsg = `Pipeline ${pipelineName} step '${adv.step}' is in_progress. Advance the pipeline now — do not summarize or editorialize.`;
     process.stdout.write(JSON.stringify({
       injectSteps: [
         {
+          ephemeralMessage: reminderMsg,
           type: 'ephemeralMessage',
-          content: `Pipeline ${pipelineName} step '${adv.step}' is in_progress. Advance the pipeline now — do not summarize or editorialize.`,
+          content: reminderMsg,
         },
       ],
     }) + '\n');

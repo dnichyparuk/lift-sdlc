@@ -483,8 +483,13 @@ const outputLines = [
   ...resumeLines,
 ];
 
+const sessionNotice = outputLines.join('\n');
 process.stdout.write(JSON.stringify({
   injectSteps: [
-    { type: 'ephemeralMessage', content: outputLines.join('\n') }
+    {
+      ephemeralMessage: sessionNotice,
+      type: 'ephemeralMessage',
+      content: sessionNotice,
+    },
   ]
 }) + '\n');

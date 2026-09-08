@@ -14,7 +14,7 @@
   "question-suppression": {
     "PreToolUse": [
       {
-        "matcher": "AskUserQuestion",
+        "matcher": "ask_question|AskUserQuestion",
         "hooks": [
           {
             "command": "node ./hooks/question-suppression.js"
