@@ -49,3 +49,29 @@ test('generate-run-audit: creates markdown audit report from state file', () => 
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('generate-run-audit: exits 1 when --state-file is missing', () => {
+  const res = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' });
+  assert.strictEqual(res.status, 1);
+  assert.ok(res.stderr.includes('Error: --state-file is required'));
+});
+
+test('generate-run-audit: exits 1 when state file does not exist', () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '--state-file', '/nonexistent/path/state.json'], { encoding: 'utf8' });
+  assert.strictEqual(res.status, 1);
+  assert.ok(res.stderr.includes('Error: state file not found'));
+});
+
+test('generate-run-audit: exits 2 when state file contains invalid JSON', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-test-'));
+  try {
+    const corruptFile = path.join(tempDir, 'corrupt.json');
+    fs.writeFileSync(corruptFile, '{ invalid-json', 'utf8');
+
+    const res = spawnSync(process.execPath, [SCRIPT, '--state-file', corruptFile], { encoding: 'utf8' });
+    assert.strictEqual(res.status, 2);
+    assert.ok(res.stderr.includes('Error: unreadable state JSON'));
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

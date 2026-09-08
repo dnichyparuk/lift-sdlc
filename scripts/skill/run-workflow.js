@@ -25,21 +25,19 @@ const PLUGIN_ROOT = path.join(__dirname, '..', '..');
 function parseArgs(argv) {
   const args = argv.slice(2);
   let manifestPath = null;
-  let outputFile = false;
   const forwarded = [];
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--manifest' && args[i + 1]) {
       manifestPath = args[++i];
-    } else if (args[i] === '--output-file') {
-      outputFile = true;
-      forwarded.push(args[i]);
+    } else if (args[i] === '--manifest') {
+      manifestPath = null;
     } else {
       forwarded.push(args[i]);
     }
   }
 
-  return { manifestPath, outputFile, forwarded };
+  return { manifestPath, forwarded };
 }
 
 function resolveManifest(manifestArg) {

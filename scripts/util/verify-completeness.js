@@ -36,6 +36,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { renderTodos, parsePlanTasks } = require(path.join(__dirname, '..', 'lib', 'ship-todos'));
+const { writeJsonLine } = require(path.join(__dirname, '..', 'lib', 'output'));
 
 const EXECUTE_STATE_SCRIPT = path.join(__dirname, '..', 'state', 'execute.js');
 
@@ -100,7 +101,7 @@ function markExecuteFailed(stateFile, planFile, { readFileFn = fs.readFileSync }
   const result = renderTodos(state, { event: 'execute', failStep: 'execute', planTasks });
   process.stderr.write(result.marker + '\n');
   const json = JSON.stringify(result, null, 2) + '\n';
-  process.stdout.write(json);
+  writeJsonLine(result, { indent: 2, exit: false });
   return { marker: result.marker, json };
 }
 

@@ -24,7 +24,7 @@ If the system context contains "Plan mode is active":
 Run the generic prepare wrapper to compute the pipeline plan:
 
 ```shell
-PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/run-workflow.js" --manifest "$MANIFEST_PATH" --output-file $FORWARDED_ARGS)
+PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/run-workflow.js" --manifest "$MANIFEST_PATH" $FORWARDED_ARGS)
 EXIT_CODE=$?
 echo "PREPARE_OUTPUT_FILE: $PREPARE_OUTPUT_FILE"
 echo "STATUS: $EXIT_CODE"
@@ -32,7 +32,7 @@ echo "STATUS: $EXIT_CODE"
 
 1. If `EXIT_CODE` is non-zero, read errors from `$PREPARE_OUTPUT_FILE`, display them to the user, and stop.
 2. Parse the JSON manifest from `$PREPARE_OUTPUT_FILE`.
-3. Extract `pipeline`, `version`, `steps[]`, `flags`, and `validation`. Extract `<branch>` from `context.currentBranch` (or `git branch --show-current`). Retain `statePrefix` / `pipeline` from `pipeline.json` for state CLI calls.
+3. Extract `pipeline`, `version`, `statePrefix` (fallback: `pipeline`), `steps[]`, `flags`, and `validation`. Extract `<branch>` from `context.currentBranch` (or `git branch --show-current`). Extract `$PLAN_FILE` from `context.planFile` (or `flags.planFile`). Retain `statePrefix` for all state CLI calls to match session resume and hook conventions.
 4. Clean up: `rm -f "$PREPARE_OUTPUT_FILE"`.
 
 ---
@@ -62,10 +62,10 @@ Format and display the pipeline table:
 
 ## Step 3 — Initialize Pipeline State
 
-Initialize the execution state file via the state CLI:
+Initialize the execution state file via the state CLI using `<statePrefix>`:
 
 ```shell
-node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" init --branch "<branch>" --flags '<flags_json>' --steps '<steps_json>'
+node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" init --branch "<branch>" --flags '<flags_json>' --steps '<steps_json>'
 ```
 
 Extract the created `stateFile` path from stdout (`const stateFile = JSON.parse(stdout).filePath;`).
@@ -84,7 +84,7 @@ If `step.status === "skipped"`:
    ```
 2. Record skip in state machine:
    ```shell
-   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" skip --step "<step.name>" --reason "<step.reason>"
+   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" skip --step "<step.name>" --reason "<step.reason>"
    ```
 3. Proceed to next step.
 
@@ -94,14 +94,14 @@ If `step.status === "conditional"`:
 2. If the condition is met: proceed to dispatch.
 3. If the condition is NOT met:
    - Print: `[skipped] Step <name> condition not met (<step.reason>)`
-   - Record skip via `pipeline.js skip`
+   - Record skip via `node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" skip --step "<step.name>" --reason "condition not met"`
    - Proceed to next step.
 
 ### 4c. Step Dispatch
 
 1. **Record step start**:
    ```shell
-   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" start --step "<step.name>"
+   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" start --step "<step.name>"
    ```
 
 2. **Dispatch Step**:
@@ -122,23 +122,31 @@ If `step.status === "conditional"`:
    *Bounded Retry Rule:* If the agent result cannot be parsed, retry dispatch exactly once with a clarifying request. If it fails again, treat as step failure.
 
    **Case B: `step.dispatchMode === null` (Inline step execution)**:
-   Execute the step directly in main orchestrator context using Bash or inline verdict logic per the step's handler specification (e.g. CI verification polling or OpenSpec archiving).
+   Execute the step directly in main orchestrator context per the step's handler specification:
+   - `archive-openspec`: Run `ARCHIVE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/openspec-archive.js" '<name>')`
+   - `verify-pipeline`: Poll CI checks via `node "<PLUGIN_ROOT>/scripts/util/verify-pipeline.js"`
+   - `await-remote-review`: Poll PR reviews via `node "<PLUGIN_ROOT>/scripts/util/await-review.js"`
+   - `learnings-commit`: Commit learnings via `node "<PLUGIN_ROOT>/scripts/util/ship-git-ops.js" commit-learnings`
 
 3. **Post-Gates Verification**:
-   If `step.postGates` is defined, execute each gate command sequentially. If any gate script exits with its configured `haltExitCode` (e.g. 65 for completeness check):
-   - Record step failure via `pipeline.js fail --step <step.name> --error "Post-gate failed"`
+   If `step.postGates` is defined, execute each gate command sequentially, interpolating `$STATE_FILE` and `$PLAN_FILE`:
+   ```shell
+   # Example: scripts/util/verify-completeness.js --state-file $STATE_FILE --plan-file $PLAN_FILE
+   ```
+   If any gate script exits with its configured `haltExitCode` (e.g. 65 for completeness check):
+   - Record step failure via `node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" fail --step <step.name> --error "Post-gate failed"`
    - Halt pipeline execution and proceed to cleanup.
 
 4. **Record Completion**:
    Record step completion via the state CLI:
    ```shell
-   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" complete --step "<step.name>" --result "<summary>"
+   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" complete --step "<step.name>" --result "<summary>"
    ```
 
 5. **Record Decisions**:
    If the step produced structured flow decisions (e.g. review verdict), persist them:
    ```shell
-   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" decide --step "<step.name>" --text "<decision>"
+   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" decide --step "<step.name>" --text "<decision>"
    ```
 
 ---
@@ -155,7 +163,7 @@ When a dispatched agent or step encounters ambiguity in `--auto` mode, resolve i
 4. **Rung 4 (Safe Branch Fallback):** For destructive operations (**Q6**), choose non-destructive alternatives (safe rebase instead of merge).
 5. **Rung 5 (Structured Suspension):** For hard blockers (**Q1/Q2** — missing credentials, external API reachability), do NOT ask interactive questions. Transition step to `needs_input`:
    ```shell
-   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" suspend --step "<step.name>" --question '<question_json>'
+   node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" suspend --step "<step.name>" --question '<question_json>'
    ```
    Halt the turn so the user can address the blocker.
 
@@ -174,11 +182,11 @@ When a dispatched agent or step encounters ambiguity in `--auto` mode, resolve i
 2. **Run terminal pipeline cleanup**:
    - If all steps succeeded:
      ```shell
-     node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" cleanup-pipeline
+     node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" cleanup-pipeline
      ```
    - If any step failed:
      ```shell
-     node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<pipeline>" cleanup-pipeline --force
+     node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" cleanup-pipeline --force
      ```
 
 ---

@@ -32,8 +32,7 @@ test('stop-block: blocks stop with continue when a step is in_progress', () => {
   process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
 
   try {
-    const branch = exec('git branch --show-current');
-    if (!branch) return;
+    const branch = exec('git branch --show-current') || 'feature/test';
 
     initState('ship', branch, {
       branch,
@@ -46,7 +45,7 @@ test('stop-block: blocks stop with continue when a step is in_progress', () => {
 
     const res = spawnSync(process.execPath, [HOOK_PATH], {
       encoding: 'utf8',
-      env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir },
+      env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir, SDLC_BRANCH_OVERRIDE: branch },
     });
     assert.strictEqual(res.status, 0);
     const json = JSON.parse(res.stdout.trim());
@@ -68,8 +67,7 @@ test('stop-block: blocks stop with continue between steps in auto mode', () => {
   process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
 
   try {
-    const branch = exec('git branch --show-current');
-    if (!branch) return;
+    const branch = exec('git branch --show-current') || 'feature/test';
 
     initState('ship', branch, {
       branch,
@@ -82,7 +80,7 @@ test('stop-block: blocks stop with continue between steps in auto mode', () => {
 
     const res = spawnSync(process.execPath, [HOOK_PATH], {
       encoding: 'utf8',
-      env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir },
+      env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir, SDLC_BRANCH_OVERRIDE: branch },
     });
     assert.strictEqual(res.status, 0);
     const json = JSON.parse(res.stdout.trim());

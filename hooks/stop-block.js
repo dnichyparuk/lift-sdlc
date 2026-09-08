@@ -15,18 +15,7 @@
 
 'use strict';
 
-const fs = require('node:fs');
-
 try {
-  // Read optional stdin if provided
-  let input = {};
-  try {
-    const raw = fs.readFileSync(0, 'utf8');
-    if (raw && raw.trim()) input = JSON.parse(raw);
-  } catch (_) {
-    // Stdin empty or unparseable — non-fatal for Stop event
-  }
-
   const { pipelineAdvancing } = require('../scripts/lib/state');
   const adv = pipelineAdvancing();
 

@@ -39,8 +39,10 @@ const {
   gcStateFiles, pruneStateFiles, migrateBranchSlug,
   listBranches, readTtlDaysFromConfig,
   registerStatePrefix, getRegisteredPrefixes,
+  resolveStateDir, parseStateFilename,
 } = require(path.join(LIB, 'state'));
 const { DAY_MS } = require(path.join(LIB, 'time-constants'));
+const { writeJsonLine } = require(path.join(LIB, 'output'));
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -189,16 +191,15 @@ function cmdInit(opts) {
     const prunedOrphans = pruneStateFiles(opts.pipeline, branchSlug);
 
     const filePath = initState(opts.pipeline, opts.branch, data);
-    const m = path.basename(filePath).match(/-(\d{8}T\d{6}Z)\.json$/);
-    if (m) {
+    const parsed = parseStateFilename(path.basename(filePath));
+    if (parsed) {
       data.ledgers = {
-        assumptions: `ASSUMPTIONS_${m[1]}.md`,
-        runAudit: `RUN_AUDIT_${m[1]}.md`,
+        assumptions: `ASSUMPTIONS_${parsed.timestamp}.md`,
+        runAudit: `RUN_AUDIT_${parsed.timestamp}.md`,
       };
       writeState(filePath, data);
     }
-    process.stdout.write(JSON.stringify({ filePath, prunedOrphans }) + '\n');
-    process.exit(0);
+    writeJsonLine({ filePath, prunedOrphans });
   } catch (e) {
     process.stderr.write(`Error: ${e.message}\n`);
     process.exit(2);
@@ -365,8 +366,7 @@ function cmdRead(opts) {
     process.exit(1);
   }
 
-  process.stdout.write(JSON.stringify(found.data, null, 2) + '\n');
-  process.exit(0);
+  writeJsonLine(found.data, { indent: 2 });
 }
 
 function validatePipelineContract(stateData) {
@@ -397,14 +397,12 @@ function cmdCleanup(opts) {
 
   const contract = validatePipelineContract(found.data);
   if (!contract.valid) {
-    process.stdout.write(JSON.stringify({ valid: false, violations: contract.violations }, null, 2) + '\n');
     process.stderr.write(`Pipeline contract violation: ${contract.violations.length} step(s) not in terminal state. State file preserved.\n`);
-    process.exit(1);
+    writeJsonLine({ valid: false, violations: contract.violations }, { indent: 2, exitCode: 1 });
   }
 
   deleteState(found.filePath);
-  process.stdout.write(JSON.stringify({ valid: true, cleaned: true }, null, 2) + '\n');
-  process.exit(0);
+  writeJsonLine({ valid: true, cleaned: true }, { indent: 2 });
 }
 
 function cmdCleanupPipeline(opts) {
@@ -431,9 +429,8 @@ function cmdCleanupPipeline(opts) {
     const contract = validatePipelineContract(found.data);
     if (!contract.valid) {
       report.currentRun = { valid: false, cleaned: false, violations: contract.violations };
-      process.stdout.write(JSON.stringify(report, null, 2) + '\n');
       process.stderr.write(`Pipeline contract violation: ${contract.violations.length} step(s) not in terminal state. State file preserved.\n`);
-      process.exit(1);
+      writeJsonLine(report, { indent: 2, exitCode: 1 });
     }
     deleteState(found.filePath);
     report.currentRun = { valid: true, cleaned: true };
@@ -445,8 +442,7 @@ function cmdCleanupPipeline(opts) {
     report.gc[prefix] = gcStateFiles({ prefix, ttlDays, knownBranches });
   }
 
-  process.stdout.write(JSON.stringify(report, null, 2) + '\n');
-  process.exit(0);
+  writeJsonLine(report, { indent: 2 });
 }
 
 function cmdGc(opts) {
@@ -455,7 +451,6 @@ function cmdGc(opts) {
   const prefixes = getRegisteredPrefixes();
 
   if (opts.dryRun) {
-    const { resolveStateDir, parseStateFilename } = require(path.join(LIB, 'state'));
     const stateDir = resolveStateDir();
     const liveSlugs = new Set(knownBranches.map(slugifyBranch));
     const now = Date.now();
@@ -488,8 +483,7 @@ function cmdGc(opts) {
       }
     }
 
-    process.stdout.write(JSON.stringify({ dryRun: true, ttlDays, ...out }, null, 2) + '\n');
-    process.exit(0);
+    writeJsonLine({ dryRun: true, ttlDays, ...out }, { indent: 2 });
   }
 
   const out = { ttlDays };
@@ -497,8 +491,7 @@ function cmdGc(opts) {
     out[prefix] = gcStateFiles({ prefix, ttlDays, knownBranches });
   }
 
-  process.stdout.write(JSON.stringify(out, null, 2) + '\n');
-  process.exit(0);
+  writeJsonLine(out, { indent: 2 });
 }
 
 function cmdMigrate(opts) {
@@ -509,8 +502,7 @@ function cmdMigrate(opts) {
 
   registerStatePrefix(opts.pipeline);
   const result = migrateBranchSlug({ prefix: opts.pipeline, fromSlug: opts.from, toBranch: opts.to });
-  process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-  process.exit(result.migrated ? 0 : 1);
+  writeJsonLine(result, { indent: 2, exitCode: result.migrated ? 0 : 1 });
 }
 
 // ---------------------------------------------------------------------------

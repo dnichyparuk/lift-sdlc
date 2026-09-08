@@ -79,7 +79,9 @@ function writeJsonLine(obj, opts = {}) {
   const exitCode = typeof opts.exitCode === 'number' ? opts.exitCode : 0;
   const indent   = typeof opts.indent === 'number' ? opts.indent : null;
   process.stdout.write(JSON.stringify(obj, null, indent) + '\n');
-  process.exit(exitCode);
+  if (opts.exit !== false) {
+    process.exit(exitCode);
+  }
 }
 
 /**

@@ -33,13 +33,14 @@ function hasApprovalMarker(text) {
 }
 
 try {
+  // Read stdin
   let input = {};
   try {
     const raw = fs.readFileSync(0, 'utf8');
     if (raw && raw.trim()) input = JSON.parse(raw);
   } catch (_) {
-    // If payload unreadable, allow
-    process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
+    // Fail closed if input is unreadable or malformed
+    process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'question-suppression hook could not parse tool-call input (fail-closed)' }) + '\n');
     process.exit(0);
   }
 

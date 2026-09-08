@@ -117,9 +117,13 @@ function main() {
     md += `See detailed assumptions in [ASSUMPTIONS_${runId}.md](./ASSUMPTIONS_${runId}.md).\n`;
   }
 
-  fs.writeFileSync(auditFile, md, 'utf8');
+  try {
+    fs.writeFileSync(auditFile, md, 'utf8');
+  } catch (err) {
+    process.stderr.write(`Error: could not write audit file '${auditFile}': ${err.message}\n`);
+    process.exit(2);
+  }
   writeJsonLine({ generated: true, auditFile });
-  process.exit(0);
 }
 
 if (require.main === module) {

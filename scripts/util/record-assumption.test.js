@@ -49,4 +49,27 @@ test('record-assumption: appends assumptions to ASSUMPTIONS_<runId>.md', () => {
 test('record-assumption: fails with code 1 on missing required args', () => {
   const res = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' });
   assert.strictEqual(res.status, 1);
+  assert.ok(res.stderr.includes('--state-file, --step, --question-class, and --decision are required'));
+});
+
+test('record-assumption: fails with code 1 on invalid question class', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'assume-test-'));
+  try {
+    const runId = '20260907T123456Z';
+    const stateFile = path.join(tempDir, `ship-main-${runId}.json`);
+    fs.writeFileSync(stateFile, JSON.stringify({ version: 1, assumptions: [] }), 'utf8');
+
+    const res = spawnSync(process.execPath, [
+      SCRIPT,
+      '--state-file', stateFile,
+      '--step', 'review',
+      '--question-class', 'Q9',
+      '--decision', 'Some choice',
+    ], { encoding: 'utf8' });
+
+    assert.strictEqual(res.status, 1);
+    assert.ok(res.stderr.includes('--question-class must be one of Q1, Q2, Q3, Q4, Q5, Q6'));
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });

@@ -89,7 +89,7 @@ The following tables map exactly where specific models are hardcoded or referenc
 | `harden-sdlc` | [skills/harden-sdlc/SKILL.md](../skills/harden-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
 | `jira-sdlc` | [skills/jira-sdlc/SKILL.md](../skills/jira-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 | `plan-sdlc` | [skills/plan-sdlc/SKILL.md](../skills/plan-sdlc/SKILL.md) | `gemini-3.8-flash-medium`, `gemini-3.1-pro-low` |
-| `pr-sdlc` | [skills/pr-sdlc/SKILL.md](../skills/pr-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
+| `pr-sdlc` | [skills/pr-sdlc/SKILL.md](../skills/pr-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 | `received-review-sdlc` | [skills/received-review-sdlc/SKILL.md](../skills/received-review-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
 | `review-sdlc` | [skills/review-sdlc/resources/EXAMPLES.md](../skills/review-sdlc/resources/EXAMPLES.md) | `gemini-3.8-flash-medium` |
 | `review-sdlc` | [skills/review-sdlc/resources/REFERENCE.md](../skills/review-sdlc/resources/REFERENCE.md) | `gemini-3.1-pro-low`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium` |
@@ -97,7 +97,7 @@ The following tables map exactly where specific models are hardcoded or referenc
 | `run-workflow` | [skills/run-workflow/SKILL.md](../skills/run-workflow/SKILL.md) | `gemini-3.8-flash-medium` |
 | `setup-sdlc` | [skills/setup-sdlc/SKILL.md](../skills/setup-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 | `ship-sdlc` | [skills/ship-sdlc/SKILL.md](../skills/ship-sdlc/SKILL.md) | `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `verify-pipeline-sdlc` | [skills/verify-pipeline-sdlc/SKILL.md](../skills/verify-pipeline-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
+| `verify-pipeline-sdlc` | [skills/verify-pipeline-sdlc/SKILL.md](../skills/verify-pipeline-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 | `version-sdlc` | [skills/version-sdlc/SKILL.md](../skills/version-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 
 ### Scripts & Libraries

@@ -22,7 +22,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { writeJsonLine } = require('../lib/output');
-const { parseStateFilename } = require('../lib/state');
+const { parseStateFilename, writeState } = require('../lib/state');
 
 const VALID_CLASSES = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6'];
 
@@ -108,14 +108,13 @@ function main() {
         decision: opts.decision,
         rationale,
       });
-      fs.writeFileSync(opts.stateFile, JSON.stringify(state, null, 2) + '\n', 'utf8');
+      writeState(opts.stateFile, state);
     }
   } catch (err) {
     process.stderr.write(`Warning: could not update state file with assumption: ${err.message}\n`);
   }
 
   writeJsonLine({ recorded: true, ledgerFile });
-  process.exit(0);
 }
 
 if (require.main === module) {

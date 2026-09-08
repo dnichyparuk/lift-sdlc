@@ -8,13 +8,20 @@ const { spawnSync } = require('node:child_process');
 const SCRIPT = path.join(__dirname, 'run-workflow.js');
 const { parseArgs, resolveManifest } = require('./run-workflow');
 
-test('parseArgs: extracts manifest and output-file and forwards other args', () => {
+test('parseArgs: extracts manifest and forwards other args', () => {
   const argv = ['node', 'run-workflow.js', '--manifest', 'skills/ship-sdlc/pipeline.json', '--output-file', '--dry-run', '--auto'];
   const res = parseArgs(argv);
 
   assert.strictEqual(res.manifestPath, 'skills/ship-sdlc/pipeline.json');
-  assert.strictEqual(res.outputFile, true);
   assert.deepStrictEqual(res.forwarded, ['--output-file', '--dry-run', '--auto']);
+});
+
+test('parseArgs: handles trailing --manifest gracefully without forwarding', () => {
+  const argv = ['node', 'run-workflow.js', '--dry-run', '--manifest'];
+  const res = parseArgs(argv);
+
+  assert.strictEqual(res.manifestPath, null);
+  assert.deepStrictEqual(res.forwarded, ['--dry-run']);
 });
 
 test('resolveManifest: finds manifest relative to plugin root', () => {
@@ -62,6 +69,32 @@ test('run-workflow.js CLI: fails with exit code 1 when manifest missing prepareS
     const res = spawnSync(process.execPath, [SCRIPT, '--manifest', noPrepare], { encoding: 'utf8' });
     assert.strictEqual(res.status, 1);
     assert.ok(res.stderr.includes('manifest missing "prepareScript"'));
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('run-workflow.js CLI: happy path executes prepareScript and forwards arguments', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rw-happy-'));
+  const mockScript = path.join(tempDir, 'mock-prepare.js');
+  fs.writeFileSync(mockScript, `
+    const args = process.argv.slice(2);
+    process.stdout.write("MOCK_OUTPUT:" + args.join(',') + "\\n");
+    process.exit(0);
+  `, 'utf8');
+
+  const manifestFile = path.join(tempDir, 'pipeline.json');
+  fs.writeFileSync(manifestFile, JSON.stringify({
+    pipeline: 'test-pipe',
+    prepareScript: mockScript,
+  }), 'utf8');
+
+  try {
+    const res = spawnSync(process.execPath, [SCRIPT, '--manifest', manifestFile, '--flag1', 'val1'], { encoding: 'utf8' });
+    assert.strictEqual(res.status, 0, res.stderr);
+    assert.ok(res.stdout.includes('MOCK_OUTPUT:--flag1,val1'));
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

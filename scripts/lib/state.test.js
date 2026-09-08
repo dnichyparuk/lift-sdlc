@@ -193,3 +193,32 @@ test('pipelineAdvancing: returns advancing: true and step: null when auto pipeli
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('pipelineAdvancing: returns advancing: false when an auto pipeline step has failed or needs_input', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'state-test-'));
+  const prevOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
+  process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
+
+  try {
+    const branch = 'feature-auto-failed';
+    initState('ship', branch, {
+      branch,
+      flags: { auto: true },
+      steps: [
+        { name: 'execute', status: 'failed' },
+        { name: 'review', status: 'pending' },
+      ],
+    });
+
+    const res = pipelineAdvancing({ branch });
+    assert.strictEqual(res.advancing, false);
+    assert.strictEqual(res.step, null);
+  } finally {
+    if (prevOverride !== undefined) {
+      process.env.SDLC_STATE_DIR_OVERRIDE = prevOverride;
+    } else {
+      delete process.env.SDLC_STATE_DIR_OVERRIDE;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

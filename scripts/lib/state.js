@@ -357,6 +357,7 @@ function deleteState(filePath) {
  */
 function resolveBranch(argBranch) {
   if (argBranch) return argBranch;
+  if (process.env.SDLC_BRANCH_OVERRIDE) return process.env.SDLC_BRANCH_OVERRIDE;
   const branch = exec('git branch --show-current');
   if (!branch) {
     throw new Error('Could not determine current branch');
@@ -476,16 +477,19 @@ function pipelineAdvancing(opts = {}) {
 
         const isAuto = Boolean(data.flags && data.flags.auto === true);
         if (isAuto) {
-          const hasPending = data.steps.some(s => s.status === 'pending');
-          if (hasPending) {
-            return {
-              advancing: true,
-              prefix,
-              step: null,
-              auto: true,
-              stateFile: state.filePath,
-              data,
-            };
+          const hasHalted = data.steps.some(s => s.status === 'failed' || s.status === 'suspended' || s.status === 'needs_input');
+          if (!hasHalted) {
+            const hasPending = data.steps.some(s => s.status === 'pending');
+            if (hasPending) {
+              return {
+                advancing: true,
+                prefix,
+                step: null,
+                auto: true,
+                stateFile: state.filePath,
+                data,
+              };
+            }
           }
         }
       }
