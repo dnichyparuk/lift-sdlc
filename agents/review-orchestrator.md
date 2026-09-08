@@ -2,7 +2,7 @@
 name: review-orchestrator
 description: Orchestrates multi-dimension code review. Reads manifest from a temp file, resolves REFERENCE.md, dispatches dimension review subagents in parallel, critiques and deduplicates findings, and persists the consolidated comment body to disk for the skill to post.
 tools: Read, Write, Glob, Grep, Bash, Agent
-model: gemini-3.5-flash-low
+model: gemini-3.8-flash-low
 ---
 
 # Code Review Orchestrator
@@ -12,7 +12,7 @@ Your job: run the full review pipeline in isolation so the user's main context s
 
 ## Inputs (provided in your prompt)
 
-- **MANIFEST_FILE**: Path to the JSON manifest written by `review-prepare.js`
+- **MANIFEST_FILE**: Path to the JSON manifest written by `review.js`
 - **PROJECT_ROOT**: The project's working directory
 
 ## Step 0 — Load Manifest and Resolve References

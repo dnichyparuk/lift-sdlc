@@ -3,10 +3,12 @@ name: pr-sdlc
 description: "Use this skill when creating or updating a pull request, updating a PR description, or generating PR content from commits and diffs. Handles the full PR workflow: consumes pre-computed context from skill/pr.js, generates description with plan-critique-improve-do-critique-improve, user review, and gh CLI execution. Auto-labels PRs based on context signals (branch, commits, diff, Jira) with mandatory approval. Arguments: [--draft] [--update] [--base <branch>] [--auto] [--label <name>]. Use --auto to skip interactive approval. Triggers on: create PR, open pull request, update PR, write PR description, PR summary, describe changes for a pull request."
 user-invocable: true
 argument-hint: "[--draft] [--update] [--base <branch>] [--auto] [--label <name>]"
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Creating Pull Requests
+
+When to use: creating or updating a PR for the current branch; `/pr` delegates here.
 
 Consume pre-computed git context from `skill/pr.js` and generate an 8-section
 PR description readable by both technical and non-technical stakeholders.
@@ -21,14 +23,6 @@ If the system context contains "Plan mode is active":
 2. Stop. Do not proceed to subsequent steps.
 
 ---
-
-## When to Use This Skill
-
-- Creating a new pull request on any branch
-- Updating an existing PR title or description
-- Writing or rewriting a PR description
-- Summarizing branch changes for review
-- When the `/pr` command delegates here after running `skill/pr.js`
 
 ## PR Template
 
@@ -72,8 +66,7 @@ Breaking changes, migration needs, performance implications.
 Each bullet describes a concept or behavior change — e.g.:
 - Webhook handler validates event ID before processing and records it after success
 - New migration adds processed_events table with TTL index
-- Retry deduplication test coverage added
-No file paths in this section.]
+- Retry deduplication test coverage added]
 
 ## Testing
 [How this was verified: manual steps, automated tests, edge cases.
@@ -96,13 +89,17 @@ If no tests added, explain why.]
 
 ### Step 0: Resolve and Run skill/pr.js
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-<PLUGIN_ROOT>/skills/pr-sdlc/scripts/prepare.sh
+PR_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/pr.js" $ARGUMENTS)
+EXIT_CODE=$?
 ```
+> **Contract (Input/Output):**
+> - **Input**: `$ARGUMENTS` (the skill's own arguments), forwarded verbatim.
+> - **Output**: Prints the path of a temp file holding the PR context JSON on stdout — capture it into `PR_CONTEXT_FILE`. Its exit code is `EXIT_CODE`.
 
-Read and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. The `trap` above guarantees cleanup on any exit path — do not add scattered `rm -f` calls in success/cancel branches.
+Read and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. Run `rm -f "$PR_CONTEXT_FILE"` on every terminal branch (success, cancel, error) — there is no trap to rely on for cleanup.
 
 **On non-zero `EXIT_CODE`:**
 
@@ -113,20 +110,9 @@ Read and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. The `trap` above guarante
 
 **If `PR_CONTEXT_JSON.errors` is non-empty**, show each error message and stop.
 
-**Note (issue #234):** The prepare script (`skill/pr.js`) populates `errors[]` for auth failures, account mismatches (`accountMismatch`), and expired tokens (`tokenExpired`). The `errors[]` check above already halts on all of these — the reactive recovery flow later in this skill handles edge cases the preflight cannot anticipate (e.g., permission revocation between preflight and `gh pr create`).
+**Note:** The prepare script (`skill/pr.js`) populates `errors[]` for auth failures, account mismatches (`accountMismatch`), and expired tokens (`tokenExpired`). The `errors[]` check above already halts on all of these — the reactive recovery flow later in this skill handles edge cases the preflight cannot anticipate (e.g., permission revocation between preflight and `gh pr create`).
 
-**Step 0.5 (BRANCH-GUARD): HARD GATE — Expected Branch Check**
-
-**Implements R-expected-branch (docs/specs/pr-sdlc.md, issues #347, #348, #349).**
-
-Check `branchGuard.active` and `branchGuard.ok` from `PR_CONTEXT_JSON`.
-
-If `branchGuard.active === true` AND `branchGuard.ok === false`:
-- Surface `branchGuard.message` verbatim to the user.
-- Halt the skill immediately. Do NOT proceed to Step 1 or any `gh pr create` / `gh pr edit` invocation.
-- Do NOT re-derive the current branch via shell commands — use the resolved `branchGuard` field only.
-
-If `branchGuard.active === false` (flag was not passed) or `branchGuard.ok === true` (branches match): proceed.
+**Step 0.5 (BRANCH-GUARD): HARD GATE.** If `PR_CONTEXT_JSON.branchGuard.active === true` and `.ok === false`: surface `branchGuard.message` verbatim and halt immediately — do not proceed to Step 1 or any `gh pr create`/`gh pr edit`, and do not re-derive the current branch via shell commands (use the resolved field only). Otherwise (`active === false` or `ok === true`) proceed.
 
 **If `PR_CONTEXT_JSON.warnings` is non-empty**, show the warnings prominently before continuing.
 Do not ask for confirmation — the Step 5 approval gate (AskUserQuestion) is the consent point before PR creation.
@@ -139,30 +125,15 @@ GitHub account switched: now using "<account>" (was "<previousAccount>")
 
 ### Step 1: Consume the Context
 
-Read `PR_CONTEXT_JSON` now.
-
-Key fields available (including `customTemplate` added for project-level PR template support):
+Read `PR_CONTEXT_JSON` now. Most fields are self-explanatory: `mode`, `baseBranch`, `currentBranch`, `isDraft`, `ghAuth`, `existingPr`, `issueTicket`, `commits`, `diffStat`, `diffContent`, `remoteState`, `warnings`, `changedFiles`, `repoLabels`, `isAuto`. Non-obvious fields:
 
 | Field | Description |
 | ----- | ----------- |
-| `mode` | `"create"` or `"update"` |
-| `baseBranch` | The target base branch |
-| `currentBranch` | The branch being PR'd |
-| `isDraft` | Whether to create a draft PR |
-| `ghAuth` | `{ switched, account, previousAccount }` or `null` — GitHub account switch result |
-| `existingPr` | `{ number, title, url, state, labels }` or `null` |
-| `issueTicket` | Detected ticket reference or `null` |
-| `commits` | `[{ hash, subject, body, coAuthors }]` — all commits on this branch |
-| `diffStat` | `{ filesChanged, insertions, deletions, totalLinesChanged, summary }` |
-| `diffContent` | Full unified diff text |
-| `remoteState` | `{ pushed, remoteBranch, action }` |
-| `warnings` | Non-fatal notes already surfaced to the user by the command |
-| `changedFiles` | `string[]` — relative file paths changed in this PR |
-| `repoLabels` | `[{ name, description }]` — labels defined in the repository; empty if unavailable |
-| `customTemplate` | Full content of `.sdlc/pr-template.md` (canonical) or `.sdlc/pr-template.md` (deprecated fallback, one-time stderr warning per process); `null` if neither file exists. Issue #260. |
+| `customTemplate` | Full content of `.sdlc/pr-template.md` (canonical) or `.sdlc/pr-template.md` (deprecated fallback, one-time stderr warning per process); `null` if neither file exists |
 | `prConfig` | PR title validation config from `.sdlc/config.json` (null when absent) |
-| `isAuto` | Whether `--auto` was passed — skip interactive prompts |
-| `forcedLabels` | `string[]` — labels forced via `--label` flag(s), pre-validated against `repoLabels`. Always included in PR regardless of signal matching |
+| `forcedLabels` | `string[]` — labels forced via `--label` flag(s), pre-validated against `repoLabels`. Always included in the PR regardless of signal matching |
+| `existingPr.labels` | `string[]` — labels currently applied to the existing PR (update mode only; `existingPr` is `null` in create mode) |
+| `diffStat.totalLinesChanged` | `number` — total lines added + removed across the diff |
 
 ### Step 2 (PLAN): Draft PR Description
 
@@ -173,8 +144,6 @@ Key fields available (including `customTemplate` added for project-level PR temp
 Using data from `PR_CONTEXT_JSON`, draft all sections of the active PR template (custom sections if `customTemplate` is present, or the default 8 sections below).
 
 **OpenSpec enrichment (automatic when detected):**
-
-**Hook context fast-path:** If the session-start system-reminder contains an `OpenSpec active:` line, use its data (change name, branch match status, delta spec count) to skip the `Glob for openspec/config.yaml` and change directory scanning. If the line is absent or the user switched branches since session start, fall back to the existing Glob-based detection. The hook context is a session-start snapshot — treat it as a hint, not as authoritative.
 
 1. Glob for `openspec/config.yaml`. If absent, skip this block entirely.
 2. Identify the active change: Glob `openspec/changes/*/proposal.md` (exclude `archive/`). If one matches, use it. If multiple, match against `PR_CONTEXT_JSON.currentBranch`. If ambiguous, skip — do not ask during PR creation.
@@ -204,59 +173,20 @@ If `prConfig` is null or absent, use conventional commit style (`feat:`, `fix:`,
 
 #### Common Patterns Reference
 
-Teams can configure their PR title patterns in `.sdlc/config.json`. Here are four real-world examples to guide configuration:
+Teams configure PR title rules via `.sdlc/config.json`'s `pr.titlePattern` (regex), `pr.titlePatternError`, `pr.allowedTypes`, and `pr.allowedScopes`. Common patterns:
 
-**Pattern 1: Conventional Commits**
-```json
-{
-  "pr": {
-    "titlePattern": "^(feat|fix|refactor|chore|docs|test|ci)(\\([a-z-]+\\))?: .+$",
-    "titlePatternError": "Title must follow conventional commits: type(scope): description",
-    "allowedTypes": ["feat", "fix", "refactor", "chore", "docs", "test", "ci"],
-    "allowedScopes": []
-  }
-}
-```
+| Pattern | `titlePattern` | Example title |
+| ------- | -------------- | ------------- |
+| Conventional Commits | `^(feat\|fix\|refactor\|chore\|docs\|test\|ci)(\([a-z-]+\))?: .+$` | `feat(auth): add SSO` |
+| Ticket prefix | `^[A-Z]{2,10}-\d+: .+$` | `PROJ-42: description` |
+| Ticket + Conventional | `^[A-Z]{2,10}-\d+ (feat\|fix\|chore): .+$` | `PROJ-42 feat: description` |
+| Semantic (squash-merge friendly) | `^(feat\|fix\|breaking): .+$` | `feat: description` |
 
-**Pattern 2: Ticket Prefix**
-```json
-{
-  "pr": {
-    "titlePattern": "^[A-Z]{2,10}-\\d+: .+$",
-    "titlePatternError": "Title must start with ticket ID (e.g., PROJ-42: description)",
-    "allowedTypes": [],
-    "allowedScopes": []
-  }
-}
-```
-
-**Pattern 3: Ticket Prefix + Conventional**
-```json
-{
-  "pr": {
-    "titlePattern": "^[A-Z]{2,10}-\\d+ (feat|fix|chore): .+$",
-    "titlePatternError": "Title format: TICKET-123 type: description",
-    "allowedTypes": ["feat", "fix", "chore"],
-    "allowedScopes": []
-  }
-}
-```
-
-**Pattern 4: Semantic PR (Squash-Merge Friendly)**
-```json
-{
-  "pr": {
-    "titlePattern": "^(feat|fix|breaking): .+$",
-    "titlePatternError": "Title must use semantic type: feat|fix|breaking",
-    "allowedTypes": ["feat", "fix", "breaking"],
-    "allowedScopes": []
-  }
-}
-```
+Each pattern pairs with a matching `allowedTypes` list (and `allowedScopes` where scopes are used) and a human-readable `titlePatternError` shown on validation failure.
 
 #### Step 2b: Infer Labels
 
-Label assignment is **mode-dispatched** based on `PR_CONTEXT_JSON.prConfig?.labels?.mode` (issue #197). Each suggested label carries a provenance tag — `(forced)`, `(rule)`, or `(llm)` — used in the Step 5 display.
+Label assignment is **mode-dispatched** based on `PR_CONTEXT_JSON.prConfig?.labels?.mode`. Each suggested label carries a provenance tag — `(forced)`, `(rule)`, or `(llm)` — used in the Step 5 display.
 
 **Mode resolution:**
 
@@ -274,17 +204,7 @@ Set `inferredLabels = []`. No automatic suggestions are produced. The merged `su
 
 ##### Rules mode
 
-Iterate `PR_CONTEXT_JSON.prConfig.labels.rules` (already validated against `repoLabels` by `pr.js` — unknown labels were stripped before this step). For each rule, evaluate the single signal in `rule.when` against the PR context:
-
-| Signal | Match condition |
-| ------ | --------------- |
-| `branchPrefix: string[]` | `currentBranch` starts with any listed prefix |
-| `commitType: string[]` | Any commit subject begins with `<type>:` or `<type>(scope):` (Conventional Commits) |
-| `pathGlob: string[]` | **Every** entry in `changedFiles` matches at least one glob (all-changed-files semantics, like the legacy `*.md → documentation` rule) |
-| `jiraType: string[]` | `jiraTicket.type` (when extracted) is in the list |
-| `diffSizeUnder: number` | `diffStat.totalLinesChanged < value` |
-
-Collect every matched `rule.label` and dedupe (multiple rules may target the same label — they OR together). Tag each survivor with `source = "rule"`.
+`pr.js` already evaluates `prConfig.labels.rules` (already validated against `repoLabels` — unknown labels were stripped before this step) against the PR context via `evaluateRule`/`matchRule` and returns the matches, deduped by label (multiple rules targeting the same label OR together into one entry), in `PR_CONTEXT_JSON.suggestedLabels` as `{ label, source: "rule" }`. Set `inferredLabels = PR_CONTEXT_JSON.suggestedLabels` directly — no signal matching happens here.
 
 ##### LLM mode
 
@@ -330,7 +250,7 @@ Before presenting to the user, review the draft against every quality gate:
 | All sections present | If custom template: all `##` sections from `customTemplate` have content. If default: all 8 hardcoded sections exist | Real content, "N/A", or "Not detected" — never empty |
 | Specificity | Summary names a concrete change | No vague summaries like "various improvements" |
 | Business honesty | Business Context/Benefits are concrete or "N/A" | No "because it was needed" or invented reasons |
-| No file paths | Changes Overview uses concepts only | Zero file paths in this section |
+| No file paths | Per the Step 2 Changes Overview fill rule | Zero file paths in this section |
 | Title length | Title under 72 characters | `len(title) < 72` |
 | Title pattern match | Title matches `prConfig.titlePattern` regex (skip when null/absent) | Regex passes or `prConfig` is null |
 | No fabrication | All claims traceable to commits, diff, or user input | Nothing invented |
@@ -339,7 +259,7 @@ Before presenting to the user, review the draft against every quality gate:
 | Documentation sync | If diff adds new commands, changes structure, renames concepts, or adds new directories/scripts: check that at least one `docs:` commit exists on this branch OR ask the user to confirm docs are updated | PR does not silently ship structural changes without a corresponding docs update |
 | Label validity | Every label in `suggestedLabels` exists in `repoLabels` | Zero fabricated labels |
 | Forced label inclusion | Every label in `forcedLabels` appears in the final `suggestedLabels` list | Zero forced labels dropped |
-| Link verification (R15, #198) | Every URL in the body is validated by `scripts/skill/pr.js --validate-body` before `gh pr create` / `gh pr edit`. The script enforces — SKILL.md only invokes it. See the Link verification block in the publish step. | `LINK_EXIT === 0`; on non-zero, abort and surface violations |
+| Link verification | Every URL in the body is validated by `scripts/skill/pr.js --validate-body` before `gh pr create` / `gh pr edit`. The script enforces — SKILL.md only invokes it. See the Link verification block in the publish step. | `LINK_EXIT === 0`; on non-zero, abort and surface violations |
 
 > **Note**: When a custom template is active, the "No file paths in Changes Overview"
 > gate applies only if the custom template includes a section named "Changes Overview".
@@ -367,11 +287,13 @@ before receiving explicit user approval via AskUserQuestion.**
 
 **Auto mode:** When `PR_CONTEXT_JSON.isAuto` is true, skip the AskUserQuestion prompt entirely. Still display the full title, labels, and description for visibility, then proceed directly to Step 6 (execution). Treat the response as an implicit `yes`. All critique gates (Steps 3–4) still run — only the interactive approval prompt is skipped.
 
-**Create mode** (with `suggestedLabels` non-empty):
+Display format — create mode uses the `Labels:` line, update mode uses the `Existing labels`/`New labels` lines instead:
 
 ```text
 PR Title: <title>
-Labels: <label1> (forced), <label2> (rule), <label3> (llm)
+Labels: <label1> (forced), <label2> (rule), <label3> (llm)      [create mode only]
+Existing labels (preserved): <existing1>, <existing2>            [update mode only]
+New labels: <new1>, <new2>                                       [update mode only]
 
 PR Description:
 ─────────────────────────────────────────────
@@ -379,28 +301,8 @@ PR Description:
 ─────────────────────────────────────────────
 ```
 
-Each label carries its provenance suffix from the Step 2b dispatch:
-- `(forced)` — applied via CLI `--label` or ship-sdlc injection (e.g. `skip-version-check`)
-- `(rule)` — matched a deterministic rule under `pr.labels.rules` (mode = `rules`)
-- `(llm)` — fuzzy-matched by the model (mode = `llm`, opt-in)
-
-When `pr.labels.mode = "off"` and no forced labels are present, omit the Labels line entirely (existing behavior — do not show "Labels: none").
-
-**Update mode** (with existing labels and new suggestions):
-
-```text
-PR Title: <title>
-Existing labels (preserved): <existing1>, <existing2>
-New labels: <new1>, <new2>
-
-PR Description:
-─────────────────────────────────────────────
-<full description>
-─────────────────────────────────────────────
-```
-
-If no labels are suggested, omit the Labels line entirely — do not show "Labels: none".
-In update mode, if there are existing labels but no new suggestions, still show the "Existing labels (preserved)" line but omit "New labels".
+- **Create mode:** show `Labels:` only when `suggestedLabels` is non-empty; each entry carries its Step 2b provenance suffix — `(forced)` (CLI `--label` or ship-sdlc injection), `(rule)` (matched `pr.labels.rules`), or `(llm)` (fuzzy-matched, opt-in mode). Omit the line entirely when empty — never show "Labels: none".
+- **Update mode:** show "Existing labels (preserved)" whenever `existingPr.labels` is non-empty; show "New labels" only when there are new suggestions. Omit either line when its list is empty — never show "Labels: none".
 
 ```text
 Use AskUserQuestion to ask (adapt question to mode):
@@ -425,7 +327,7 @@ Loop until explicit `yes` or `cancel`.
 **Pre-execution title pattern validation:** Before executing `gh pr create` or `gh pr edit`, if `prConfig` is non-null and `prConfig.titlePattern` is set, validate the title against the pattern:
 
 ```shell
-<PLUGIN_ROOT>/skills/pr-sdlc/scripts/validate_title.sh "$title" "$titlePattern" "$titlePatternError"
+node "<PLUGIN_ROOT>/scripts/util/validate-pr-title.js" "$title" "$titlePattern" "$titlePatternError"
 ```
 
 On failure:
@@ -436,14 +338,15 @@ On failure:
 On success:
 - Continue to link verification, label creation, and `gh pr create` / `gh pr edit`
 
-**Link verification (issue #198, implements spec R15) — HARD GATE:** Before executing `gh pr create` or `gh pr edit`, validate every URL embedded in the final PR body via `scripts/skill/pr.js --validate-body`. The script reads the body from stdin and derives the expected GitHub repo identity (`parseRemoteOwner(projectRoot)`) deterministically — the skill MUST NOT construct ctx JSON.
+**Link verification — HARD GATE:** Before executing `gh pr create` or `gh pr edit`, validate every URL embedded in the final PR body via `scripts/skill/pr.js --validate-body`. The script reads the body from stdin and derives the expected GitHub repo identity (`parseRemoteOwner(projectRoot)`) deterministically — the skill MUST NOT construct ctx JSON.
 
 ```shell
-<PLUGIN_ROOT>/skills/pr-sdlc/scripts/validate_body.sh
+printf '%s' "$body" | node "<PLUGIN_ROOT>/scripts/skill/pr.js" --validate-body
+LINK_EXIT=$?
 ```
 
 On non-zero exit (`LINK_EXIT != 0`):
-- The script has already printed the violation list to stderr (URL, line, reason code, observed/expected detail)
+- The command has already printed the violation list to stderr (URL, line, reason code, observed/expected detail)
 - Do NOT execute `gh pr create` or `gh pr edit`
 - Surface the violation list verbatim to the user
 - Stop. Do not retry. Do not edit URLs without user input. Do not bypass.
@@ -460,19 +363,17 @@ gh label create "<name>" --description "Auto-created by pr-sdlc" --color "c5def5
 
 This is idempotent — the command succeeds silently if the label already exists. This ensures forced labels work in any repository where the plugin is installed, not just repos where labels were pre-created.
 
-**Create mode:**
-
-```bash
-gh pr create --title "<title>" --body "<body>" [--draft] [--label "<l1>" --label "<l2>"]
-```
+**Create mode:** issue the create through the `create-pr.js` wrapper described below — it is a transparent passthrough to `gh pr create` that only adds the post-failure recovery step. (What `create-pr.js` runs under the hood: `gh pr create --title "<title>" --body "<body>" [--draft] [--label "<l1>" --label "<l2>"]`.) The wrapper invocation below is the single publish path — do not run `gh pr create` directly first.
 
 If no labels were approved, omit the `--label` flags entirely.
 
-**Post-failure account-switch recovery (implements spec E7, issue #184):** If `gh pr create` exits non-zero, capture stderr to a temp file and invoke the recovery helper exactly once:
+**Post-failure account-switch recovery:** Run the create step through the `create-pr.js` wrapper, which forwards every argument verbatim to `gh pr create` and — only if `gh` exits non-zero — captures its stderr to a temp file and invokes the recovery helper exactly once, printing the recovery verdict JSON on stdout:
 
 ```shell
-<PLUGIN_ROOT>/skills/pr-sdlc/scripts/create_pr.sh
+RECOVER_JSON=$(node "<PLUGIN_ROOT>/scripts/util/create-pr.js" --title "<title>" --body "<body>" [--draft] [--label "<l1>" --label "<l2>"])
 ```
+
+The wrapper exits 0 when `gh pr create` succeeded (nothing is printed), forwards `gh`'s own non-zero exit code after the recovery attempt, and exits 2 if the recovery helper could not be located.
 
 Parse `RECOVER_JSON`. Branches:
 
@@ -523,16 +424,14 @@ Title: <title>
 1. **Read ALL commits, not just the latest** — the PR is the sum of all branch work
 2. **Diff is ground truth** — when commit messages and diff disagree, trust the diff
 3. **Ask rather than guess** — a clarifying question is better than fabricated content
-4. **No file paths in Changes Overview** — reviewers think in concepts, not paths
-5. **Flag risks** — call out migrations, permission changes, or config changes
-6. **Preserve author intent** — if commit messages express design rationale, carry it into the description
+4. **Flag risks** — call out migrations, permission changes, or config changes
+5. **Preserve author intent** — if commit messages express design rationale, carry it into the description
 
 ## DO NOT
 
 - Omit any section from the active template (default 8 or custom) — always include all defined sections
 - Write generic descriptions ("various improvements", "code cleanup")
 - Fabricate a JIRA ticket, business reason, or technical claim
-- Include file paths in the Changes Overview section (this rule applies only if the active template includes a "Changes Overview" section)
 - Execute `gh pr create` or `gh pr edit` without explicit user approval (unless `--auto` was passed)
 - Skip the plan-critique-improve-do-critique-improve cycle before presenting to the user
 - Run git or gh bash commands to gather data — all context comes from `PR_CONTEXT_JSON`
@@ -545,7 +444,7 @@ Title: <title>
 |-------|----------|---------------------------|
 | `skill/pr.js` node -e 'process.exit(1)' (`errors[]` present) | Show each error, stop | No — user input error |
 | `skill/pr.js` node -e 'process.exit(2)' (crash) | Show stderr, stop | Yes |
-| `gh pr create` fails with `does not have the correct permissions to execute CreatePullRequest` (spec E7) | Auto-recover: invoke `pr-recover-gh-account.js` once; if a matching local gh account exists, switch and retry `gh pr create` exactly once. If no match, surface original error + `gh auth login --hostname <host>` hint and continue with the manual fallback below. | No on first retry; Yes only if the retry also fails |
+| `gh pr create` fails with a `CreatePullRequest` permission error | Auto-recover per Step 6's account-switch retry (once); on no match, surface the original error + `gh auth login --hostname <host>` hint | No on first retry; Yes only if the retry also fails |
 | `gh pr create` / `gh pr edit` fails with 5xx or unexpected error | Show error; offer manual fallback (copy title + description) | Yes |
 | `gh` unavailable | Show install instructions | No — user setup |
 | `gh` auth failure | Show `gh auth login` instructions | No — auth, not a bug |
@@ -561,33 +460,23 @@ When invoking `error-report-sdlc`, provide:
 
 ## Gotchas
 
-- **Large diff output**: `skill/pr.js` embeds full `diffContent` inline in its JSON. For repos
-  with many changed files this easily exceeds 100KB — too large to pipe through a shell command
-  without truncation (failure manifests as "Unterminated string in JSON at position N"). The
-  `pr.md` command already prescribes writing to a temp file (`mktemp`). If you ever need to
-  re-run the script manually, always use `node skill/pr.js > /tmp/pr-context-$$.json` and
-  read from the file rather than piping output to a parser.
+- **Large diff output**: `diffContent` can exceed 100KB, which truncates if piped through a
+  shell parser (failure manifests as "Unterminated string in JSON at position N"). Always read
+  `PR_CONTEXT_FILE` from disk (per Step 0) — never re-pipe `skill/pr.js` output manually.
 
 - **Installed plugin version skew silently suppresses custom template**: `skill/pr.js` is
-  resolved from the installed plugin, which may be older than the project's local copy. An
-  older installed version may lack `customTemplate` support entirely, returning the field as
-  absent or `null` even when `.sdlc/pr-template.md` exists on disk. **Always cross-check**:
-  if `PR_CONTEXT_JSON.customTemplate` is null or absent, verify whether `.sdlc/pr-template.md` (or its
-  deprecated fallback `.sdlc/pr-template.md`)
-  exists before defaulting to the 8-section template. If the file exists, read it directly and
-  use it as the template, then warn the user that the installed plugin may be out of date and
-  suggest re-installing.
+  resolved from the installed plugin, which may be older than the project's local copy and lack
+  `customTemplate` support, returning it as absent/`null` even when `.sdlc/pr-template.md`
+  exists. **Always cross-check**: if `customTemplate` is null, verify whether
+  `.sdlc/pr-template.md` (or its deprecated fallback) exists on disk before defaulting to the
+  8-section template; if it exists, read and use it directly, and warn the user the installed
+  plugin may be out of date.
 
-- **Multiple GitHub accounts — auto-recovery covers most mismatches**: Pre-flight, the skill
-  matches the active `gh` account against the remote repo owner (via `ensureGhAccount`).
-  Post-flight (spec E7, issue #184), if `gh pr create` still fails with a `CreatePullRequest`
-  permission error, the skill invokes `pr-recover-gh-account.js` once: it parses the repo
-  owner, looks for a local gh account whose login matches, runs `gh auth switch`, and retries
-  `gh pr create` exactly once. The user sees a single concise recovery line, not the raw
-  GraphQL error. If no matching account is configured locally, the skill surfaces a
-  `gh auth login --hostname <host>` hint and falls through to the manual fallback. Manual
-  `gh auth switch --user <login>` before invoking the skill is still valid for collaborator
-  scenarios where no local account login matches the owner.
+- **Multiple GitHub accounts**: pre-flight (`ensureGhAccount`) and the Step 6 post-failure
+  account-switch retry (see Error Recovery) cover most mismatches automatically, surfacing one
+  concise recovery line instead of the raw GraphQL error. Manual `gh auth switch --user <login>`
+  before invoking the skill is still needed for collaborator scenarios where no local account
+  login matches the repo owner.
 
 - **OpenSpec change detection during PR creation should not block.** Unlike plan-sdlc which can ask the user to disambiguate multiple active changes, pr-sdlc should silently skip OpenSpec enrichment if the change cannot be uniquely identified from the branch name. PR creation should never be blocked by spec detection ambiguity.
 

@@ -14,7 +14,7 @@
  * Zero npm dependencies — Node.js built-ins only.
  */
 
-const path = require('path');
+const path = require('node:path');
 const { resolvePath } = require('./worktree-path');
 
 // Sentinel branch/slug used for live previews during validation.

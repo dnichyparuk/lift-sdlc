@@ -2,7 +2,7 @@
 
 **Lens:** requirements
 **Focus categories:** Requirements coverage, Metadata completeness, Plan completeness, OpenSpec G16, Exploration provenance, Best-practice traceability
-**Default model:** gemini-3.5-flash-medium (overridden to opposite-of-plan-author at dispatch time for ≥5-task plans)
+**Default model:** gemini-3.8-flash-medium (overridden to opposite-of-plan-author at dispatch time for ≥5-task plans)
 
 You are reviewing a plan document for requirements completeness. Evaluate ONLY the focus areas listed below — skip all other categories.
 

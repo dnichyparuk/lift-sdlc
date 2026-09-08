@@ -19,17 +19,17 @@ at the current plugin version is a no-op.
 
 ### Step 1 — Run openspec-enrich.js
 
-Locate and run the enrichment script:
+Run the enrichment script. The fixed flags come first and any caller-supplied argument is appended last, so a caller flag can never be swallowed as the value of `--project-root`:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-openspec_enrich.sh
+node "<PLUGIN_ROOT>/scripts/util/openspec-enrich.js" --output-file --project-root . {REMOVE_FLAG}
 ```
 
 Replace `{REMOVE_FLAG}` with `--remove` if the parent passed `--remove-openspec`, otherwise omit it.
 
 ### Step 2 — Parse and report
 
-Parse the JSON output from `$PREPARE_OUTPUT_FILE`. Report the result:
+The command prints the manifest path on stdout. Read that file and parse its JSON. Report the result:
 
 - `action: "append"` — "Managed block added to openspec/config.yaml."
 - `action: "update"` — "Managed block updated to v{version} in openspec/config.yaml."

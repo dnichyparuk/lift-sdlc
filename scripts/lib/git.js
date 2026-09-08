@@ -21,6 +21,14 @@ const { execSync, spawnSync } = require('node:child_process');
 // Core exec helper
 // ---------------------------------------------------------------------------
 
+// execSync's own default maxBuffer (1 MiB) is far too small for `git diff`/`git log`
+// output on a large changeset — exceeding it throws ERR_CHILD_PROCESS_STDOUT_MAXBUFFER,
+// which this function's catch-and-return-null behavior silently turns into "empty output"
+// rather than a visible error. Callers that read a null/empty result as "no diff content"
+// then report a false-clean result instead of surfacing the real failure. Default to a
+// generous buffer; callers may still override via `opts.maxBuffer`.
+const DEFAULT_MAX_BUFFER = 200 * 1024 * 1024; // 200 MiB
+
 /**
  * Run a shell command and return trimmed stdout, or null on failure.
  * @param {string} cmd
@@ -31,7 +39,7 @@ const { execSync, spawnSync } = require('node:child_process');
 function exec(cmd, opts = {}) {
   const { throwOnError, ...execOpts } = opts;
   try {
-    return execSync(cmd, { encoding: 'utf8', ...execOpts }).trim();
+    return execSync(cmd, { encoding: 'utf8', maxBuffer: DEFAULT_MAX_BUFFER, ...execOpts }).trim();
   } catch (err) {
     if (throwOnError) throw err;
     return null;
@@ -277,21 +285,25 @@ function fetchPrReviews(owner, repo, prNumber) {
 
 /**
  * Fetch CI checks for a PR via `gh pr checks <n> --json`.
- * Returns a sentinel-empty array on any failure.
+ * Distinguishes between "no failing checks" and "`gh` unauthenticated" by
+ * probing gh auth status when the gh command returns no data.
  * Used by verify-pipeline polling (R42).
  *
  * @param {number|string} prNumber
- * @returns {Array<{name:string,state:string,bucket:string,workflow:string,event:string,startedAt:string,completedAt:string,link:string}>}
+ * @returns {{checks: Array<{name:string,state:string,bucket:string,workflow:string,event:string,startedAt:string,completedAt:string,link:string}>, ghAuthenticated: boolean, errorMessage: string|null}}
  */
 function fetchPrChecks(prNumber) {
-  if (prNumber === undefined || prNumber === null) return [];
+  if (prNumber === undefined || prNumber === null) return { checks: [], ghAuthenticated: true, errorMessage: null };
   const raw = exec(`gh pr checks ${prNumber} --json name,state,bucket,workflow,event,startedAt,completedAt,link`);
-  if (!raw) return [];
+  if (!raw) {
+    const auth = probeGhAuth();
+    return { checks: [], ghAuthenticated: auth.authenticated, errorMessage: auth.errorMessage };
+  }
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return { checks: Array.isArray(parsed) ? parsed : [], ghAuthenticated: true, errorMessage: null };
   } catch (_) {
-    return [];
+    return { checks: [], ghAuthenticated: true, errorMessage: null };
   }
 }
 
@@ -1218,7 +1230,6 @@ function fetchPrReviewThreads(owner, repo, prNumber) {
   const threads = [];
   let cursor = null;
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const cursorArg = cursor ? ` -F after=${cursor}` : '';
     const raw = exec(

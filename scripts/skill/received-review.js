@@ -289,7 +289,10 @@ function classifyThread(thread, currentUser, changedFileSet) {
 // ---------------------------------------------------------------------------
 
 function main() {
-  const { prNumber, owner: cliOwner, repo: cliRepo, projectRoot, auto } = parseArgs(process.argv);
+  const parsedArgs = parseArgs(process.argv);
+  const { owner: cliOwner, repo: cliRepo, projectRoot, auto } = parsedArgs;
+  // `let`, not `const`: reassigned below when --pr is inferred from the current branch.
+  let prNumber = parsedArgs.prNumber;
 
   // Issue #232: verifyAndMigrate gate (CLI > env > default false).
   const skipConfigCheck = resolveSkipConfigCheck(process.argv);

@@ -26,27 +26,27 @@ State files are always written to the **main working tree's** `.sdlc/execution/`
 
 **Main working tree resolution:**
 
-Run the following command and take the path from the first `worktree <path>` line:
+Run the worktree lifecycle helper for the current branch and read `mainWorktree` from its single-line JSON output:
 
 ```bash
-git worktree list --porcelain
+node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" resolve --branch <branch>
 ```
 
-Example output:
+Example output when the branch has a linked worktree:
 
-```
-worktree /Users/dev/myrepo
-HEAD abc123def456
-branch refs/heads/main
-
-worktree /Users/dev/myrepo/.worktrees/feat-my-feature
-HEAD 789abc012def
-branch refs/heads/feat/my-feature
+```json
+{"found":true,"path":"/Users/dev/myrepo/.worktrees/feat-my-feature","mainWorktree":"/Users/dev/myrepo","branch":"feat/my-feature","exists":true,"matchedBy":"branch"}
 ```
 
-The main working tree is `/Users/dev/myrepo`. The state file is written to `/Users/dev/myrepo/.sdlc/execution/`.
+Example output when it does not:
 
-If there is only one worktree entry (no linked worktrees), the main working tree is the current repo root.
+```json
+{"found":false,"mainWorktree":"/Users/dev/myrepo"}
+```
+
+`mainWorktree` is present in every shape the script emits — including the error shape, where it is `null` when the main worktree itself couldn't be resolved — so read it regardless of `found`. Here the main working tree is `/Users/dev/myrepo`, so the state file is written to `/Users/dev/myrepo/.sdlc/execution/`.
+
+If there are no linked worktrees, `mainWorktree` is the current repo root. Never hand-parse the porcelain worktree listing to derive this — the script does that parsing and main-worktree detection for you.
 
 ---
 

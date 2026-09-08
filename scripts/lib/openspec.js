@@ -10,10 +10,11 @@
 
 'use strict';
 
-const fs     = require('fs');
-const path   = require('path');
-const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const fs     = require('node:fs');
+const path   = require('node:path');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
+const { writeJsonLine } = require('./output');
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -544,3 +545,44 @@ module.exports = {
   markTaskDone,
   STAGE_LABELS,
 };
+
+// ---------------------------------------------------------------------------
+// CLI (thin — reuses isArchived() above, no reimplementation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Usage:
+ *   node openspec.js --is-archived --change <name>
+ *
+ * Output (stdout, one JSON line via writeJsonLine()):
+ *   {"archived": true}
+ *   {"archived": false}
+ *
+ * Exit code: always 0 (informational check).
+ */
+function parseCliArgs(argv) {
+  const args = argv.slice(2);
+  const flags = { isArchived: false, change: null };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--is-archived') {
+      flags.isArchived = true;
+    } else if (a === '--change') {
+      flags.change = args[++i] !== undefined ? args[i] : null;
+    }
+  }
+  return flags;
+}
+
+function main(argv) {
+  const flags = parseCliArgs(argv);
+  if (!flags.isArchived || !flags.change) {
+    process.stderr.write('Usage: openspec.js --is-archived --change <name>\n');
+    process.exit(1);
+  }
+  writeJsonLine({ archived: isArchived(process.cwd(), flags.change) });
+}
+
+if (require.main === module) {
+  main(process.argv);
+}

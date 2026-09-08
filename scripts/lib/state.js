@@ -8,12 +8,13 @@
  * Zero npm dependencies — Node.js built-ins only.
  */
 
-const fs     = require('fs');
-const path   = require('path');
-const crypto = require('crypto');
+const fs     = require('node:fs');
+const path   = require('node:path');
+const crypto = require('node:crypto');
 const { exec }                   = require('./git');
 const { readSection, resolveSdlcRoot } = require('./config');
 const { resolveMainWorktree }    = require('./worktree');
+const { HOUR_MS }                = require('./time-constants');
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -48,7 +49,7 @@ function atomicWriteSync(filePath, content) {
  *
  * @type {number} milliseconds
  */
-const COMPACT_RECOVERY_TTL_MS = 60 * 60 * 1000;
+const COMPACT_RECOVERY_TTL_MS = HOUR_MS;
 
 // ---------------------------------------------------------------------------
 // Worktree helpers — resolveMainWorktree is imported from ./worktree
@@ -665,7 +666,7 @@ function readTtlDaysFromConfig() {
  * @returns {{ deleted: Array<{dir,branch,mtime,reason}>, kept: Array<{dir,branch,reason}> }}
  */
 function gcTempdirs({ prefix, ttlDays = 7, knownBranches = [], now, tmpdir } = {}) {
-  const os = require('os');
+  const os = require('node:os');
   const scanDir = tmpdir || os.tmpdir();
   const result = { deleted: [], kept: [] };
 

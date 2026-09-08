@@ -3,7 +3,7 @@ name: received-review-sdlc
 description: "Use this skill when responding to code review feedback on a pull request or inline reviewer comments. Covers reading, verifying, evaluating, and responding to reviewer comments with a dual self-critique gate — prevents performative agreement and ensures technical rigor. Can be launched manually or automatically after /review-sdlc. Triggers on: process review feedback, respond to review, handle review comments, address PR feedback, fix review findings, received-review."
 user-invocable: true
 argument-hint: "[--pr <number>] [--auto]"
-model: gemini-3.5-flash-high
+model: gemini-3.8-flash-high
 ---
 
 # Responding to Code Review Feedback
@@ -20,21 +20,21 @@ the proposed action plan.
 ## Context Optimization Constraints
 
 To prevent context bloat and token exhaustion:
-1. **Targeted File Reads (R4):** Avoid reading entire large codebase files directly into memory. When gathering context, use `<PLUGIN_ROOT>/skills/plan-sdlc/scripts/outline_file.sh <file>` to extract file structure (classes, interfaces, functions) instead of using the `view_file` tool on massive files.
-2. **Enforced Parallelism (R5):** If you need to execute multiple exploration commands, process multiple review items, or read multiple files, you MUST batch them in a single JSON tool call array rather than waiting for each to finish sequentially.
-3. **Strict Thought Protocol (R6):** Do not return an empty chat response just to explain intermediate thoughts or internal self-critiques. All internal reasoning must remain in the `thought` block. You must execute the next logical step immediately.
-4. **Truncated Test Outputs (R1):** When verifying changes (compiling, tests, linting) or running package manager commands (e.g., npm, pnpm, pnpm build, yarn), ALWAYS use the truncated wrapper script: `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`.
+1. **Targeted File Reads:** Avoid reading entire large codebase files directly into memory. When gathering context, use `node "<PLUGIN_ROOT>/scripts/util/outline-file.js" <file>` to extract file structure (classes, interfaces, functions) instead of using the `view_file` tool on massive files.
+2. **Enforced Parallelism:** If you need to execute multiple exploration commands, process multiple review items, or read multiple files, you MUST batch them in a single JSON tool call array rather than waiting for each to finish sequentially.
+3. **Strict Thought Protocol:** Do not return an empty chat response just to explain intermediate thoughts or internal self-critiques. All internal reasoning must remain in the `thought` block. You must execute the next logical step immediately.
+4. **Truncated Test Outputs:** When verifying changes (compiling, tests, linting) or running package manager commands (e.g., npm, pnpm, pnpm build, yarn), ALWAYS use the truncated runner: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`.
 
 ## Configuration
 
-### `receivedReview.alwaysFixSeverities` (issue #233, R18/R19)
+### `receivedReview.alwaysFixSeverities`
 
 Per-user, per-project allowlist of finding severities whose **"agree, will fix"** verdicts bypass
 the per-finding consent gate in Step 10 (PRESENT) and Step 12 (REPLY & RESOLVE).
 
 - **Location:** `.sdlc/local.json` under `receivedReview.alwaysFixSeverities` (gitignored, per-user).
   This field is **local-only** — it MUST NEVER be set in `.sdlc/config.json`. The prepare script
-  emits a stderr warning and ignores the value if it appears in project config (R19).
+  emits a stderr warning and ignores the value if it appears in project config.
 - **Type:** `string[]` — array of severities; allowed values: `low | medium | high | critical`.
 - **Default:** `[]` — preserves the original consent-on-every-finding behavior.
 - **Resolution site:** the prepare script `skill/received-review.js` resolves the field once and
@@ -51,52 +51,37 @@ the per-finding consent gate in Step 10 (PRESENT) and Step 12 (REPLY & RESOLVE).
 }
 ```
 
-**Auto-apply rule (R18):** A finding is auto-applied (no consent prompt) when **all three** hold:
+**Bypass rule:** A finding auto-applies — no consent prompt, logged as `fixed: <description>` —
+when **all three** hold: verdict is `agree, will fix`, parsed severity is non-null, and
+severity ∈ `flags.alwaysFixSeverities`. A finding with `severity: null` (unparseable from the
+comment body) **NEVER** bypasses the gate, regardless of the list.
 
-1. The verdict is `agree, will fix`
-2. The finding's parsed severity is non-null
-3. The severity ∈ `flags.alwaysFixSeverities`
-
-A finding with `severity: null` (severity could not be parsed from the comment body) **NEVER**
-bypasses the consent gate, regardless of `flags.alwaysFixSeverities`.
-
-**`--auto` interaction (R10/R16):** When `flags.alwaysFixSeverities` is non-empty, `--auto`
-is further restricted by R18: only "will fix" findings whose severity is in the list are
-implemented in Step 11; remaining "will fix" findings (severity not in the list, or
-`severity: null`) are collected into a **follow-up summary** appended to the response output.
-In Step 12, only "agree, will fix" threads matching R18 are resolved; other threads are replied
-to but left open.
-
-When `flags.alwaysFixSeverities` is empty (the default — `alwaysFixSeverities` unset in
-`.sdlc/local.json`), `--auto` falls back to the original behavior: **all** "will fix" findings
-are auto-applied in Step 11 and all "agree, will fix" threads are resolved in Step 12, regardless
-of severity (including `severity: null`). This preserves backward compatibility for users who
-have not configured the field.
+**`--auto` interaction:** When `flags.alwaysFixSeverities` is **empty** (default), `--auto`
+auto-applies/resolves **all** "agree, will fix" findings/threads in Steps 11/12, regardless of
+severity — the original, backward-compatible behavior. When **non-empty**, `--auto`
+implements/resolves only bypass-eligible findings/threads (per the rule above); the rest are
+collected into a **follow-up summary** (Step 11) and left replied-but-unresolved (Step 12).
 
 To configure interactively, run `/setup-sdlc --only received-review`.
 
-### `receivedReview.alwaysHardenFromReview` (issue #429, R24)
+### `receivedReview.alwaysHardenFromReview`
 
-Per-user flag that controls whether Step 11.6 (META-ANALYZE) automatically dispatches
-`Skill(harden-sdlc)` per cluster without asking for consent.
+Per-user flag: when `true`, Step 11.6 dispatches `Skill(harden-sdlc)` per cluster without a
+consent prompt.
 
-- **Location:** `.sdlc/local.json` under `receivedReview.alwaysHardenFromReview` (gitignored, per-user).
-  This field is **local-only** — it MUST NEVER be set in `.sdlc/config.json`. The prepare script
-  emits a stderr warning and ignores the value if it appears in project config (R24).
+- **Location:** `.sdlc/local.json` under `receivedReview.alwaysHardenFromReview` — local-only,
+  gitignored, per-user; MUST NEVER be set in `.sdlc/config.json` (the prepare script warns
+  and ignores it there).
 - **Type:** `boolean` — default `false`.
-- **Scope:** applies uniformly to all Step 11.6 cluster dispatches in every run.
 
-**Auto-mode matrix (R25 — all four cells authoritative):**
+**Auto-mode matrix (all four cells authoritative — resolved as `mode` by `received-review-cluster.js`, never re-derived from raw `$ARGUMENTS` or config):**
 
-| `flags.auto` | `flags.alwaysHardenFromReview` | Step 11.6 behavior |
-|---|---|---|
-| `false` | `false` | Present consent gate per cluster → dispatch approved clusters only. |
-| `false` | `true`  | Skip consent gate → dispatch every cluster (capped at `hardenClusterCap`). |
-| `true`  | `false` | Skip consent gate AND skip dispatch entirely → append deferred-action entry to `.sdlc/learnings/log.md` (R26 format). |
-| `true`  | `true`  | Skip consent gate → dispatch every cluster (capped), propagating `--auto` to every dispatch. |
-
-**Single resolution site:** `skill/received-review.js` (prepare script). SKILL.md cites
-`flags.alwaysHardenFromReview` only — never raw `$ARGUMENTS` or `.sdlc/local.json` directly.
+| `flags.auto` | `flags.alwaysHardenFromReview` | `mode` | Step 11.6 behavior |
+|---|---|---|---|
+| `false` | `false` | `interactive-consent` | Present consent gate per cluster → dispatch approved clusters only. |
+| `false` | `true`  | `interactive-always`  | Skip consent gate → dispatch every cluster (capped at `hardenClusterCap`). |
+| `true`  | `false` | `auto-defer`          | Skip consent gate AND skip dispatch entirely → append deferred-action entry to `.sdlc/learnings/log.md`. |
+| `true`  | `true`  | `auto-always`         | Skip consent gate → dispatch every cluster (capped), propagating `--auto` to every dispatch. |
 
 **Example `.sdlc/local.json`:**
 ```json
@@ -108,7 +93,7 @@ Per-user flag that controls whether Step 11.6 (META-ANALYZE) automatically dispa
 }
 ```
 
-### `receivedReview.hardenClusterCap` (issue #429, P15)
+### `receivedReview.hardenClusterCap`
 
 Maximum number of harden-sdlc clusters dispatched per Step 11.6 run.
 
@@ -135,14 +120,17 @@ If the system context contains "Plan mode is active":
 When a PR number or URL is provided (via arguments or user input), run the prepare script to pre-compute review thread state:
 
 ```shell
-<PLUGIN_ROOT>/skills/received-review-sdlc/scripts/prepare.sh
+MANIFEST_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/received-review.js" --output-file $ARGUMENTS)
+EXIT_CODE=$?
+echo "MANIFEST_FILE=$MANIFEST_FILE"
+echo "EXIT_CODE=$EXIT_CODE"
 ```
 
 > **Contract (Input/Output):**
 > - **Input**: No arguments required (automatically infers PR from git branch context).
-> - **Output**: Prints JSON manifest of review comments to `stdout`. On success (exit 0), read the manifest JSON to extract `flags.auto`. On exit 1, no PR found.
+> - **Output**: Prints the path of a temp JSON manifest of review comments on stdout. On success (exit 0), read `$MANIFEST_FILE` to extract `flags.auto`. On exit 1, no PR found.
 
-**On exit code 0:** Read the manifest JSON. Extract `flags.auto` from the manifest and store it as a boolean (defaults to `false` if absent). If `--auto` was passed in `$ARGUMENTS` but not in the manifest, treat it as `true`. Display the incremental summary:
+**On exit code 0:** Read the manifest JSON at `$MANIFEST_FILE`. Extract `flags.auto` from the manifest and store it as a boolean (defaults to `false` if absent). If `--auto` was passed in `$ARGUMENTS` but not in the manifest, treat it as `true`. Display the incremental summary:
 
 ```
 Found N outstanding comments (M resolved, K already replied, J stale — skipped).
@@ -203,7 +191,7 @@ Only proceed to Step 3 after all items are understood.
 
 For each feedback item, gather context beyond the immediate change diff:
 
-1. **Read the referenced code** — understand what the code actually does. **CRITICAL:** Use `<PLUGIN_ROOT>/skills/plan-sdlc/scripts/outline_file.sh <file>` or dispatch a subagent instead of natively reading large files.
+1. **Read the referenced code** — understand what the code actually does. **CRITICAL:** Use `node "<PLUGIN_ROOT>/scripts/util/outline-file.js" <file>` or dispatch a subagent instead of natively reading large files.
 2. **Trace callers and dependents** — use LSP references or grep to find who calls the changed code, what imports it, and what would be affected by the suggested change
 3. **Check architectural context** — read related modules, interfaces, and tests to understand the design intent behind the current implementation
 4. **Evaluate ripple effects** — determine whether the suggested change would break or improve behavior beyond the immediate diff
@@ -241,34 +229,19 @@ IF used: Then evaluate the suggestion on merit
 
 ---
 
-## Step 5 — CRITIQUE #1: Self-Critique the Evaluation
+## Step 5 — CRITIQUE #1 / IMPROVE #1: Self-Critique the Evaluation
 
 > **INTERNAL** — Do not display gate results, pass/fail status, or any output from this step to the user. Process silently and proceed to the next step.
 
-Before drafting responses, review the evaluation against these gates:
+Before drafting responses, check the evaluation against each gate below and fix any failure
+before moving on (re-read source for incomplete verification, strengthen vague reasoning,
+reclassify unsupported assessments). Max 2 iterations per gate.
 
-| Gate | Check | Pass Criteria |
-|------|-------|--------------|
-| Verification completeness | Every item verified against actual code | No item evaluated without reading relevant source |
-| No blind agreement | Disagreements exist where technically warranted | Not everything marked "agree" unless genuinely correct |
-| YAGNI applied | Feature suggestions checked for real vs hypothetical need | No "sounds good, will add" for speculative features |
-| Unclear items resolved | All unclear items clarified before proceeding | Not implementing partial feedback |
-| Technical grounding | Every agree/disagree decision cites code or behavior | No decisions based on "seems right" without evidence |
-
-Note every failing gate.
-
----
-
-## Step 6 — IMPROVE #1: Revise Evaluation
-
-> **INTERNAL** — Do not display output from this step to the user. Process silently.
-
-Fix each issue found in Step 5:
-- Re-read code for items where verification was incomplete
-- Strengthen technical reasoning where it was vague
-- Reclassify items where the initial assessment was unsupported
-
-Continue until all gates pass (max 2 iterations per gate).
+- **Verification completeness** — no item evaluated without reading relevant source
+- **No blind agreement** — not everything marked "agree" unless genuinely correct
+- **YAGNI applied** — no "sounds good, will add" for speculative features
+- **Unclear items resolved** — nothing implemented on partial understanding
+- **Technical grounding** — every agree/disagree decision cites code or behavior, not "seems right"
 
 ---
 
@@ -297,46 +270,27 @@ Checked [specific code location]. [What it actually does]. [Consequence of the s
 Decision: [keeping as-is / discussing with owner / needs more context].
 ```
 
-**GitHub thread replies:** Reply in-thread using the comment ID, not as a top-level PR comment:
-```bash
-gh api repos/{owner}/{repo}/pulls/{pr}/comments/{comment_id}/replies \
-  -f body="<response text>"
-```
-
-**Version footer:** Append `manifest.reply_footer` verbatim to the end of every reply body before posting. Do not modify the footer string. Do not insert it elsewhere. The footer is a single string with a leading blank-line separator already included — append it directly to the reply body with no additional separator.
+**GitHub thread replies:** Posted later, in Step 12, in-thread using the comment ID — never as
+a top-level PR comment. See Step 12's reply template for the exact command and the
+`manifest.reply_footer` rule.
 
 ---
 
-## Step 8 — CRITIQUE #2: Self-Critique the Responses
+## Step 8 — CRITIQUE #2 / IMPROVE #2: Self-Critique the Responses
 
 > **INTERNAL** — Do not display gate results, pass/fail status, or any output from this step to the user. Process silently and proceed to the next step.
 
-Review drafted responses against these gates:
+Check the drafted responses against each gate below and fix any failure before moving on
+(delete performative openers, add missing code references, shorten over-explained simple
+fixes). Max 2 iterations per gate.
 
-| Gate | Check | Pass Criteria |
-|------|-------|--------------|
-| No performative language | Zero forbidden openers or gratuitous praise | Responses start with substance, not social filler |
-| Technically grounded | Every response references specific code, behavior, or constraint | No hand-waving ("this should be fine") |
-| Pushback is technical | Disagreements cite code, performance data, or design constraints | No "I prefer" or "I think" without backing evidence |
-| Thread-level replies | Each response targets its specific comment thread | No top-level dump of all responses |
-| Implementation plan clear | For accepted items, response states what will change | Reviewer knows what to expect in next push |
-| No blind agreement | Factual errors corrected, not accommodated | Incorrect reviewer claims are challenged |
-| Proportional effort | Simple fixes get short responses; complex items get detailed ones | No walls of text for typo fixes |
-
-Note every failing gate.
-
----
-
-## Step 9 — IMPROVE #2: Revise Responses
-
-> **INTERNAL** — Do not display output from this step to the user. Process silently.
-
-Fix each issue found in Step 8:
-- Delete performative openers, replace with substance
-- Add specific code references where missing
-- Shorten over-explained simple fixes
-
-Continue until all gates pass (max 2 iterations per gate).
+- **No performative language** — matches Step 7's forbidden-openers rule; substance, not social filler
+- **Technically grounded** — every response references specific code, behavior, or constraint — no "this should be fine"
+- **Pushback is technical** — disagreements cite code, performance data, or design constraints — no "I prefer" without evidence
+- **Thread-level replies** — each response targets its specific comment thread, not a top-level dump
+- **Implementation plan clear** — accepted items state what will change
+- **No blind agreement** — factual errors corrected, not accommodated
+- **Proportional effort** — simple fixes get short responses; complex items get detailed ones
 
 ---
 
@@ -367,24 +321,16 @@ Show the full text of each drafted response, labeled by item number.
 
 **4. Consent gate:**
 
-**Per-finding bypass rule (R18):** Skip the consent gate for finding F when
-`flags.alwaysFixSeverities` includes `F.severity` AND `F.verdict === "agree, will fix"` AND
-`F.severity !== null`. Such findings are auto-applied with a one-line `fixed: <description>`
-log entry and require no user prompt. All other findings (any other verdict, severity not in
-the list, or `severity: null`) follow the modes below.
+Apply the **bypass rule** from Configuration → `alwaysFixSeverities`: bypass-eligible
+findings are auto-applied with a one-line `fixed: <description>` log entry, no prompt. All
+other findings follow the modes below.
 
-**Auto mode:** When `flags.auto` is true (from manifest or arguments):
-- If `flags.alwaysFixSeverities` is **non-empty**: apply only "agree, will fix" findings whose
-  severity ∈ `flags.alwaysFixSeverities` (per the R18 bypass rule above). Remaining "agree, will
-  fix" findings — severity NOT in the list, or `severity: null` — are collected into a
-  **follow-up summary** appended to the response output (not auto-applied).
-- If `flags.alwaysFixSeverities` is **empty** (default): apply **all** "agree, will fix" findings
-  regardless of severity (including `severity: null`). This is the original `--auto` behavior and
-  is the default for users who have not configured `alwaysFixSeverities`.
-
-Items with "disagree", "needs discussion", or "won't fix" verdicts are displayed but NEVER
-auto-actioned in either case. Still display the full analysis table and action plan above for
-visibility, then proceed directly to Step 11.
+**Auto mode** (`flags.auto` true): apply the Configuration → "Bypass rule" / "`--auto`
+interaction" behavior — all "agree, will fix" findings when `alwaysFixSeverities` is empty
+(default), else only bypass-eligible ones, with the remainder collected into a follow-up
+summary. "disagree" / "needs discussion" / "won't fix" items are displayed but NEVER
+auto-actioned. Still show the full analysis table and action plan above, then proceed
+directly to Step 11.
 
 **Manual mode (default):** When `flags.auto` is false or absent, use AskUserQuestion to ask:
 > No changes have been made yet. How to proceed?
@@ -397,21 +343,17 @@ Options:
 If the user chooses **edit**, ask what to change, revise, and present again.
 Loop until explicit **implement** or **skip**.
 
-**Do NOT proceed to Step 11 without explicit `implement` from the user via AskUserQuestion**, EXCEPT
-for findings that satisfy the R18 bypass rule above — those are auto-applied without prompting and
-emit a `fixed: ...` log line. Findings outside the R18 bypass set still require explicit
-`implement` consent.
-
-**Without `--auto`, pipeline context does NOT override this gate** (except for findings satisfying
-the R18 bypass rule). Even when invoked from `/ship-sdlc`, if `--auto` was not explicitly passed
-as a flag, this consent gate is mandatory for findings outside the R18 bypass set. Do not infer
-from surrounding context that automatic execution is expected.
+**Do NOT proceed to Step 11 without explicit `implement`**, except bypass-eligible findings
+(per Configuration). **Pipeline context never overrides this gate:** even when invoked from
+`/ship-sdlc`, if `--auto` was not explicitly passed as a flag, this consent gate is mandatory
+for findings outside the bypass set — never infer automatic execution from surrounding
+context or conversation history.
 
 ---
 
 ## Step 11 — IMPLEMENT: Execute Changes
 
-**Only execute after explicit `implement` from Step 10, OR when `flags.auto` is true (auto-proceed for "will fix" items only), OR when the finding satisfies the R18 bypass rule from Step 10 (severity ∈ `flags.alwaysFixSeverities` AND verdict is "agree, will fix" AND `severity !== null`).** Findings auto-applied via R18 emit a one-line `fixed: <description>` log entry instead of a consent prompt.
+**Only execute after explicit `implement` from Step 10, OR when `flags.auto` is true (auto-proceed for "will fix" items only), OR when the finding satisfies the Configuration → `alwaysFixSeverities` bypass rule.** Bypass-rule findings emit a one-line `fixed: <description>` log entry instead of a consent prompt.
 
 Post responses to PR threads, then implement accepted code changes.
 
@@ -420,7 +362,7 @@ Post responses to PR threads, then implement accepted code changes.
 2. Simple fixes (typos, imports, naming)
 3. Complex fixes (refactoring, logic changes)
 
-For each change: make the edit, verify it compiles/passes tests (including running npm, pnpm, pnpm build, or yarn commands) via `<PLUGIN_ROOT>/skills/execute-plan-sdlc/scripts/run_truncated.sh "<command>"`, then move to the next.
+For each change: make the edit, verify it compiles/passes tests (including running npm, pnpm, pnpm build, or yarn commands) via `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`, then move to the next.
 Do NOT batch changes across items.
 
 **Items marked "disagree" or "needs discussion":** Do NOT implement — await reviewer or
@@ -436,97 +378,76 @@ State the correction factually and move on.
 
 ---
 
-## Step 11.6 — META-ANALYZE: Cluster Findings and Dispatch harden-sdlc (R21–R26)
+## Step 11.6 — META-ANALYZE: Cluster Findings and Dispatch harden-sdlc
 
 **Best-effort step.** Failure here MUST NOT abort Step 11.7 or Step 12.
 
-### 11.6.1 — Cluster findings (R22, C18)
+Build a `findings` array — one entry per Step-4-graded thread (`threadId`, `verdict`, `severity`,
+`hardenSurfaceHint`, `hardenTargetFileHint`, `body`, `verificationStatus`, all sourced from the
+manifest and Step 4's evaluation; pre-Step-4 threads — `cannot-verify`, ungraded — MUST NOT be
+included) — and pipe it to the clustering script:
 
-Only cluster findings whose verdict is one of the four R6 outcomes
-(`agree-will-fix | agree-won't-fix | disagree | needs-discussion`). Pre-Step-4 threads
-(`cannot-verify`, ungraded) MUST NOT enter clusters (C18).
+```shell
+node "<PLUGIN_ROOT>/scripts/skill/received-review-cluster.js" <<'JSON'
+{ "projectRoot": "<cwd>", "prNumber": <pr.number>, "auto": <flags.auto>,
+  "alwaysHardenFromReview": <flags.alwaysHardenFromReview>,
+  "hardenClusterCap": <flags.hardenClusterCap>, "findings": [ /* built above */ ] }
+JSON
+```
 
-Cluster key = `(hardenSurfaceHint, hardenTargetFileHint)` from each thread's manifest fields (P12/P13).
-
-Rules:
-- `disagree` findings require ≥2 findings with the same `hardenTargetFileHint` before forming a cluster (singleton `disagree` silently skipped).
-- Apply cap `flags.hardenClusterCap` (default 5): prune by top-highest-severity-in-cluster → ties by finding count → alphabetic on `(surface, targetFile)`.
-- Track `suppressed = totalClusters - cap` for the log entry.
+> **Contract:** Handles clustering by `(hardenSurfaceHint, hardenTargetFileHint)`, singleton-`disagree`
+> filtering, cap+sort (top severity → finding count → alphabetic), the KD7 re-run dedup against
+> the last 100 lines of `.sdlc/learnings/log.md`, 4096-char failure-text synthesis, and auto-mode
+> matrix resolution from `flags.auto` × `flags.alwaysHardenFromReview` (never re-read raw
+> `$ARGUMENTS` or config directly). Exit 0: JSON `{ mode, clusters[], suppressedByCap,
+> suppressedByRerun, skippedNullHints, deferredLogEntry }` on stdout, where `suppressedByRerun` is
+> the number of clusters dropped by the KD7 re-run guard and `skippedNullHints` is the number of
+> otherwise-clusterable findings excluded because `hardenSurfaceHint` or `hardenTargetFileHint` was
+> null (they have no cluster key, so they are counted rather than silently dropped). `mode` is one of `interactive-consent |
+> interactive-always | auto-defer | auto-always` and each cluster carries `surface`, `targetFile`,
+> `findingCount`, `findingIds`, `verdictMix`, `failureText`, `preview200`. Exit 1/2: script error —
+> treat as best-effort failure per the rule above, skip the rest of this step.
 
 Emit step-emitter: `meta-analyze-findings` — started:
 ```
-Step 11.6 — meta-analyze-findings: started | clusterCount=<N> surfaces=[<list>]
+Step 11.6 — meta-analyze-findings: started | clusterCount=<N> surfaces=[<list>] suppressedByRerun=<N> skippedNullHints=<N>
 ```
 
-### 11.6.2 — Re-run guard (KD7)
+Branch on `mode`:
 
-Scan the last 100 lines of `.sdlc/learnings/log.md` for prior `received-review-sdlc:` deferred-cluster entries whose `surface=` and `targetFile=` match the current PR's clusters. Suppress matching clusters with a `suppressed: re-run dedup` log line.
+- **`interactive-consent`** (manual, default): for each cluster, present a consent gate —
+  > **Step 11.6 — Harden proposal** — cluster: surface=`<surface>`, targetFile=`<targetFile>`, findings=`<findingCount>`
+  >
+  > Synthesized failure text: _`<preview200>`_
+  >
+  > Dispatch `harden-sdlc` for this cluster?
 
-### 11.6.3 — Branch on R25 auto-mode matrix
+  `AskUserQuestion: dispatch | skip`. Emit per cluster: `present-harden-clusters` —
+  `consent-granted | consent-skipped`. Dispatch only `consent-granted` clusters (below).
+- **`interactive-always`**: skip the consent gate, emit `consent-skipped` for every cluster,
+  dispatch all of them (below).
+- **`auto-defer`**: NEVER call `AskUserQuestion`. Skip dispatch entirely. Append
+  `deferredLogEntry` (already formatted by the script) verbatim to `.sdlc/learnings/log.md`.
+  Emit: `dispatch-harden` — `skipped`.
+- **`auto-always`**: NEVER call `AskUserQuestion`. Dispatch every cluster (below), propagating
+  `--auto` to every `Skill(harden-sdlc)` invocation.
 
-Gate on `flags.auto` and `flags.alwaysHardenFromReview` (resolved fields from manifest — never re-read `$ARGUMENTS` or config directly; C17).
-
-**Cell 1 — `flags.auto === false` AND `flags.alwaysHardenFromReview === false` (interactive, default):**
-
-For each cluster, present consent gate:
-
-> **Step 11.6 — Harden proposal** — cluster: surface=`<hardenSurfaceHint>`, targetFile=`<hardenTargetFileHint>`, findings=`<count>`
->
-> Synthesized failure text: _`<first 200 chars of cluster body>`_
->
-> Dispatch `harden-sdlc` for this cluster?
-
+**Dispatch** (each approved cluster in the three non-`auto-defer` modes):
 ```
-AskUserQuestion: dispatch | skip
+Skill("harden-sdlc",
+  "--failure-text \"<cluster.failureText>\"
+   --skill received-review-sdlc
+   --step \"Step 11.6 — meta-analysis\"
+   --operation \"review-feedback-driven hardening\"
+   [--auto when mode is auto-always]"
+)
 ```
-
-Emit per cluster: `present-harden-clusters` — `consent-granted | consent-skipped`.
-
-**Cell 2 — `flags.auto === false` AND `flags.alwaysHardenFromReview === true` (interactive, always-harden):**
-
-Skip consent gate. Emit `consent-skipped` for every cluster. Proceed directly to dispatch (11.6.4).
-
-**Cell 3 — `flags.auto === true` AND `flags.alwaysHardenFromReview === false` (auto, defer):**
-
-NEVER call `AskUserQuestion` (C17). Skip consent gate. Skip dispatch entirely.
-
-Append deferred-action entry to `.sdlc/learnings/log.md` in R26 format:
+On dispatch failure (exit ≠ 0), log one line to `.sdlc/learnings/log.md` and continue to the
+next cluster — do NOT abort Step 11.7 or Step 12:
 ```
-## YYYY-MM-DD — received-review-sdlc: deferred meta-analysis clusters
-PR: <pr.number>
-Clusters (<count>):
-- surface=<hardenSurfaceHint> targetFile=<hardenTargetFileHint> findings=<count> verdict-mix=<csv> failure-text-preview="<first 100 chars>"
-- ...
-Suppressed: <N> additional clusters beyond cap=<cap>
+error: harden dispatch exit <code> — surface=<surface> targetFile=<targetFile>
 ```
-
-Emit: `dispatch-harden` — `skipped`.
-
-**Cell 4 — `flags.auto === true` AND `flags.alwaysHardenFromReview === true` (auto, always-harden):**
-
-NEVER call `AskUserQuestion` (C17). Skip consent gate. Dispatch every cluster (capped), propagating `--auto` to every `Skill(harden-sdlc)` invocation.
-
-### 11.6.4 — Dispatch per approved cluster (R23)
-
-For each approved cluster (cells 1, 2, or 4 above):
-
-1. Synthesize `--failure-text`: concatenate cluster-member comment bodies + verification status + verdict, trimmed to 4096 chars.
-2. Dispatch:
-   ```
-   Skill("harden-sdlc",
-     "--failure-text \"<synthesized cluster text>\"
-      --skill received-review-sdlc
-      --step \"Step 11.6 — meta-analysis\"
-      --operation \"review-feedback-driven hardening\"
-      [--auto when cell 4]"
-   )
-   ```
-3. On dispatch failure (exit ≠ 0): log one line to `.sdlc/learnings/log.md`:
-   ```
-   error: harden dispatch exit <code> — surface=<surface> targetFile=<targetFile>
-   ```
-   Then continue to next cluster. Do NOT abort Step 11.7 or Step 12 (R25 hard rule c).
-4. Emit: `dispatch-harden` — `{ surface, targetFile, hardenExitCode }`.
+Emit: `dispatch-harden` — `{ surface, targetFile, hardenExitCode }`.
 
 Emit step-emitter: `meta-analyze-findings` — completed:
 ```
@@ -535,12 +456,12 @@ Step 11.6 — meta-analyze-findings: completed | dispatched=<N> deferred=<N> sup
 
 ---
 
-## Step 11.7 — LINK VERIFICATION (R17, issue #198) — HARD GATE
+## Step 11.7 — LINK VERIFICATION — HARD GATE
 
 Before any `gh api` reply is posted, validate every URL embedded in every drafted reply body via the shared link validator. Concatenate all reply bodies (one per line) and feed them to the validator on stdin. The script auto-derives `expectedRepo` from `parseRemoteOwner(cwd)` and `jiraSite` from `~/.sdlc-cache/jira/` — the skill MUST NOT construct ctx JSON.
 
 ```shell
-<PLUGIN_ROOT>/skills/received-review-sdlc/scripts/validate_links.sh
+node "<PLUGIN_ROOT>/scripts/util/received-review-validate-links.js"
 ```
 
 > **Contract (Input/Output):**
@@ -570,27 +491,17 @@ Review feedback processing complete:
 
 2. **Consent gate:**
 
-**Per-finding bypass rule (R18):** Skip the consent gate for finding F when
-`flags.alwaysFixSeverities` includes `F.severity` AND `F.verdict === "agree, will fix"` AND
-`F.severity !== null`. Such findings have their replies posted and threads resolved without a
-user prompt; the action is logged as `fixed: <description>`. All other findings follow the modes
-below.
+Apply the **bypass rule** from Configuration → `alwaysFixSeverities`: bypass-eligible
+findings have their replies posted and threads resolved with no prompt, logged as
+`fixed: <description>`.
 
-**Auto mode:** When `flags.auto` is true (from manifest or arguments), skip the AskUserQuestion
-consent gate. Still display the summary block above for visibility, then proceed directly to
-step 3 below as if the user selected `yes`: post in-thread replies for every action-plan item.
-
-Thread resolution behavior depends on `flags.alwaysFixSeverities`:
-- **Non-empty list:** Resolve only "agree, will fix" threads whose severity ∈
-  `flags.alwaysFixSeverities` (R18). "agree, will fix" threads with severity NOT in the list (or
-  `severity: null`) are replied to but NOT resolved — they are appended to the follow-up summary.
-- **Empty list (default):** Resolve ALL "agree, will fix" threads regardless of severity
-  (including `severity: null`). This is the original `--auto` behavior for users who have not
-  configured `alwaysFixSeverities`.
-
-Pushback and "won't fix" threads are replied to but left open for the reviewer in both cases.
-Pipeline context does NOT override this behavior — only the explicit `flags.auto` signal skips
-the gate.
+**Auto mode** (`flags.auto` true): skip AskUserQuestion, still display the summary block
+above, then proceed directly to step 3 below as if `yes` were selected — post in-thread
+replies for every action-plan item. Thread resolution: when `alwaysFixSeverities` is empty
+(default), resolve ALL "agree, will fix" threads; when non-empty, resolve only bypass-eligible
+ones and append the rest to the follow-up summary (per Configuration). Pushback / "won't fix"
+threads are always replied-to but left open. Pipeline context never overrides this — only the
+explicit `flags.auto` signal skips the gate.
 
 **Manual mode (default):** When `flags.auto` is false or absent, use AskUserQuestion:
 
@@ -601,38 +512,25 @@ Options:
 - **skip** — do not post replies (user will handle manually)
 - **selective** — let me choose which threads to reply to
 
-3. **If yes, selective, or auto mode:** For each comment in the action plan:
+3. **If yes, selective, or auto mode:** For each comment in the action plan, post the reply
+   with the shared template, then apply the type-specific body and resolve rule below.
 
-   **Footer rule (applies to all reply types below):** Append `manifest.reply_footer` verbatim to the end of every reply body before posting. Do not modify the footer string. Do not insert it elsewhere. The footer already contains a leading blank-line separator.
+   **Reply template (all types):** Append `manifest.reply_footer` verbatim to the end of the
+   body before posting — do not modify or reposition the footer string; it already contains a
+   leading blank-line separator.
+   ```bash
+   gh api repos/{owner}/{repo}/pulls/{pr}/comments/{comment_id}/replies -f body="<body><footer>"
+   ```
+   Resolve via GraphQL mutation when the rule below says to:
+   ```bash
+   gh api graphql -f query='mutation($threadId: ID!) { resolveReviewThread(input: {threadId: $threadId}) { thread { isResolved } } }' -F threadId="<thread_id>"
+   ```
 
-   **For addressed comments (agree, will fix):**
-   - Post a reply describing what was changed:
-     ```bash
-     gh api repos/{owner}/{repo}/pulls/{pr}/comments/{comment_id}/replies \
-       -f body="Fixed — <brief description of what was changed>"
-     ```
-   - Resolve the thread via GraphQL mutation:
-     ```bash
-     gh api graphql -f query='mutation($threadId: ID!) { resolveReviewThread(input: {threadId: $threadId}) { thread { isResolved } } }' -F threadId="<thread_id>"
-     ```
-   - In **manual `implement`/`selective` modes**, always resolve all "agree, will fix" threads — the user has explicitly approved the action plan.
-   - In **auto mode**, resolution follows the rule in the Auto mode block above: all "agree, will fix" threads are resolved when `flags.alwaysFixSeverities` is empty; only severity-matching threads are resolved when the list is non-empty.
-
-   **For pushback comments (disagree):**
-   - Post the drafted pushback response (from Step 7):
-     ```bash
-     gh api repos/{owner}/{repo}/pulls/{pr}/comments/{comment_id}/replies \
-       -f body="<pushback response>"
-     ```
-   - Do NOT resolve the thread — leave for reviewer to evaluate
-
-   **For intentionally skipped comments (agree, won't fix):**
-   - Post a reply explaining why it was skipped:
-     ```bash
-     gh api repos/{owner}/{repo}/pulls/{pr}/comments/{comment_id}/replies \
-       -f body="Acknowledged — not fixing in this PR because: <reason>"
-     ```
-   - Do NOT resolve — let the reviewer decide
+   | Type | `<body>` | Resolve? |
+   |------|----------|----------|
+   | Addressed (agree, will fix) | `Fixed — <brief description of what was changed>` | Yes — always in manual `implement`/`selective` modes; in auto mode, per the Auto-mode resolution rule above |
+   | Pushback (disagree) | the drafted pushback response (from Step 7) | No — leave for reviewer to evaluate |
+   | Intentionally skipped (agree, won't fix) | `Acknowledged — not fixing in this PR because: <reason>` | No — let the reviewer decide |
 
 4. **Report results:**
 
@@ -647,29 +545,24 @@ Replied to N threads:
 
 ## Best Practices
 
-1. Read ALL feedback before responding to any of it — items may be related
-2. Verify every claim — reviewers can be wrong about what code does
-3. Group unclear items and ask once, not piecemeal
-4. Pushback is professional; blind agreement is not
-5. Implementation order matters: blocking first, cosmetic last
-6. When the reviewer is wrong, say so clearly with evidence
-7. Actions speak — a clean implementation is better than a verbose acknowledgment
+- Pushback is professional; blind agreement is not — when the reviewer is wrong, say so
+  clearly, with evidence (see Step 7).
+- Actions speak — a clean implementation is better than a verbose acknowledgment.
 
 ---
 
 ## DO NOT
 
-- Use performative openers ("Great catch!", "You're right!", "Thanks!")
+- Use performative openers or express gratitude in responses — see Step 7's forbidden-openers rule
 - Agree with factually incorrect claims to avoid conflict
 - Implement unclear feedback — clarify all unclear items first
 - Implement feature requests without a YAGNI check
 - Reply top-level when the comment is in a review thread
 - Skip the self-critique steps even when evaluation seems obvious
 - Batch implement without testing each change individually
-- Express gratitude — let the code changes speak
-- Display output from internal critique steps (Steps 5-6, 8-9) to the user
-- Skip the Step 10 consent gate without an explicit `--auto` flag — pipeline context, conversation history, or inference about "auto mode" is not a substitute for the flag being passed
-- Use `AskUserQuestion` in Step 11.6 when `flags.auto` is true — the R25 / C17 matrix governs all Step 11.6 decision sites; cite `flags.auto` and `flags.alwaysHardenFromReview` (resolved manifest fields) exclusively, never raw `$ARGUMENTS`
+- Display output from internal critique steps (Steps 5, 8) to the user
+- Skip the Step 10 consent gate without an explicit `--auto` flag — see Step 10 (pipeline context never overrides this gate)
+- Use `AskUserQuestion` in Step 11.6 when `flags.auto` is true — the auto-mode matrix governs all Step 11.6 decision sites; cite `flags.auto` and `flags.alwaysHardenFromReview` (resolved manifest fields) exclusively, never raw `$ARGUMENTS`
 
 ---
 
@@ -703,18 +596,12 @@ When invoking `error-report-sdlc`, provide:
   which one they meant.
 - **Comments on deleted lines:** May reference code that no longer exists in the current
   revision. Verify against current HEAD, not the diff context shown in the review.
-- **Automated review tools:** Findings from `/review-sdlc` or similar automated tools should
-  be treated as external reviewer feedback — verify each finding against actual code before
-  accepting it.
 - **Re-running after partial reply:** If the skill previously posted replies but didn't
   resolve threads (or vice versa), re-running with the prepare script will detect
   self-replied threads and skip them, preventing duplicate replies.
 - **GraphQL thread IDs vs REST comment IDs:** The reply endpoint uses REST `databaseId`
   (from `comment.databaseId`), while the resolve mutation uses the GraphQL thread `id`
   (from `thread.id`). The prepare script provides both in its manifest output.
-- **Auto mode scope:** `--auto` only auto-implements "will fix" items. "Disagree", "needs
-  discussion", and "won't fix" items are always displayed and never auto-actioned. This
-  prevents automated tools from silently suppressing pushback.
 
 ---
 

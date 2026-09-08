@@ -22,9 +22,9 @@ There are three predefined quality tiers available:
 
 | Tier | Name | Dynamic Routing Behavior | Use Case |
 |---|---|---|---|
-| **`minimal`** | Speed | Forces `gemini-3.5-flash` for all tasks, but dynamically allocates reasoning budgets: `-low` (Trivial), `-medium` (Standard), `-high` (Complex). | Rapid prototyping, mechanical refactoring, or low-cost runs. |
-| **`balanced`** | Balanced (Default) | Matches model architecture and reasoning loop to task complexity. Trivial: `gemini-3.5-flash-medium`, Standard: `gemini-3.5-flash-high`, Complex: `gemini-3.1-pro-low`. | General day-to-day development. |
-| **`full`** | Quality | Forces `gemini-3.1-pro` for non-trivial tasks (`-low` for Standard, `-high` for Complex) and routes Trivial to `gemini-3.5-flash-medium`. Runs a spec-compliance review. | Critical code paths, production deployments, or complex features requiring maximum reasoning capability. |
+| **`minimal`** | Speed | Forces `gemini-3.8-flash` for all tasks, but dynamically allocates reasoning budgets: `-low` (Trivial), `-medium` (Standard), `-high` (Complex). | Rapid prototyping, mechanical refactoring, or low-cost runs. |
+| **`balanced`** | Balanced (Default) | Matches model architecture and reasoning loop to task complexity. Trivial: `gemini-3.8-flash-medium`, Standard: `gemini-3.8-flash-high`, Complex: `gemini-3.1-pro-low`. | General day-to-day development. |
+| **`full`** | Quality | Forces `gemini-3.1-pro` for non-trivial tasks (`-low` for Standard, `-high` for Complex) and routes Trivial to `gemini-3.8-flash-medium`. Runs a spec-compliance review. | Critical code paths, production deployments, or complex features requiring maximum reasoning capability. |
 
 ---
 
@@ -97,6 +97,6 @@ If you are developing Lift-SDLC or updating the model definitions, refer to the 
 
 *   **Configuration Schema**: [scripts/lib/ship-fields.js](scripts/lib/ship-fields.js) is the single source of truth defining the `quality` config field schema, option validations, and description text.
 *   **Resolution and Precedence**: [scripts/skill/ship.js](scripts/skill/ship.js) handles merging the config files with any command-line options and passes the resolved flag down.
-*   **Orchestration Logic**: [skills/execute-plan-sdlc/SKILL.md](skills/execute-plan-sdlc/SKILL.md) defines how the executing agent reads the `--quality` flag and dynamically maps tasks to model engines (e.g., `gemini-3.5-flash-low` vs `gemini-3.1-pro-low`).
+*   **Orchestration Logic**: [skills/execute-plan-sdlc/SKILL.md](skills/execute-plan-sdlc/SKILL.md) defines how the executing agent reads the `--quality` flag and dynamically maps tasks to model engines (e.g., `gemini-3.8-flash-low` vs `gemini-3.1-pro-low`).
 *   **Architecture & Agent Relations**: For a comprehensive view of how quality tiers integrate across all agent layers, see the [SDLC Plugin Architecture Report](./sdlc-plugin-architecture-report.md).
 

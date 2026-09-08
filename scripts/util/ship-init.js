@@ -28,8 +28,8 @@
 
 'use strict';
 
-const fs   = require('fs');
-const path = require('path');
+const fs   = require('node:fs');
+const path = require('node:path');
 const LIB = path.join(__dirname, '..', 'lib');
 
 const { readSection, writeSection, ensureSdlcGitignore, resolveSdlcRoot } = require(path.join(LIB, 'config'));

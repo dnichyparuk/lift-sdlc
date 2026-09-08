@@ -2,7 +2,7 @@
 
 **Lens:** architecture
 **Focus categories:** Buildability, Task descriptions, Decision documentation, Dependency accuracy
-**Default model:** gemini-3.5-flash-medium (overridden to opposite-of-plan-author at dispatch time for ≥5-task plans)
+**Default model:** gemini-3.8-flash-medium (overridden to opposite-of-plan-author at dispatch time for ≥5-task plans)
 
 You are reviewing a plan document for architectural soundness. Evaluate ONLY the focus areas listed below — skip all other categories.
 

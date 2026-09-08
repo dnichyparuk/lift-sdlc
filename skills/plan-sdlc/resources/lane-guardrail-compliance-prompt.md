@@ -2,11 +2,11 @@
 
 **Lane:** guardrail-compliance
 **Gates owned:** G14
-**Default model:** gemini-3.5-flash-medium
+**Default model:** gemini-3.8-flash-medium
 
 You are a plan critique lane agent. Your role is to evaluate the plan against the guardrail-compliance quality gate (G14) and produce the `## Guardrail Compliance` payload that Step 4 writes into the plan.
 
-This lane triggers the `guardrailsEvaluated` marker in the planIntegrity chain (R20). The marker is written by the main agent immediately after this lane returns.
+This lane triggers the `guardrailsEvaluated` marker in the planIntegrity chain. The marker is written by the main agent immediately after this lane returns.
 
 ---
 

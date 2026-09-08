@@ -22,9 +22,9 @@
 
 'use strict';
 
-const fs   = require('fs');
-const path = require('path');
-const os   = require('os');
+const fs   = require('node:fs');
+const path = require('node:path');
+const os   = require('node:os');
 const { execFileSync } = require('node:child_process');
 const LIB  = path.join(__dirname, '..', 'lib');
 
@@ -55,7 +55,7 @@ function slugify(name) {
  * @returns {boolean}
  */
 function isValidBranchName(name) {
-  return /^[a-zA-Z0-9/_.\-]+$/.test(name) && !/\.\./.test(name) && !name.endsWith('.lock');
+  return /^[a-zA-Z0-9/_.-]+$/.test(name) && !/\.\./.test(name) && !name.endsWith('.lock');
 }
 
 /**
@@ -246,3 +246,5 @@ if (require.main === module) {
     process.exit(1);
   }
 }
+
+module.exports = { slugify, isValidBranchName, parseArgs };

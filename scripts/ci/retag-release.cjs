@@ -181,7 +181,7 @@ function retagOnHead(tag, repoRoot) {
     fs.writeFileSync(tmpFile, tagMessage, 'utf8');
     execOrThrow(`git tag -a "${tag}" -F "${tmpFile}" HEAD`, { cwd: repoRoot });
   } finally {
-    try { fs.unlinkSync(tmpFile); } catch (_) {}
+    try { fs.unlinkSync(tmpFile); } catch (_) { /* best-effort temp-file cleanup */ }
   }
 
   execOrThrow(`git push origin "refs/tags/${tag}"`, { cwd: repoRoot });

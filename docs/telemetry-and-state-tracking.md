@@ -141,7 +141,7 @@ Using 75% of context for inputs, 25% reserved for reasoning:
 
 | Model | Input Limit | Byte Budget |
 |-------|-------------|-------------|
-| gemini-3.5-flash (all variants) | 1M tokens | ~3M bytes |
+| gemini-3.8-flash (all variants) | 1M tokens | ~3M bytes |
 | gemini-3.1-pro (all variants) | 1M tokens | ~3M bytes |
 
 #### Static Cap Table

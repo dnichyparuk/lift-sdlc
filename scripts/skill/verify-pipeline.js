@@ -174,7 +174,11 @@ function main(argv) {
   while (Date.now() - startedAt < timeoutMs) {
     iteration += 1;
     process.stderr.write(`verify-pipeline: poll ${iteration} (PR #${prNumber})\n`);
-    const checks = fetchPrChecks(prNumber);
+    const { checks, ghAuthenticated, errorMessage } = fetchPrChecks(prNumber);
+    if (!ghAuthenticated) {
+      emit({ status: 'error', reason: errorMessage });
+      return;
+    }
     const verdict = evaluateChecks(checks);
 
     if (verdict.status === 'green') {

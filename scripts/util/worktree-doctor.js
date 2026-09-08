@@ -21,9 +21,9 @@
  * Zero npm dependencies — Node.js built-ins only (issue #351).
  */
 
-const path     = require('path');
-const fs       = require('fs');
-const { execFileSync } = require('child_process');
+const path     = require('node:path');
+const fs       = require('node:fs');
+const { execFileSync } = require('node:child_process');
 
 const LIB = path.join(__dirname, '..', 'lib');
 
@@ -271,4 +271,8 @@ function main() {
   process.exit(issues.length === 0 ? 0 : 1);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { parseWorktreeList, slugify };

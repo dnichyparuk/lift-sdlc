@@ -19,23 +19,27 @@
  *   node execute-state.js summarize-prior-wave-context [--run-id <id>] [--max-files <n>] [--max-decisions <n>] [--max-interfaces <n>]
  *   node execute-state.js wave-split --wave <n> --dispatched <json-id-array> [--missing-ids <json-id-array>] [--split-depth <n>] [--max-split-depth <n>]
  *   node execute-state.js verify-completeness --run-id <id>
+ *   node execute-state.js detect-resume --branch <name>
  *
  * Exit codes:
  *   0 = success
  *   1 = state file not found (read/cleanup)
  *   2 = unexpected error
+ *   65 = verify-completeness only — one or more planned tasks unaccounted
+ *        for (BSD EX_DATAERR; see that command's own docstring below)
  */
 
 'use strict';
 
 const path = require('node:path');
 const fs   = require('node:fs');
+const { spawnSync } = require('node:child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 
 const {
   slugifyBranch, readState, writeState, initState, deleteState, resolveBranch,
   gcStateFiles, resolveStateDir, parseStateFilename,
-  listBranches, readTtlDaysFromConfig, summarizePriorWaveContext,
+  listBranches, readTtlDaysFromConfig, summarizePriorWaveContext, detectResumeState,
 } = require(path.join(LIB, 'state'));
 
 const { writeTaskFactSheet, taskFactSheetPath } = require(path.join(LIB, 'task-factsheet'));
@@ -879,6 +883,52 @@ function cmdSummarizePriorWaveContext(opts) {
   process.exit(0);
 }
 
+/**
+ * `detect-resume` — CLI-expose `lib/state.js::detectResumeState()` for
+ * execute-plan-sdlc's Step 0 resume detection, plus a per-wave `committedSha`
+ * reachability check (Fixes #392 / R35 resume gate).
+ *
+ * No new resume-detection logic lives here: `detectResumeState()` supplies
+ * the `{stateFile, fullPath, found, fresh, nextPendingStep}` shape verbatim
+ * (mirrors ship.js's resume probe), and `readState()` supplies the parsed
+ * wave data for the reachability check — both already wired through
+ * `resolveStateDir()`/`findStateFile()`/`slugifyBranch()` internally.
+ *
+ * Appends `waveShaStatus`: for each wave in the found state file, classifies
+ * its `committedSha` via `git merge-base --is-ancestor <sha> HEAD`:
+ *   - `committedSha` null/absent → `reachable: null`  (not applicable)
+ *   - ancestor of HEAD (exit 0)  → `reachable: true`   (reachable)
+ *   - not an ancestor (exit !=0) → `reachable: false`  (diverged)
+ *
+ * Output: {stateFile, fullPath, found, fresh, nextPendingStep, waveShaStatus}
+ * Always exits 0 — `found: false` is a valid answer, not an error.
+ */
+function cmdDetectResume(opts) {
+  const branch = resolveBranchOrExit(opts.branch);
+  const slug = slugifyBranch(branch);
+  const result = detectResumeState({ prefix: 'execute', branch });
+
+  const waveShaStatus = [];
+  if (result.found) {
+    const found = readState('execute', slug);
+    const waves = (found && Array.isArray(found.data.waves)) ? found.data.waves : [];
+    for (const wave of waves) {
+      const sha = (typeof wave.committedSha === 'string' && wave.committedSha.length > 0)
+        ? wave.committedSha
+        : null;
+      let reachable = null;
+      if (sha) {
+        const check = spawnSync('git', ['merge-base', '--is-ancestor', sha, 'HEAD'], { encoding: 'utf8' });
+        reachable = check.status === 0;
+      }
+      waveShaStatus.push({ wave: wave.number, committedSha: sha, reachable });
+    }
+  }
+
+  process.stdout.write(JSON.stringify({ ...result, waveShaStatus }) + '\n');
+  process.exit(0);
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -901,9 +951,10 @@ try {
     case 'summarize-prior-wave-context': cmdSummarizePriorWaveContext(opts); break;
     case 'wave-split': cmdWaveSplit(opts); break;
     case 'verify-completeness': cmdVerifyCompleteness(opts); break;
+    case 'detect-resume': cmdDetectResume(opts); break;
     default:
       process.stderr.write(`Error: unknown subcommand "${opts.subcommand}"\n`);
-      process.stderr.write('Usage: node execute-state.js <init|wave-start|wave-done|wave-fail|wave-committed|task-done|task-fail|context|read|cleanup|gc|summarize-prior-wave-context|wave-split|verify-completeness> [options]\n');
+      process.stderr.write('Usage: node execute-state.js <init|wave-start|wave-done|wave-fail|wave-committed|task-done|task-fail|context|read|cleanup|gc|summarize-prior-wave-context|wave-split|verify-completeness|detect-resume> [options]\n');
       process.exit(2);
   }
 } catch (e) {

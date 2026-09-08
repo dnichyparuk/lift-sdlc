@@ -1,0 +1,12 @@
+# Normalize every text file to LF in the repository and in working trees on
+# every platform. Git auto-detects text vs binary (`text=auto`), so binary
+# files are left untouched. This pins the repo to LF regardless of the
+# committer's platform or local core.autocrlf setting.
+#
+# Rationale: commit e2be6da rewrote ~150 pre-existing files LF->CRLF, which
+# made 72% of PR #3's diff line-ending noise and breaks unpinned
+# `#!/usr/bin/env node` shebangs. Downstream branches authored against the
+# CRLF content should rebase with `git rebase -X renormalize` (and
+# `git config merge.renormalize true`).
+* text=auto eol=lf
+

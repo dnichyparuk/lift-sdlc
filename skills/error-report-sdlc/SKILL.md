@@ -3,15 +3,10 @@ name: error-report-sdlc
 description: "Internal skill invoked by other SDLC skills when they encounter an actionable error (script crash, CLI failure, persistent API error, build failure after retries). Proposes creating a GitHub issue in dnichyparuk/lift-sdlc to track the error with full context capture, two-gate user consent, and pre-flight verification. NOT user-invocable — only dispatched from within another skill's error handling path. When dispatched, follow ./resources/REFERENCE.md for the full procedure."
 user-invocable: false
 disable-model-invocation: true
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Error-to-GitHub Issue Proposal
-
-<!-- disable-model-invocation: true prevents the harness from auto-triggering this skill
-     when conversation content matches the description. It does NOT prevent explicit
-     dispatch from another skill's error-handling path — that is the only intended
-     activation route. user-invocable: false hides the skill from the / menu. -->
 
 Internal procedure invoked by SDLC skills when an actionable error occurs.
 Captures error context, verifies gh CLI availability, gets user consent, and
@@ -20,7 +15,7 @@ creates a tracking issue in `dnichyparuk/lift-sdlc` using the gh CLI.
 The skill body runs in the main parent-model context. The heavy work — assembling
 the issue title and body from the error context and the `templates/ToolingError.md`
 template — is dispatched to the dedicated `error-report-orchestrator` agent so the
-main conversation transcript is never inherited (issue #202). Both consent gates
+main conversation transcript is never inherited. Both consent gates
 and the `gh issue create` call stay in the main context.
 
 ## When This Skill Is Invoked
@@ -36,10 +31,9 @@ error. The calling skill provides:
 
 ## Procedure
 
-The full procedural narrative — error classification (issue-worthy vs not),
-pre-flight verification, two-gate consent flow, template, and the `gh issue create`
-sequence — lives in `./resources/REFERENCE.md`. The implementation flow below resolves
-sections from resources/REFERENCE.md and dispatches the orchestrator.
+The full procedural narrative (classification, pre-flight, consent prompts, `gh`
+commands) lives in `resources/REFERENCE.md`. The steps below resolve its sections
+in order and dispatch the orchestrator.
 
 ### Step 1 — Classify and Pre-flight (main context)
 
@@ -60,14 +54,24 @@ required before any further work, including running the prepare script.
 
 ### Step 3 — Run the Prepare Script (main context)
 
-> **VERBATIM** — Execute this script directly using its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `<PLUGIN_ROOT>/skills/<skill-name>/scripts/<script-name>.sh`). Do NOT prepend `bash` or `sh`. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** — Execute this command directly with `node` and the absolute plugin path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict CLI location pattern: `<PLUGIN_ROOT>/scripts/<skill|util|lib>/<script-name>.js`). Do not modify, rephrase, or simplify the flags.
 
 ```shell
-<PLUGIN_ROOT>/skills/error-report-sdlc/scripts/prepare_report.sh
+ERROR_CONTEXT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/error-report-prepare.js" \
+  --skill "$SKILL_NAME" \
+  --step "$STEP_NAME" \
+  --operation "$OPERATION" \
+  --error-text "$ERROR_TEXT" \
+  --exit-or-http-code "$EXIT_OR_HTTP_CODE" \
+  --error-type "$ERROR_TYPE" \
+  --user-intent "$USER_INTENT" \
+  --args-string "$ARGS_STRING" \
+  --suggested-investigation "$SUGGESTED_INVESTIGATION" \
+  --output-file)
+EXIT_CODE=$?
 ```
-> **Contract (Input/Output):**
-> - **Input**: Error text and skill context.
-> - **Output**: Prints JSON structure for GitHub issue submission.
+> **Contract:** input is the flags above; output is the path to a temp JSON manifest,
+> captured as `ERROR_CONTEXT_FILE` (command exit status as `EXIT_CODE`).
 
 Substitute the shell variables with the values supplied by the calling skill. Optional
 fields (`exitOrHttpCode`, `errorType`, `userIntent`, `argsString`,
@@ -81,43 +85,35 @@ orchestrator will omit dependent template sections.
 
 ### Step 4 — Dispatch the error-report-orchestrator Agent
 
-Issue #202: pinning `model:` in skill frontmatter routes the skill into a subagent
-that inherits the entire conversation transcript and overflows smaller-window
-models on long sessions. To keep the main context clean and bound the
-orchestrator's input to the prepared payload only, dispatch the dedicated
-`error-report-orchestrator` agent. See
-`docs/skill-best-practices.md` → "Why frontmatter `model:` is the wrong
-context-isolation knob" for the rationale.
+To keep the main context clean and bound the orchestrator's input to the
+prepared payload only, dispatch the dedicated `error-report-orchestrator` agent.
 
 Use the `Agent` tool with:
 
 - `subagent_type`: `sdlc:error-report-orchestrator`
-- `model`: `gemini-3.5-flash-low` (the Agent tool `model:` parameter takes precedence over agent frontmatter; passing `gemini-3.5-flash-low` here keeps this bounded task on a lightweight model regardless of the parent context's model)
-- `prompt` (exactly two lines, no other content):
+- `model`: `gemini-3.8-flash-low` — the Agent tool's `model:` param takes precedence
+  over agent frontmatter, keeping this bounded task on a lightweight model regardless
+  of the parent context's model
+- `prompt` (exactly three lines, no other content):
 
   ```text
   MANIFEST_FILE: <ERROR_CONTEXT_FILE>
   PROJECT_ROOT: <cwd>
+  PLUGIN_ROOT: <PLUGIN_ROOT>
   ```
 
   Substitute `<ERROR_CONTEXT_FILE>` with the absolute temp-file path captured in
-  Step 3. Substitute `<cwd>` with the current working directory.
+  Step 3. Substitute `<cwd>` with the current working directory. Substitute
+  `<PLUGIN_ROOT>` with the same absolute plugin path used in Step 3.
 
 The orchestrator reads the manifest, reads
 `skills/error-report-sdlc/templates/ToolingError.md`, fills
 every `{placeholder}` strictly from manifest fields, removes sections whose
-manifest fields are empty, and returns ONLY a JSON object:
+manifest fields are empty, and returns ONLY a JSON object `{ "title": ..., "body": ... }`
+(full contract: `agents/error-report-orchestrator.md`). The orchestrator does not call
+`gh`, does not call `git`, does not write any file.
 
-```json
-{
-  "title": "<assembled title>",
-  "body": "<filled markdown body>"
-}
-```
-
-The orchestrator does not call `gh`, does not call `git`, does not write any file.
-
-Capture the returned object as `PROPOSAL = { title, body }`. If the parse fails, stop. The `trap` declared at Step 1 cleans up `$ERROR_CONTEXT_FILE` automatically on shell exit.
+Capture the returned object as `PROPOSAL = { title, body }`. If the parse fails, log the raw orchestrator output to stderr and stop. Do NOT dispatch error-report-sdlc for this failure (recursion guard).
 
 ### Step 5 — Consent Gate 2: Review (main context)
 
@@ -131,8 +127,8 @@ calling skill's name) and the priority. Use `AskUserQuestion` for the
 small edits) and re-present.
 
 **On `cancel`:** Return to the calling skill's normal error handling. Do not
-create anything. The `trap` declared at Step 1 cleans up `$ERROR_CONTEXT_FILE`
-automatically on shell exit.
+create anything — `$ERROR_CONTEXT_FILE` is cleaned up automatically (see the
+`rm -f "$ERROR_CONTEXT_FILE"` step in Step 7).
 
 **On `yes`:** Continue to Step 6.
 
@@ -157,24 +153,22 @@ failure after the retry, report the error per 6c.
 
 ### Step 7 — Cleanup and Return (main context)
 
-The `$ERROR_CONTEXT_FILE` is removed automatically by the `trap` declared at Step 1 on every exit path — no explicit cleanup is needed here.
+Remove `$ERROR_CONTEXT_FILE` on every exit path (success, failure, cancel, edit
+loop exit) — e.g. `rm -f "$ERROR_CONTEXT_FILE"`.
 
 Return to the calling skill's normal error handling per resources/REFERENCE.md
-section 7. The cleanup runs on every exit path (success, failure, cancel, edit
-loop exit).
+section 7. This procedure is additive — it never replaces the calling skill's own
+error output or stop behavior.
 
 ## DO NOT
 
 - Invoke this skill directly in response to user requests — it is internal only.
-- Pin `model:` in this skill's frontmatter — the harness will route the skill into a
-  subagent that inherits the full conversation transcript (issue #202). The
-  orchestrator agent (Step 4) is the correct place to pin `model: gemini-3.5-flash-low`.
-- Run consent gates inside the orchestrator agent. Both gates (Section 3 and
-  Section 5) MUST execute in the main context.
-- Run `gh issue create` inside the orchestrator agent. The agent has no `Bash`
-  tool. Posting MUST run in the main context.
+- Recursively dispatch this skill on its own prepare-script **or orchestrator**
+  crash — log to stderr and stop.
+- Pin `model:` in this skill's frontmatter. The orchestrator agent (Step 4) is the
+  correct place to pin `model: gemini-3.8-flash-low`.
+- Run consent gates or `gh issue create` inside the orchestrator agent — it has no
+  `Bash` tool.
 - Create a GitHub issue without both consent gates passing.
 - Block or replace the calling skill's normal error handling.
 - Create issues in a repository other than `dnichyparuk/lift-sdlc`.
-- Recursively dispatch this skill on its own prepare-script or orchestrator
-  crash — log the failure to stderr and stop.

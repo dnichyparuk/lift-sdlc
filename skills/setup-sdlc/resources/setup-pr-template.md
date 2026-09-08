@@ -145,10 +145,10 @@ After the user accepts:
 
 ### Step 7 — Validate
 
-After writing, locate and run the validation script:
+After writing, run the validation script:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-pr-template_validate.sh
+node "<PLUGIN_ROOT>/scripts/ci/validate-pr-template.js" --project-root .
 ```
 
 - Exit code 0 (validation **passes**): show the summary table from the script output.
@@ -227,4 +227,4 @@ When invoking `error-report-sdlc`, provide:
 - `setup-sdlc --pr-template` — parent skill that invokes this sub-flow
 - `setup-sdlc --dimensions` — sibling sub-flow for review dimensions
 - `pr-sdlc/SKILL.md` — uses the template written by this sub-flow
-- `scripts/validate-pr-template.js` — validates the template format
+- `scripts/ci/validate-pr-template.js` — validates the template format

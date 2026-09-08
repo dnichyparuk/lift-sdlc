@@ -42,15 +42,15 @@ Max 1 retry. If it fails again, escalate.
 When re-dispatching a failed task, escalate the model one step up the fixed ladder per retry:
 
 ```
-gemini-3.5-flash-low → gemini-3.5-flash-medium → gemini-3.5-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high → user (escalate, do not retry further)
+gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high → user (escalate, do not retry further)
 ```
 
 The starting point is the task's `assignedModel`; each retry advances exactly one position along this ladder.
 
 Examples:
-- If a task starts on `gemini-3.5-flash-low`, it escalates to `gemini-3.5-flash-medium` (Retry 1), and then to `gemini-3.5-flash-high` (Retry 2).
-- If a task starts on `gemini-3.5-flash-medium`, it escalates to `gemini-3.5-flash-high` (Retry 1), and then to `gemini-3.1-pro-low` (Retry 2).
-- If a task starts on `gemini-3.5-flash-high`, it escalates to `gemini-3.1-pro-low` (Retry 1), and then to `gemini-3.1-pro-high` (Retry 2).
+- If a task starts on `gemini-3.8-flash-low`, it escalates to `gemini-3.8-flash-medium` (Retry 1), and then to `gemini-3.8-flash-high` (Retry 2).
+- If a task starts on `gemini-3.8-flash-medium`, it escalates to `gemini-3.8-flash-high` (Retry 1), and then to `gemini-3.1-pro-low` (Retry 2).
+- If a task starts on `gemini-3.8-flash-high`, it escalates to `gemini-3.1-pro-low` (Retry 1), and then to `gemini-3.1-pro-high` (Retry 2).
 - If a task starts on `gemini-3.1-pro-low`, it escalates to `gemini-3.1-pro-high` (Retry 1), and then to `gemini-3.1-pro-high` with failure context (Retry 2).
 - If a task starts on `gemini-3.1-pro-high`, it is retried on `gemini-3.1-pro-high` with failure context (Retry 1), and then escalated to user (Retry 2 / no further escalation).
 
@@ -81,7 +81,7 @@ Max 1 retry.
 ### Unauthorized file modification
 Do NOT retry the agent without fixing the prompt first.
 1. Identify which unauthorized files were modified
-2. Revert them: `git checkout -- <file>`
+2. Revert each one: `node "<PLUGIN_ROOT>/scripts/util/rollback-stash.js" revert-file --path <file>` — returns `{"status": "reverted", "path": "<file>"}`, or `{"status": "failed", "path": "<file>", "message": "<diagnostic>"}` (exit 1)
 3. Re-examine the task — if it genuinely needs those files, update the allowed file list
 4. Re-dispatch with the corrected file list and a warning:
    ```
@@ -124,7 +124,7 @@ When a batch agent reports mixed results (some tasks SUCCESS, some tasks FAILED)
 2. Extract each failed task from the batch into its own individual retry
 3. Re-dispatch each failed task as a standalone agent with:
    - The single-task Agent Prompt Template (not the batch template)
-   - Model escalated one step (e.g., `gemini-3.5-flash-low` → `gemini-3.5-flash-high`)
+   - Model escalated one step (e.g., `gemini-3.8-flash-low` → `gemini-3.8-flash-high`)
    - `mode: "bypassPermissions"` passed explicitly to the Agent tool
    - Failure context from the batch report added at the top of the prompt
 4. Treat each extracted retry independently — it counts toward that task's 2-retry budget
@@ -153,7 +153,7 @@ When an agent reports successful completion but `git diff --stat` shows no chang
 
    Complete the task from scratch — assume none of your previous work exists.
    ```
-    Escalate model one step per the dynamic escalation path (`gemini-3.5-flash-low → gemini-3.5-flash-medium → gemini-3.5-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high`) and pass `mode: "bypassPermissions"` explicitly. This counts toward the 2-retry budget.
+    Escalate model one step per the dynamic escalation path (`gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high`) and pass `mode: "bypassPermissions"` explicitly. This counts toward the 2-retry budget.
 
 4. **After the retry, re-run filesystem verification.** Run `git diff --stat` and grep for the verification token. If still no changes, escalate to the user immediately — do not retry a third time. Include: "Agent reported success twice but produced no filesystem changes. Manual implementation required."
 
@@ -189,7 +189,7 @@ The agent cannot complete the task. Assess the blocker before acting:
    Provide the missing context and re-dispatch with the same or escalated model. Counts as one retry.
 
 2. **Capability problem** — the task requires more reasoning than the assigned model:
-   Re-dispatch with an escalated model (gemini-3.5-flash-medium → gemini-3.5-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high). Counts as one retry.
+   Re-dispatch with an escalated model (gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high). Counts as one retry.
 
 3. **Scope problem** — the task is too large for a single agent dispatch:
    Break the task into smaller sub-tasks. Each sub-task starts with a fresh retry budget.
@@ -234,7 +234,7 @@ When escalating to the user after 2 failed retries or a systemic failure, provid
 Task: {task name and wave number}
 Failure: {clear description of what went wrong}
 Attempts: {N retries attempted}
-Models used:     {e.g., "gemini-3.5-flash-medium (attempt 1), gemini-3.5-flash-high (attempt 2)"}
+Models used:     {e.g., "gemini-3.8-flash-medium (attempt 1), gemini-3.8-flash-high (attempt 2)"}
 
 Recovery tried:
 {describe each recovery attempt and its outcome}
@@ -285,16 +285,15 @@ Splitting only the missing IDs risks re-overflowing if the dependencies or share
 
 When a wave produces fundamentally broken output that cannot be recovered through targeted fixes:
 
-1. Stash all changes from the failed wave:
+1. Stash all changes from the failed wave, labeling the entry with the wave number so two failed waves produce distinguishable stash entries:
    ```bash
-   git stash push -m "failed-wave-N-$(date +%Y%m%d-%H%M%S)"
+   node "<PLUGIN_ROOT>/scripts/util/rollback-stash.js" stash --label "failed-wave-<N>"
    ```
 
-2. Confirm the stash captured everything:
-   ```bash
-   git status
-   git stash list
-   ```
+2. The script pushes a timestamped stash and then confirms it captured everything (`git status` + `git stash list`) before reporting. Branch on `status`:
+   - `{"status": "nothing_to_stash"}` — the tree was already clean; nothing was pushed and there is no ref to drop later.
+   - `{"status": "stashed", "ref": "stash@{0}"}` — pushed and confirmed. Keep `ref` — it is the only handle for step 5.
+   - `{"status": "failed", "message": "<diagnostic>"}` (exit 1) — the push or its confirmation failed. Do not continue the rollback; escalate to the user with `message`.
 
 3. Re-examine the tasks in the failed wave. Common root causes:
    - Task descriptions were too vague (agents interpreted them differently)
@@ -306,8 +305,8 @@ When a wave produces fundamentally broken output that cannot be recovered throug
    - **Skip the wave** and mark tasks as unimplemented (user completes manually)
    - **Abort execution** entirely (stash remains, user takes over)
 
-5. If retrying: pop the stash only after the new wave succeeds:
+5. If retrying: drop the stash only after the new wave succeeds. Dropping never happens automatically — it always requires this explicit second call with the `ref` returned in step 2:
    ```bash
-   git stash drop stash@{0}
+   node "<PLUGIN_ROOT>/scripts/util/rollback-stash.js" stash --drop "<ref>"
    ```
-   If aborting: leave the stash for the user to inspect.
+   Returns `{"status": "dropped", "ref": "<ref>"}`, or `{"status": "failed", "ref": "<ref>", "message": "<diagnostic>"}` (exit 1). If aborting: leave the stash for the user to inspect.

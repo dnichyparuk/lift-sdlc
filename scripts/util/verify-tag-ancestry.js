@@ -26,7 +26,7 @@
  */
 'use strict';
 
-const path     = require('path');
+const path     = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const LIB = path.join(__dirname, '..', 'lib');

@@ -19,7 +19,7 @@ For `{WAVE_NUMBER}`, use the current wave number.
 ```
 Task tool (general-purpose):
   description: "Spec compliance review for Wave {WAVE_NUMBER}"
-  model: gemini-3.5-flash-medium
+  model: gemini-3.8-flash-medium
   mode: bypassPermissions
   prompt: |
     You are reviewing whether implementations match their specifications. Read the actual

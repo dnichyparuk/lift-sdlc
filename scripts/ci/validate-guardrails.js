@@ -8,26 +8,40 @@
  */
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const LIB = path.join(__dirname, '..', 'lib');
 
 const { resolveSdlcRoot } = require(path.join(LIB, 'config'));
 const { GUARDRAIL_SEVERITIES } = require(path.join(LIB, 'dimensions'));
 
 /**
- * Parse command-line flags
+ * Parse command-line flags.
+ *
+ * `--project-root <dir>` (default) resolves `.sdlc/config.json` under a
+ * directory via readSection, mirroring every other project-root-rooted CLI.
+ * `--config-file <path>` instead names an explicit config file to parse and
+ * validate directly — used when the caller already holds a specific file
+ * (e.g. a `.harden-tmp` staging copy) rather than a project directory.
+ * `--config-file` and an explicit `--project-root` are mutually exclusive;
+ * passing both is a usage error (exit 1) — see main().
  */
 function parseArgs(args) {
   const result = {
     // C-projectroot (#360): default to main-worktree .sdlc/ root, not cwd.
     projectRoot: resolveSdlcRoot(),
+    explicitProjectRoot: false,
+    configFile: null,
     json: false,
     section: 'plan',
   };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--project-root' && i + 1 < args.length) {
       result.projectRoot = args[i + 1];
+      result.explicitProjectRoot = true;
+      i++;
+    } else if (args[i] === '--config-file' && i + 1 < args.length) {
+      result.configFile = args[i + 1];
       i++;
     } else if (args[i] === '--json') {
       result.json = true;
@@ -125,39 +139,29 @@ function validateGuardrail(guardrail, seenIds) {
 }
 
 /**
- * Validate guardrail config for a given section — no process.exit, no console output.
- * Exported for programmatic use by harden-prepare.js (R16).
+ * Validate an already-resolved guardrails section value — pure function, no
+ * I/O, no readSection. This is the half of the old validateGuardrailsConfig
+ * that actually validates; the other half (locating the section value, via
+ * project-root + readSection OR an explicit --config-file) now lives in
+ * resolveSectionData(). Exported so both CLI modes and future callers can
+ * validate a section object they already hold.
  *
- * @param {string} projectRoot — absolute path to the project root
- * @param {string} sectionName — 'plan' | 'execute' (or any readSection key)
+ * @param {object|null} sectionValue — the section object (e.g. what
+ *   readSection(root, 'plan') or config.plan would yield), or null/undefined
+ *   when nothing is configured
+ * @param {string} sectionName — 'plan' | 'execute' (or any section) — used
+ *   only to prefix per-guardrail error/warning messages
  * @returns {{ errors: string[], warnings: string[], guardrailCount: number }}
  */
-function validateGuardrailsConfig(projectRoot, sectionName) {
+function validateGuardrailsSection(sectionValue, sectionName) {
   const errors = [];
   const warnings = [];
 
-  let readSection;
-  try {
-    readSection = loadReadSection(projectRoot);
-  } catch (err) {
-    errors.push(`Cannot load readSection: ${err.message}`);
+  if (!sectionValue || !Array.isArray(sectionValue.guardrails)) {
     return { errors, warnings, guardrailCount: 0 };
   }
 
-  const section = sectionName || 'plan';
-  let sectionData;
-  try {
-    sectionData = readSection(projectRoot, section);
-  } catch (err) {
-    errors.push(`Cannot read section "${section}": ${err.message}`);
-    return { errors, warnings, guardrailCount: 0 };
-  }
-
-  if (!sectionData || !Array.isArray(sectionData.guardrails)) {
-    return { errors, warnings, guardrailCount: 0 };
-  }
-
-  const guardrails = sectionData.guardrails;
+  const guardrails = sectionValue.guardrails;
   const seenIds = new Set();
 
   for (const guardrail of guardrails) {
@@ -174,15 +178,108 @@ function validateGuardrailsConfig(projectRoot, sectionName) {
 }
 
 /**
- * Main validation logic — thin CLI wrapper around validateGuardrailsConfig.
+ * Validate guardrail config for a given section — no process.exit, no console output.
+ * Exported for programmatic use by harden-prepare.js (R16). Signature and
+ * behavior unchanged: still resolves the section via project-root + readSection,
+ * now delegating the actual validation to validateGuardrailsSection().
+ *
+ * @param {string} projectRoot — absolute path to the project root
+ * @param {string} sectionName — 'plan' | 'execute' (or any readSection key)
+ * @returns {{ errors: string[], warnings: string[], guardrailCount: number }}
+ */
+function validateGuardrailsConfig(projectRoot, sectionName) {
+  let readSection;
+  try {
+    readSection = loadReadSection(projectRoot);
+  } catch (err) {
+    return { errors: [`Cannot load readSection: ${err.message}`], warnings: [], guardrailCount: 0 };
+  }
+
+  const section = sectionName || 'plan';
+  let sectionData;
+  try {
+    sectionData = readSection(projectRoot, section);
+  } catch (err) {
+    return { errors: [`Cannot read section "${section}": ${err.message}`], warnings: [], guardrailCount: 0 };
+  }
+
+  return validateGuardrailsSection(sectionData, section);
+}
+
+/**
+ * Locate the guardrails section value for the given parsed flags, without
+ * validating its contents — this is the "locating" half split out of the old
+ * validateGuardrailsConfig (see module doc / task contract).
+ *
+ * `--config-file` mode reads and JSON.parses the named file directly, then
+ * indexes into it the same way readSection does for project-config sections
+ * (`config?.[section] ?? null` — see scripts/lib/config.js readSection,
+ * PROJECT_SECTIONS branch), so a `.sdlc/config.json`-shaped file yields
+ * identical results whether read via --project-root or via --config-file.
+ * A missing --config-file target fails loudly (exit 1 from main()), unlike
+ * project-root mode's graceful "no guardrails configured" fallback — setup
+ * flows legitimately run project-root mode before any guardrails exist, but
+ * an explicit --config-file target (e.g. a harden `.harden-tmp` staging
+ * copy) is expected to exist.
+ *
+ * @param {{projectRoot: string, configFile: string|null}} flags
+ * @param {string} section
+ * @returns {object|null}
+ * @throws {Error} with `.code === 'CONFIG_FILE_NOT_FOUND'` when --config-file
+ *   is set but the target does not exist, or `.code === 'CONFIG_FILE_INVALID_JSON'`
+ *   when the target exists but fails to parse; other failures (readSection
+ *   errors) propagate as plain Errors.
+ */
+function resolveSectionData(flags, section) {
+  if (flags.configFile) {
+    if (!fs.existsSync(flags.configFile)) {
+      const err = new Error(`Config file not found: ${flags.configFile}`);
+      err.code = 'CONFIG_FILE_NOT_FOUND';
+      throw err;
+    }
+    let config;
+    try {
+      config = JSON.parse(fs.readFileSync(flags.configFile, 'utf8'));
+    } catch (parseErr) {
+      const err = new Error(`Invalid JSON in ${flags.configFile}: ${parseErr.message}`);
+      err.code = 'CONFIG_FILE_INVALID_JSON';
+      throw err;
+    }
+    return config?.[section] ?? null;
+  }
+
+  const readSection = loadReadSection(flags.projectRoot);
+  return readSection(flags.projectRoot, section);
+}
+
+/**
+ * Main validation logic — thin CLI wrapper around resolveSectionData() +
+ * validateGuardrailsSection().
  */
 function main() {
   const args = process.argv.slice(2);
   const flags = parseArgs(args);
+  const section = flags.section || 'plan';
+
+  if (flags.configFile && flags.explicitProjectRoot) {
+    process.stderr.write('--config-file and --project-root are mutually exclusive; pass only one\n');
+    process.exit(1);
+  }
+
+  let sectionData;
+  try {
+    sectionData = resolveSectionData(flags, section);
+  } catch (err) {
+    if (err.code === 'CONFIG_FILE_NOT_FOUND' || err.code === 'CONFIG_FILE_INVALID_JSON') {
+      process.stderr.write(err.message + '\n');
+      process.exit(1);
+    }
+    process.stderr.write('CRASH: ' + err.message + '\n');
+    process.exit(2);
+  }
 
   try {
-    const section = flags.section || 'plan';
-    const result = validateGuardrailsConfig(flags.projectRoot, section);
+    const result = validateGuardrailsSection(sectionData, section);
 
     // If no guardrails configured, treat as pass
     if (result.guardrailCount === 0 && result.errors.length === 0) {
@@ -200,8 +297,6 @@ function main() {
     }
 
     // Re-run per-guardrail validation for structured output (needed for CLI display)
-    const readSection = loadReadSection(flags.projectRoot);
-    const sectionData = readSection(flags.projectRoot, section);
     const guardrails = sectionData ? (sectionData.guardrails || []) : [];
     const seenIds = new Set();
     const results = [];
@@ -257,7 +352,7 @@ function main() {
   }
 }
 
-module.exports = { validateGuardrailsConfig };
+module.exports = { validateGuardrailsConfig, validateGuardrailsSection };
 
 if (require.main === module) {
   main();

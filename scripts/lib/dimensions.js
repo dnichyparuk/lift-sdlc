@@ -63,9 +63,9 @@ const KNOWN_FIELDS = new Set([
 
 const VALID_SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'info']);
 const VALID_MODELS = new Set([
-  'gemini-3.5-flash-low',
-  'gemini-3.5-flash-medium',
-  'gemini-3.5-flash-high',
+  'gemini-3.8-flash-low',
+  'gemini-3.8-flash-medium',
+  'gemini-3.8-flash-high',
   'gemini-3.1-pro-low',
   'gemini-3.1-pro-high',
 ]);
@@ -224,19 +224,19 @@ function validateDimensionFile(filePath) {
 // Main validation runner
 // ---------------------------------------------------------------------------
 
-// Issue #231: prefer .sdlc/review-dimensions/, fall back to legacy
-// .sdlc/review-dimensions/ with one-time stderr deprecation warning.
+// Issue #231: prefer .sdlc/review-dimensions/, fall back to legacy review-dimensions/
+// with one-time stderr deprecation warning.
 let _legacyDimensionsWarningEmitted = false;
 
 function resolveDimensionsDir(projectRoot) {
   const newPath = path.join(projectRoot, '.sdlc', 'review-dimensions');
-  const legacyPath = path.join(projectRoot, '.sdlc', 'review-dimensions');
+  const legacyPath = path.join(projectRoot, 'review-dimensions');
   if (fs.existsSync(newPath)) return newPath;
   if (fs.existsSync(legacyPath)) {
     if (!_legacyDimensionsWarningEmitted) {
       _legacyDimensionsWarningEmitted = true;
       process.stderr.write(
-        `Deprecation: ${path.join('.sdlc', 'review-dimensions')} is the legacy review-dimensions location. ` +
+        `Deprecation: review-dimensions/ is the legacy review-dimensions location. ` +
         `Run /setup-sdlc --migrate to move dimensions to ${path.join('.sdlc', 'review-dimensions')}.\n`
       );
     }

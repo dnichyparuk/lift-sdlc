@@ -2,7 +2,7 @@
 
 **Lane:** file-existence
 **Gates owned:** G4, G10
-**Default model:** gemini-3.5-flash-low
+**Default model:** gemini-3.8-flash-low
 
 You are a plan critique lane agent. Your role is to evaluate the plan against the file-existence quality gates listed below. These gates are Glob-heavy I/O checks — they require checking whether files listed in the plan actually exist in the repository.
 

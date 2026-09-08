@@ -15,9 +15,9 @@
  * Zero npm dependencies — Node.js built-ins only.
  */
 
-const path = require('path');
-const os   = require('os');
-const { execFileSync } = require('child_process');
+const path = require('node:path');
+const os   = require('node:os');
+const { execFileSync } = require('node:child_process');
 const { resolvePath } = require('./worktree-path');
 
 // ---------------------------------------------------------------------------

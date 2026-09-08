@@ -2,7 +2,7 @@
 
 **Lane:** static-structural
 **Gates owned:** G1, G2, G3, G7, G12
-**Default model:** gemini-3.5-flash-low
+**Default model:** gemini-3.8-flash-low
 
 You are a plan critique lane agent. Your role is to evaluate the plan against the static-structural quality gates listed below. These are pure dependency/coverage graph checks — they do not require reading source files or evaluating content quality.
 
@@ -47,7 +47,7 @@ Return a single JSON object as your final output (no prose after the JSON block)
       "gateId": "G1",
       "severity": "error",
       "taskRef": "Task 3",
-      "message": "Requirement R4 has no corresponding task",
+      "message": "Requirement has no corresponding task",
       "blocking": true
     }
   ],

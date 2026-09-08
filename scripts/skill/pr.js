@@ -24,12 +24,13 @@
 
 'use strict';
 
-const fs   = require('fs');
-const path = require('path');
+const fs   = require('node:fs');
+const path = require('node:path');
 const LIB = path.join(__dirname, '..', 'lib');
 
-const {
-  exec,
+const { truncateDiff } = require('../lib/diff-truncate');
+const { splitDiffByFile } = require('../lib/git');
+const { exec,
   checkGitState,
   detectBaseBranch,
   fetchBaseRef,
@@ -56,6 +57,11 @@ const { validateLinks, formatViolations } = require(path.join(LIB, 'links'));
 const { loadPrTemplate } = require(path.join(LIB, 'pr-template'));
 const { issueKeyRegex, extractFromBranchAndCommits } = require(path.join(LIB, 'issue-keys'));
 const { validateExpectedBranch } = require(path.join(LIB, 'branch-guard'));
+const { parseConventionalCommit } = require(path.join(LIB, 'version'));
+// Reuse the same minimal glob semantics already used for path matching
+// elsewhere in the repo (review dimension triggers/skip-when) rather than
+// introducing a new dependency.
+const { globToRegex } = require(path.join(__dirname, 'review'));
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -144,6 +150,114 @@ function detectPrMode(forceUpdate, prMeta) {
   }
   if (prMeta.exists) return { mode: 'update' };
   return { mode: 'create' };
+}
+
+// ---------------------------------------------------------------------------
+// Rule-mode label matching (issue #197, rules-mode signal evaluation)
+// ---------------------------------------------------------------------------
+// Structural validity of `rule.when` (exactly one known key, real label) is
+// established by the loop in main() before validRules ever reaches here —
+// this only decides whether that one signal actually matches the PR.
+
+/**
+ * Evaluate one already-validated rule's single `when` signal against the
+ * current PR context.
+ * @param {{label: string, when: object}} rule
+ * @param {{branch: string, commitType: string[], changedPaths: string[], jiraType: string|null, diffLineCount: number}} context
+ * @returns {boolean}
+ */
+function matchRule(rule, context) {
+  const when = rule && rule.when;
+  if (!when || typeof when !== 'object') return false;
+  const [signal] = Object.keys(when);
+  const value = when[signal];
+
+  switch (signal) {
+    case 'branchPrefix':
+      return Array.isArray(value) && typeof context.branch === 'string' &&
+        value.some(prefix => context.branch.startsWith(prefix));
+    case 'commitType':
+      return Array.isArray(value) && Array.isArray(context.commitType) &&
+        value.some(type => context.commitType.includes(type));
+    case 'pathGlob':
+      // All-changed-files semantics (same posture as the legacy `*.md` rule):
+      // every changed path must match at least one glob.
+      return Array.isArray(value) && Array.isArray(context.changedPaths) && context.changedPaths.length > 0 &&
+        context.changedPaths.every(file => value.some(pattern => globToRegex(pattern).test(file)));
+    case 'jiraType':
+      return Array.isArray(value) && typeof context.jiraType === 'string' &&
+        value.includes(context.jiraType);
+    case 'diffSizeUnder':
+      return typeof value === 'number' && typeof context.diffLineCount === 'number' &&
+        context.diffLineCount < value;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Evaluate every structurally-valid rule against the current PR context and
+ * collect the matches. Multiple rules may target the same label — they OR
+ * together and are deduped to a single suggestedLabels entry.
+ * @param {Array<{label: string, when: object}>} validRules
+ * @param {object} context
+ * @returns {Array<{label: string, source: 'rule'}>}
+ */
+function evaluateRule(validRules, context) {
+  const suggestedLabels = [];
+  const seen = new Set();
+  for (const rule of validRules) {
+    if (seen.has(rule.label)) continue;
+    if (matchRule(rule, context)) {
+      seen.add(rule.label);
+      suggestedLabels.push({ label: rule.label, source: 'rule' });
+    }
+  }
+  return suggestedLabels;
+}
+
+/**
+ * Validates pr.labels.rules structural correctness and label existence
+ * (implements R-labels-2, issue #197). Also flags `jiraType` rules: pr.js
+ * has no Jira API access (see the `jiraType: null` note in main()), so a
+ * `jiraType` rule structurally passes validation and stays in validRules,
+ * but it can never match at evaluation time — a warning surfaces that.
+ * @param {Array} rules - raw pr.labels.rules array from config
+ * @param {string[]} repoLabelNames - known repo label names
+ * @param {string[]} knownSignals - allowed when.<signal> keys
+ * @returns {{ validRules: Array<{label: string, when: object}>, warnings: string[] }}
+ */
+function validateLabelRules(rules, repoLabelNames, knownSignals) {
+  const validRules = [];
+  const warnings = [];
+  for (const rule of rules) {
+    if (!rule || typeof rule !== 'object' || typeof rule.label !== 'string') {
+      continue;
+    }
+    // Validate structural correctness of rule.when (implements R-labels-2)
+    if (!rule.when || typeof rule.when !== 'object') {
+      warnings.push(`Rule for label "${rule.label}" is missing a "when" condition. Rule will be ignored.`);
+      continue;
+    }
+    const whenKeys = Object.keys(rule.when);
+    if (whenKeys.length !== 1) {
+      warnings.push(`Rule for label "${rule.label}" has ${whenKeys.length === 0 ? 'no' : 'multiple'} signal keys in "when" (expected exactly 1). Rule will be ignored.`);
+      continue;
+    }
+    if (!knownSignals.includes(whenKeys[0])) {
+      warnings.push(`Rule for label "${rule.label}" uses unknown signal "${whenKeys[0]}" in "when". Valid signals: ${knownSignals.join(', ')}. Rule will be ignored.`);
+      continue;
+    }
+    if (!repoLabelNames.includes(rule.label)) {
+      warnings.push(`Label "${rule.label}" referenced in pr.labels.rules does not exist in the repo. Rule will be ignored.`);
+      continue;
+    }
+    if (whenKeys[0] === 'jiraType') {
+      warnings.push(`label rule '${rule.label}' uses \`jiraType\`, which pr.js does not evaluate (no Jira lookup) — rule will never match`);
+    }
+    validRules.push(rule);
+  }
+  return { validRules, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +554,8 @@ function main() {
   // Non-fatal — offline / no-origin / auth-denied all silently pass.
   fetchBaseRef(baseBranch, projectRoot);
   const diffStat    = getDiffStat(baseBranch, projectRoot);
-  const diffContent = getDiffContent(baseBranch, projectRoot);
+  const rawDiff = getDiffContent(baseBranch, projectRoot);
+  const diffContent = rawDiff ? truncateDiff(rawDiff, { splitDiffByFile, maxBytes: 8000 }).diff : '';
 
   if (!diffContent) {
     warnings.push(`No diff found between "${baseBranch}" and HEAD.`);
@@ -474,37 +589,29 @@ function main() {
   // labels produce warnings (not errors) and are stripped from the emitted
   // prConfig.labels.rules — same posture as forced label validation above.
   // mode = "off" or "llm" leaves rules untouched.
+  let suggestedLabels = [];
   if (prConfig && prConfig.labels && prConfig.labels.mode === 'rules' && Array.isArray(prConfig.labels.rules)) {
-    const validRules = [];
     const knownSignals = ['branchPrefix', 'commitType', 'pathGlob', 'jiraType', 'diffSizeUnder'];
-    for (const rule of prConfig.labels.rules) {
-      if (!rule || typeof rule !== 'object' || typeof rule.label !== 'string') {
-        continue;
-      }
-      // Validate structural correctness of rule.when (implements R-labels-2)
-      if (!rule.when || typeof rule.when !== 'object') {
-        warnings.push(`Rule for label "${rule.label}" is missing a "when" condition. Rule will be ignored.`);
-        continue;
-      }
-      const whenKeys = Object.keys(rule.when);
-      if (whenKeys.length !== 1) {
-        warnings.push(`Rule for label "${rule.label}" has ${whenKeys.length === 0 ? 'no' : 'multiple'} signal keys in "when" (expected exactly 1). Rule will be ignored.`);
-        continue;
-      }
-      if (!knownSignals.includes(whenKeys[0])) {
-        warnings.push(`Rule for label "${rule.label}" uses unknown signal "${whenKeys[0]}" in "when". Valid signals: ${knownSignals.join(', ')}. Rule will be ignored.`);
-        continue;
-      }
-      if (!repoLabelNames.includes(rule.label)) {
-        warnings.push(`Label "${rule.label}" referenced in pr.labels.rules does not exist in the repo. Rule will be ignored.`);
-        continue;
-      }
-      validRules.push(rule);
-    }
+    const { validRules, warnings: ruleWarnings } = validateLabelRules(prConfig.labels.rules, repoLabelNames, knownSignals);
+    warnings.push(...ruleWarnings);
     prConfig = {
       ...prConfig,
       labels: { ...prConfig.labels, rules: validRules },
     };
+
+    const commitTypes = commits
+      .map(c => parseConventionalCommit(c.subject || '', c.body || '').type)
+      .filter(type => type && type !== 'other');
+    const prContext = {
+      branch: currentBranch,
+      commitType: commitTypes,
+      changedPaths: changedFiles,
+      // Jira issue type is not resolved by this script (no Jira API access
+      // here) — jiraType rules simply never match until wired upstream.
+      jiraType: null,
+      diffLineCount: diffStat.totalLinesChanged,
+    };
+    suggestedLabels = evaluateRule(validRules, prContext);
   }
 
   // Step 11: Read custom PR template via single-source resolver (issue #260).
@@ -544,6 +651,7 @@ function main() {
     diffContent,
     repoLabels,
     forcedLabels,
+    suggestedLabels,
     remoteState,
     warnings,
     errors,
@@ -611,4 +719,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs, detectIssueTicket, detectPrMode };
+module.exports = { parseArgs, detectIssueTicket, detectPrMode, matchRule, evaluateRule, validateLabelRules };

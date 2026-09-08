@@ -99,7 +99,7 @@ skip-when:
   - "**/dist/**"
   - "**/build/**"
 severity: medium
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Code Quality Review
@@ -151,7 +151,7 @@ triggers:
   - "**/*cache*"
 severity: medium
 max-files: 30
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Performance Review
@@ -205,7 +205,7 @@ skip-when:
   - "**/*.test.*"
   - "**/*.spec.*"
 severity: high
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # API Review
@@ -259,7 +259,7 @@ skip-when:
   - "**/node_modules/**"
   - "**/vendor/**"
 severity: medium
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Test Coverage Review
@@ -304,7 +304,7 @@ triggers:
   - "**/Makefile"
 severity: medium
 max-files: 20
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # CI/CD Pipeline Review
@@ -417,7 +417,7 @@ skip-when:
   - "**/node_modules/**"
   - "**/vendor/**"
 severity: medium
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Dependency Management Review
@@ -474,7 +474,7 @@ skip-when:
   - "**/vendor/**"
   - "**/dist/**"
 severity: medium
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Error Handling Review
@@ -533,7 +533,7 @@ skip-when:
   - "**/build/**"
 severity: medium
 max-files: 40
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Accessibility Review

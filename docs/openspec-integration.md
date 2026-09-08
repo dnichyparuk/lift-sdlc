@@ -71,7 +71,7 @@ graph TD
     end
 
     subgraph Execution
-        G["/execute-plan-sdlc"] -->|"Complete plan task"| H["markTaskDone (openspec_wrapper.sh)"]
+        G["/execute-plan-sdlc"] -->|"Complete plan task"| H["markTaskDone (openspec-task-info.js)"]
         H -->|"Flip tasks.md [ ] to [x]"| I["openspec/changes/&lt;change-name&gt;/tasks.md"]
     end
 
@@ -103,7 +103,7 @@ When a developer initiates planning from an active change (`/plan-sdlc --from-op
 ### 2. Execution (`/execute-plan-sdlc`)
 During autonomous code execution:
 * **Flipping Progress**: As tasks within a plan are successfully implemented and verified, the runner identifies their matching `openspec-task` annotations.
-* **Synchronization**: The runner invokes [openspec_wrapper.sh](file://~/.gemini/config/plugins/sdlc/skills/execute-plan-sdlc/scripts/openspec_wrapper.sh) to execute `markTaskDone` and update the active OpenSpec task list.
+* **Synchronization**: The runner invokes [openspec-task-info.js](../scripts/util/openspec-task-info.js) to execute `markTaskDone` and update the active OpenSpec task list.
 * **Non-Blocking Fault Tolerance**: If synchronization fails (e.g. because `tasks.md` was manually altered), the error is logged to `.sdlc/learnings/log.md` and flagged in the execution warnings summary, but the runner continues executing the remaining waves.
 
 ### 3. Commits (`/commit-sdlc`)
@@ -113,8 +113,8 @@ When committing changes:
 
 ### 4. Shipping & Archival (`/ship-sdlc`)
 The shipping pipeline integrates a dedicated `archive-openspec` step between the `version` and `pr` steps:
-* **Strict Validation**: The pipeline invokes [openspec_validate.sh](file://~/.gemini/config/plugins/sdlc/skills/ship-sdlc/scripts/openspec_validate.sh) which runs the CLI command `openspec validate <change-name> --strict` to verify task completion and schema validity.
-* **Archive Execution**: If validation succeeds, [openspec_archive.sh](file://~/.gemini/config/plugins/sdlc/skills/ship-sdlc/scripts/openspec_archive.sh) runs `openspec archive <change-name> --yes`. This moves the change folder to `openspec/changes/archive/`.
+* **Strict Validation**: The pipeline invokes [openspec-validate.js](../scripts/util/openspec-validate.js) which runs the CLI command `openspec validate <change-name> --strict` to verify task completion and schema validity.
+* **Archive Execution**: If validation succeeds, [openspec-archive.js](../scripts/util/openspec-archive.js) runs `openspec archive <change-name> --yes`. This moves the change folder to `openspec/changes/archive/`.
 * **Archival Commit**: The pipeline stages the archived change directory and commits it:
   ```bash
   git add openspec/

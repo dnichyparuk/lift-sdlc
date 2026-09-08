@@ -53,20 +53,19 @@ Check `.sdlc/review-dimensions/` for already-installed dimension files.
 
 In `--add` (expansion) mode:
 
-- Locate the validation script:
+- Run the dimension validator to list what is already installed:
   ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-dimensions_load_validator.sh
+node "<PLUGIN_ROOT>/scripts/ci/validate-dimensions.js" --project-root . --json
 ```
-- Run: `node "$SCRIPT" --project-root . --json`
 - Extract installed dimension names and their trigger patterns (new proposals must avoid identical globs).
 
 Also check for uncovered file suggestions from a recent review run:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-dimensions_run_review.sh
+REVIEW_MANIFEST=$(node "<PLUGIN_ROOT>/scripts/skill/review.js" --project-root . 2>/dev/null)
 ```
 
-If this succeeds, parse `plan_critique.uncovered_suggestions` and use as additional evidence in Step 3 (cite: "Recent review found N uncovered files matching this pattern"). If the command fails, silently skip.
+`review.js` prints the path of a temp JSON manifest, not the JSON itself. If this succeeds, read `$REVIEW_MANIFEST`, parse `plan_critique.uncovered_suggestions` and use as additional evidence in Step 3 (cite: "Recent review found N uncovered files matching this pattern"). If the command fails, silently skip.
 
 If NOT in expansion mode: skip this step.
 
@@ -140,10 +139,10 @@ For each selected dimension:
 
 ### Step 7 — Validate Installation
 
-Run the validation script (use `SCRIPT` resolved in Step 2, or re-resolve if Step 2 was skipped):
+Run the validation script (the same script as Step 2, now in markdown-report mode):
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-dimensions_validate.sh
+node "<PLUGIN_ROOT>/scripts/ci/validate-dimensions.js" --project-root . --markdown
 ```
 
 - Exit code **1**: Show validation errors. Use AskUserQuestion: "Fix these validation errors automatically? (yes / no)"

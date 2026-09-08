@@ -16,7 +16,7 @@ Use this template in plan-sdlc Step 5 (CRITIQUE) when dispatching the plan revie
 - `{LENS}` — reviewer lens: one of `architecture`, `requirements`, `risk`, or `all`. When `{LENS}=all`, the reviewer evaluates all categories (status quo for plans <5 tasks). When `{LENS}` is one of the three specific values, the reviewer filters evaluation to the categories listed in `{LENS_FOCUS}`.
 - `{LENS_FOCUS}` — category subset for the lens, rendered as a bullet list (e.g., `- Buildability\n- Task descriptions\n- Decision documentation\n- Dependency accuracy`). When `{LENS}=all`, set to `"all categories below"`.
 
-**Lens → category mapping (KD3, Fixes #418):**
+**Lens → category mapping:**
 - `architecture`: Buildability, Task descriptions, Decision documentation, Dependency accuracy
 - `requirements`: Requirements coverage, Metadata completeness, Plan completeness, OpenSpec G16, Exploration provenance, Best-practice traceability
 - `risk`: File paths, Verification strategy, Scope discipline, Guardrail compliance

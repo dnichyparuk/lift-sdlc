@@ -36,25 +36,15 @@ Only proceed with a GitHub issue proposal for **issue-worthy** errors. Skip sile
 
 ## Section 2: Pre-flight Verification
 
-Run these checks before offering the proposal. If any required check fails, **skip the proposal silently** and return to the calling skill's normal error handling.
-
-**Check 1 — gh CLI available and authenticated:**
-
-```bash
-gh auth status
-```
-
-If the command fails (exit non-zero) → skip proposal. The user's GitHub CLI is not configured or not authenticated.
-
-**Check 2 — GitHub remote resolvable:**
+Run before offering the proposal. If either check fails, **skip the proposal
+silently** and return to the calling skill's normal error handling.
 
 ```bash
-REPO_URL=$(git remote get-url origin 2>/dev/null)
+gh auth status                                      # must exit 0 — gh CLI configured & authenticated
+REPO_URL=$(git remote get-url origin 2>/dev/null)   # must be non-empty — GitHub remote resolvable
 ```
 
-If `REPO_URL` is empty or the command fails → skip proposal.
-
-Store `TARGET_REPO=dnichyparuk/lift-sdlc` — this is the fixed repository for all tooling error reports.
+Store `TARGET_REPO=dnichyparuk/lift-sdlc` — the fixed repository for all tooling error reports.
 
 ---
 
@@ -76,41 +66,15 @@ This error may be worth tracking as a GitHub issue. Create one? (yes / no)
 
 ## Section 4: Assemble Issue Content
 
-> **As of issue #202:** Template assembly (reading this template, filling placeholders,
-> building the title) is delegated to the `error-report-orchestrator` agent (SKILL.md
-> Step 4). This section documents the template structure and placeholder sources for
-> reference. The orchestrator receives the manifest from `error-report-prepare.js` and
-> applies the rules below internally.
+Template assembly (reading `templates/ToolingError.md`, filling every `{placeholder}`
+from the manifest, building the title, removing sections with no applicable content)
+is delegated to the `error-report-orchestrator` agent (SKILL.md Step 4) — see
+`agents/error-report-orchestrator.md` for the authoritative placeholder-to-manifest
+mapping. Do NOT leave raw `{placeholder}` text in the final description.
 
-Read `./templates/ToolingError.md` (locate via Glob: `**/error-report-sdlc/templates/ToolingError.md` under `~/.gemini/config/plugins`, then cwd fallback).
-
-Fill all `{placeholder}` markers using the context provided by the calling skill:
-
-| Placeholder | Source |
-|---|---|
-| `{what failed — one line}` | Summarize the error in one sentence |
-| `{skill name}` | The calling skill's name (e.g., `pr-sdlc`) |
-| `{step number and name}` | The step where the error occurred |
-| `{what the skill was trying to do}` | The operation being attempted |
-| `{ISO timestamp}` | Current timestamp in ISO 8601 format |
-| `{script crash \| CLI failure \| ...}` | Pick the matching error type |
-| `{code}` | Exit code or HTTP status |
-| `{full error text}` | Complete error message or output |
-| `{repository name from git remote}` | Run `git remote get-url origin` or use `git remote -v` |
-| `{current branch}` | Run `git branch --show-current` |
-| `{what the user was doing}` | Describe the user's intent |
-| `{with arguments if any}` | Arguments the skill was invoked with |
-| `{step that failed and why}` | The specific step and failure reason |
-| `{what was blocked}` | What could not complete |
-| `{skill-specific hints}` | The `Suggested investigation` from the calling skill |
-
-Remove any section where no applicable content exists. Do NOT leave raw `{placeholder}` text in the final description.
-
-Determine priority:
-- **High**: Script crash (exit 2), build failure blocking waves
-- **Medium**: CLI failure, persistent API error, escalated task failure
-
-Build the title: `[{skill-name}] {one-line error summary}` (max 72 chars).
+Priority: **High** for a script crash (exit 2) or a build failure blocking waves;
+**Medium** for everything else issue-worthy. Title format:
+`[{skill-name}] {one-line error summary}` (max 72 chars).
 
 ---
 
@@ -188,7 +152,7 @@ After Section 6 (whether the issue was created, skipped, or failed), **always re
 
 ## DO NOT
 
-- Propose for user input errors, auth/permission failures, or user cancellations
+- Propose for a NOT issue-worthy error (Section 1)
 - Create an issue without both consent gates passing (Sections 3 and 5)
 - Retry a failed gh issue create call
 - Leave `{placeholder}` text in the issue description

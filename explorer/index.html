@@ -1,0 +1,2103 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lift-SDLC Antigravity Plugin Explorer & Evaluator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #0b0f19;
+      --bg-card: #111827;
+      --bg-card-hover: #1f2937;
+      --bg-card-header: #1e293b;
+      --border-color: #374151;
+      --border-accent: #1e3a8a;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --accent-cyan: #38bdf8;
+      --accent-emerald: #10b981;
+      --accent-purple: #c084fc;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Fira Code', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-main); }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+    header {
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-emerald));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #000;
+      font-size: 1.2rem;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+    }
+
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #ffffff, var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-tag {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.5rem;
+      background: rgba(56, 189, 248, 0.1);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 9999px;
+      font-weight: 500;
+      font-family: var(--font-mono);
+    }
+
+    .search-box {
+      position: relative;
+      flex: 1;
+      max-width: 400px;
+    }
+
+    .search-box input {
+      width: 100%;
+      background: #1f2937;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+      color: #fff;
+      font-size: 0.875rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .search-box input:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    .nav-tabs {
+      display: flex;
+      background: #111827;
+      border-bottom: 1px solid var(--border-color);
+      padding: 0 1.5rem;
+      gap: 0.25rem;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: #fff;
+      background: rgba(255,255,255,0.03);
+    }
+
+    .tab-btn.active {
+      color: var(--accent-cyan);
+      border-bottom-color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.05);
+    }
+
+    .tab-btn svg { width: 16px; height: 16px; }
+
+    main {
+      flex: 1;
+      padding: 1.5rem;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .group-section {
+      margin-bottom: 2rem;
+    }
+
+    .group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .group-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .filter-bar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      background: #1e293b;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-btn:hover { color: #fff; border-color: #4b5563; }
+    .filter-btn.active {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+
+    .card:hover {
+      border-color: #4b5563;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .card-header {
+      padding: 1rem 1.25rem;
+      background: var(--bg-card-header);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-title code {
+      font-family: var(--font-mono);
+      color: var(--accent-cyan);
+    }
+
+    .card-body {
+      padding: 1.25rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .card-desc {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.725rem;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .badge:hover { opacity: 0.85; }
+
+    .badge-flash-low { background: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); border: 1px solid rgba(56, 189, 248, 0.3); }
+    .badge-flash-med { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-flash-high { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-pro { background: rgba(192, 132, 252, 0.15); color: var(--accent-purple); border: 1px solid rgba(192, 132, 252, 0.3); }
+
+    .badge-orchestrator { background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3); }
+    .badge-adhoc { background: rgba(156, 163, 175, 0.15); color: #e5e7eb; border: 1px solid rgba(156, 163, 175, 0.3); }
+
+    pre, code { font-family: var(--font-mono); }
+
+    pre {
+      background: #090d16;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      padding: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      color: #e5e7eb;
+      line-height: 1.4;
+    }
+
+    .kv-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .kv-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.825rem;
+      border-bottom: 1px dashed #1f2937;
+      padding-bottom: 0.25rem;
+    }
+
+    .kv-key { color: var(--text-dim); }
+    .kv-val { color: var(--text-main); font-weight: 500; font-family: var(--font-mono); }
+
+    .diagram-container {
+      background: #090d16;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      overflow-x: auto;
+    }
+
+    .pipeline-nodes {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      min-width: 950px;
+      padding: 1rem 0;
+    }
+
+    .node {
+      background: #111827;
+      border: 2px solid #374151;
+      border-radius: 10px;
+      padding: 1rem;
+      min-width: 140px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+
+    .node:hover, .node.active {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+      transform: translateY(-3px);
+    }
+
+    .node-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .node-title { font-weight: 600; font-size: 0.85rem; color: #fff; }
+    .node-sub { font-size: 0.7rem; color: var(--accent-cyan); font-family: var(--font-mono); margin-top: 0.25rem; }
+
+    .arrow-right { color: #4b5563; font-size: 1.25rem; flex-shrink: 0; }
+
+    .phase-details-panel {
+      background: #111827;
+      border: 1px solid var(--border-accent);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .phase-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.75rem;
+    }
+
+    .phase-title-text {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .entity-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .entity-section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .entity-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    /* Modal Inspector Popup */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(6px);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal-box {
+      background: #0f172a;
+      border: 1px solid var(--accent-cyan);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 850px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+      animation: modalZoom 0.2s ease-out;
+    }
+
+    @keyframes modalZoom {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-header {
+      padding: 1rem 1.5rem;
+      background: #1e293b;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+    }
+
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.25rem;
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+    }
+    .close-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+    .view-toggle-btn {
+      background: #1e293b;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .view-toggle-btn.active {
+      background: rgba(56, 189, 248, 0.2);
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+    }
+
+    .terminal {
+      background: #050811;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: #38bdf8;
+      max-height: 250px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .term-line { display: flex; gap: 0.5rem; }
+    .term-time { color: #6b7280; }
+    .term-cmd { color: #f59e0b; }
+    .term-ok { color: #10b981; }
+    .term-info { color: #94a3b8; }
+
+    .impact-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      font-size: 0.85rem;
+    }
+    .impact-table th {
+      background: #1e293b;
+      color: var(--accent-cyan);
+      text-align: left;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--border-color);
+    }
+    .impact-table td {
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-main);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-logo">L</div>
+      <div>
+        <div class="brand-title">Lift-SDLC Antigravity Plugin</div>
+        <div style="font-size:0.75rem; color: var(--text-muted)">Interactive Architecture, Workflows & JSON Schemas Inspector</div>
+      </div>
+      <span class="brand-tag">v0.21.0</span>
+    </div>
+
+    <div class="search-box">
+      <svg class="search-icon" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+      </svg>
+      <input type="text" id="global-search" placeholder="Search skills, agents, workflows, dimensions, openspec, contracts...">
+    </div>
+  </header>
+
+  <nav class="nav-tabs">
+    <button class="tab-btn active" data-tab="tab-pipeline">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+      Pipeline Flow
+    </button>
+    <button class="tab-btn" data-tab="tab-workflows">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+      Workflows & Lifecycle
+    </button>
+    <button class="tab-btn" data-tab="tab-dimensions">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+      Review Dimensions (7)
+    </button>
+    <button class="tab-btn" data-tab="tab-openspec">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+      OpenSpec Integration
+    </button>
+    <button class="tab-btn" data-tab="tab-native">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+      Antigravity Native Integrations
+    </button>
+    <button class="tab-btn" data-tab="tab-statemachine">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      State Machine & Resilience
+    </button>
+    <button class="tab-btn" data-tab="tab-context">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+      Dispatch & Context Flow
+    </button>
+    <button class="tab-btn" data-tab="tab-skills">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+      Skills Catalog (14)
+    </button>
+    <button class="tab-btn" data-tab="tab-agents">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+      Agents Matrix (7+4)
+    </button>
+    <button class="tab-btn" data-tab="tab-contracts">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+      Contracts & JSON Schemas (14)
+    </button>
+    <button class="tab-btn" data-tab="tab-scripts">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+      Scripts & Utilities (L4)
+    </button>
+    <button class="tab-btn" data-tab="tab-evaluator">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      Plugin Evaluator & Matrix
+    </button>
+  </nav>
+
+  <main>
+
+    <!-- Tab 1: Pipeline Flow -->
+    <section id="tab-pipeline" class="tab-content active">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">Native End-to-End SDLC Pipeline</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">Click any phase node to inspect its skills, agents, and data contracts. Click any contract badge to open the <strong>JSON Schema Inspector</strong> modal!</p>
+      </div>
+
+      <div class="diagram-container">
+        <div class="pipeline-nodes">
+          <div class="node active" id="node-issue" onclick="selectPhase('issue')">
+            <div class="node-icon">🎫</div>
+            <div class="node-title">1. Issue Scoping</div>
+            <div class="node-sub">/github-sdlc<br>/jira-sdlc</div>
+          </div>
+          <div class="arrow-right">➔</div>
+
+          <div class="node" id="node-plan" onclick="selectPhase('plan')">
+            <div class="node-icon">📐</div>
+            <div class="node-title">2. Plan & Explore</div>
+            <div class="node-sub">/plan-sdlc</div>
+          </div>
+          <div class="arrow-right">➔</div>
+
+          <div class="node" id="node-exec" onclick="selectPhase('exec')">
+            <div class="node-icon">⚡</div>
+            <div class="node-title">3. Wave Execution</div>
+            <div class="node-sub">/execute-plan-sdlc</div>
+          </div>
+          <div class="arrow-right">➔</div>
+
+          <div class="node" id="node-commit" onclick="selectPhase('commit')">
+            <div class="node-icon">📝</div>
+            <div class="node-title">4. Smart Commit</div>
+            <div class="node-sub">/commit-sdlc</div>
+          </div>
+          <div class="arrow-right">➔</div>
+
+          <div class="node" id="node-review" onclick="selectPhase('review')">
+            <div class="node-icon">🔍</div>
+            <div class="node-title">5. Scatter Review</div>
+            <div class="node-sub">/review-sdlc</div>
+          </div>
+          <div class="arrow-right">➔</div>
+
+          <div class="node" id="node-pr" onclick="selectPhase('pr')">
+            <div class="node-icon">🚀</div>
+            <div class="node-title">6. Pull Request</div>
+            <div class="node-sub">/pr-sdlc</div>
+          </div>
+          <div class="arrow-right">➔</div>
+
+          <div class="node" id="node-ci" onclick="selectPhase('ci')">
+            <div class="node-icon">🧪</div>
+            <div class="node-title">7. CI Verification</div>
+            <div class="node-sub">/verify-pipeline</div>
+          </div>
+          <div class="arrow-right">➔</div>
+
+          <div class="node" id="node-ship" onclick="selectPhase('ship')">
+            <div class="node-icon">🚢</div>
+            <div class="node-title">8. Release & Ship</div>
+            <div class="node-sub">/ship-sdlc</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-details-panel" id="phase-details-panel"></div>
+
+      <div class="grid" id="pipeline-overview-cards"></div>
+    </section>
+
+    <!-- Tab 2: Workflows & Lifecycle -->
+    <section id="tab-workflows" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">SDLC Lifecycle Workflows</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">Detailed breakdown of all 9 end-to-end workflows and execution loops.</p>
+      </div>
+      <div class="grid" id="workflows-grid"></div>
+    </section>
+
+    <!-- Tab 3: Review Dimensions -->
+    <section id="tab-dimensions" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">Review Dimensions & Scatter-Gather Engine</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">How <code style="color: var(--accent-cyan)">/review-sdlc</code> extracts git diffs, triggers targeted parallel review subagents, deduplicates findings, and evaluates review verdicts against thresholds.</p>
+      </div>
+
+      <div class="diagram-container">
+        <h3 style="color: #fff; font-size: 1rem; margin-bottom: 1rem;">Scatter-Gather Code Review Lifecycle Flow</h3>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 900px;">
+          <div class="node" style="min-width:180px;">
+            <div class="node-icon">📄</div>
+            <div class="node-title">1. Diff Extraction</div>
+            <div class="node-sub">git diff --staged<br>scripts/lib/git.js</div>
+          </div>
+          <div class="arrow-right">➔</div>
+          <div class="node" style="min-width:180px;">
+            <div class="node-icon">🎯</div>
+            <div class="node-title">2. Trigger Matching</div>
+            <div class="node-sub">Glob Matching<br>dimensions.js</div>
+          </div>
+          <div class="arrow-right">➔</div>
+          <div class="node" style="min-width:180px;">
+            <div class="node-icon">⚡</div>
+            <div class="node-title">3. Scatter Subagents</div>
+            <div class="node-sub">Parallel Subagents<br>gemini-3.8-flash</div>
+          </div>
+          <div class="arrow-right">➔</div>
+          <div class="node" style="min-width:180px;">
+            <div class="node-icon">🧹</div>
+            <div class="node-title">4. Gather & Critique</div>
+            <div class="node-sub">Deduplicate & Score<br>review-orchestrator</div>
+          </div>
+          <div class="arrow-right">➔</div>
+          <div class="node" style="min-width:180px;">
+            <div class="node-icon">⚖️</div>
+            <div class="node-title">5. Verdict & Gate</div>
+            <div class="node-sub">APPROVED vs<br>CHANGES REQUESTED</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" id="dimensions-grid"></div>
+    </section>
+
+    <!-- Tab 4: OpenSpec Integration -->
+    <section id="tab-openspec" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">OpenSpec Spec-Driven Development Integration</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">Bridging specification proposals (<code style="color: var(--accent-emerald)">openspec/changes/&lt;name&gt;/</code>), deterministic task tracking, commit trailers, and automated release archival.</p>
+      </div>
+
+      <div class="diagram-container">
+        <h3 style="color: #fff; font-size: 1rem; margin-bottom: 1rem;">OpenSpec Spec-Driven Lifecycle</h3>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 900px;">
+          <div class="node" style="min-width:160px;">
+            <div class="node-icon">📝</div>
+            <div class="node-title">1. Spec Proposal</div>
+            <div class="node-sub">proposal.md<br>tasks.md</div>
+          </div>
+          <div class="arrow-right">➔</div>
+          <div class="node" style="min-width:160px;">
+            <div class="node-icon">📐</div>
+            <div class="node-title">2. Plan Derivation</div>
+            <div class="node-sub">/plan-sdlc<br>--from-openspec</div>
+          </div>
+          <div class="arrow-right">➔</div>
+          <div class="node" style="min-width:160px;">
+            <div class="node-icon">⚡</div>
+            <div class="node-title">3. Task Flipping</div>
+            <div class="node-sub">&lt;!-- ref:&lt;hash&gt; --&gt;<br>- [ ] -> - [x]</div>
+          </div>
+          <div class="arrow-right">➔</div>
+          <div class="node" style="min-width:160px;">
+            <div class="node-icon">🏷️</div>
+            <div class="node-title">4. Commit Trailer</div>
+            <div class="node-sub">/commit-sdlc<br>OpenSpec-Change:</div>
+          </div>
+          <div class="arrow-right">➔</div>
+          <div class="node" style="min-width:160px;">
+            <div class="node-icon">📦</div>
+            <div class="node-title">5. Auto Archival</div>
+            <div class="node-sub">/ship-sdlc<br>openspec archive</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div class="card" style="padding: 1.25rem;">
+          <h3 style="color: var(--accent-cyan); font-size: 1.05rem; margin-bottom: 0.5rem;">4-Stage Change Lifecycle</h3>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.75rem;">Stage is automatically derived from checkbox state in <code style="color:#fff">tasks.md</code>:</p>
+          <div class="kv-group">
+            <div class="kv-row"><span class="kv-key">spec-in-progress</span><span class="kv-val">tasks.md absent or empty</span></div>
+            <div class="kv-row"><span class="kv-key">ready-for-plan</span><span class="kv-val">tasks.md populated, 0 marked complete</span></div>
+            <div class="kv-row"><span class="kv-key">implementation-in-progress</span><span class="kv-val">some tasks marked complete (- [x])</span></div>
+            <div class="kv-row"><span class="kv-key">tasks-complete</span><span class="kv-val" style="color: var(--accent-emerald)">all tasks marked complete</span></div>
+          </div>
+        </div>
+
+        <div class="card" style="padding: 1.25rem;">
+          <h3 style="color: var(--accent-purple); font-size: 1.05rem; margin-bottom: 0.5rem;">Deterministic Task Anchors</h3>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.75rem;">Prevents drift when tasks are reworded:</p>
+          <pre style="font-size:0.8rem;"># In tasks.md:
+- [x] Configure OAuth2 PKCE endpoints <!-- ref:pkce-flow-a7e1f4 -->
+- [ ] Add JWT rotation unit tests <!-- ref:jwt-rot-8b2c19 -->
+
+# In generated implementation_plan.md:
+openspec-task:
+  change: add-oauth2-pkce
+  ref: pkce-flow-a7e1f4
+  line: 12</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 5: Antigravity Native Integrations (New Tab) -->
+    <section id="tab-native" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">Antigravity Native Features & Runtime Integrations</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">How Lift-SDLC deeply couples with Google Antigravity's event hooks, clean-context subagent isolation, compaction auto-recovery, task tray widgets, and interactive GUI modals.</p>
+      </div>
+
+      <div class="grid" style="margin-bottom: 1.5rem;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🪝 Event Hooks Engine</div>
+            <span class="badge badge-flash-med">hooks.json</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">Intercepts <code style="color:var(--accent-cyan)">PreToolUse</code> to block destructive git actions, injects <code style="color:var(--accent-emerald)">PreInvocation</code> context advisories, and executes <code style="color:var(--accent-amber)">Stop</code> state saves.</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Handlers</span><span class="kv-val">pre-tool-git-guard, session-start, stop-state-save</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🧠 Clean Context Subagents</div>
+            <span class="badge badge-orchestrator">agents/*.md</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">Orchestrator agents boot with <strong>zero chat transcript inheritance</strong>, preventing token saturation and communicating via disk manifests.</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Orchestrators</span><span class="kv-val">7 isolated agents in sdlc:* namespace</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔄 Compaction Auto-Recovery</div>
+            <span class="badge badge-pro">1-Hour TTL</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">Survives Antigravity's <code style="color:var(--accent-purple)">/compact</code> events. PreInvocation hooks detect incomplete state files within 3,600,000 ms and auto-resume.</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">TTL Window</span><span class="kv-val">COMPACT_RECOVERY_TTL_MS (1h)</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 Task Tray Visibility</div>
+            <span class="badge badge-flash-low">TodoWrite</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">Calls Antigravity's native <code style="color:var(--accent-cyan)">TodoWrite</code> tool via <code style="color:#fff">ship-todos.js</code> to render live, interactive checklist widgets in the IDE task tray.</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Helper</span><span class="kv-val">scripts/lib/ship-todos.js</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">💬 Interactive GUI Modals</div>
+            <span class="badge badge-flash-med">AskUserQuestion</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">Renders interactive selection dialogs in the chat UI for pipeline approvals, missing state decisions, and setup wizards.</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Tool</span><span class="kv-val">AskUserQuestion modal UI</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🛠️ Skill Discovery & Metadata</div>
+            <span class="badge badge-adhoc">SKILL.md</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">Leverages YAML frontmatter (<code style="color:#fff">user-invocable: true</code>, <code style="color:#fff">argument-hint</code>) to bind slash commands and chat autocomplete.</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Skills Loaded</span><span class="kv-val">14 user-facing commands</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background: #111827; border: 1px solid var(--border-color); border-radius: 10px; padding: 1.25rem;">
+        <h3 style="color: #fff; font-size: 1.05rem; margin-bottom: 0.75rem;">Dependency & Impact Matrix (Antigravity vs External Shell)</h3>
+        <table class="impact-table">
+          <thead>
+            <tr>
+              <th>Antigravity Native Feature</th>
+              <th>SDLC Plugin Component</th>
+              <th>Impact If Executed Outside Antigravity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Event Hooks Engine</strong></td>
+              <td><code>hooks.json</code>, <code>hooks/*</code></td>
+              <td>❌ Destructive git guardrails & automatic state snapshots disabled.</td>
+            </tr>
+            <tr>
+              <td><strong>Clean Context Subagents</strong></td>
+              <td><code>agents/*.md</code>, <code>dispatchMode: "agent"</code></td>
+              <td>⚠️ Severe context bloat; tokens scale linearly with entire chat history.</td>
+            </tr>
+            <tr>
+              <td><strong>Compaction Auto-Recovery</strong></td>
+              <td><code>stop-state-save.js</code> + <code>session-start.js</code></td>
+              <td>❌ Pipeline execution state lost after context memory compaction.</td>
+            </tr>
+            <tr>
+              <td><strong>Task Tray (<code>TodoWrite</code>)</strong></td>
+              <td><code>ship-todos.js</code></td>
+              <td>⚠️ Loss of real-time visual progress checklists in IDE sidebar.</td>
+            </tr>
+            <tr>
+              <td><strong>GUI Modals (<code>AskUserQuestion</code>)</strong></td>
+              <td><code>ship.js</code>, <code>setup.js</code></td>
+              <td>⚠️ Degrades to raw, unstructured text prompt loops.</td>
+            </tr>
+            <tr>
+              <td><strong>Frontmatter Skill Loader</strong></td>
+              <td><code>skills/*/SKILL.md</code></td>
+              <td>❌ Slash commands, CLI autocomplete, and model routing unavailable.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tab 6: State Machine & Resilience -->
+    <section id="tab-statemachine" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">State Machine & Resilience Engine</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">How pipeline states are written atomically, stored in <code style="color: var(--accent-cyan)">.sdlc/execution/</code>, and auto-recovered after context compaction.</p>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div class="card" style="padding: 1.25rem;" onclick="openContractModal('ship-state')">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <h3 style="color: var(--accent-cyan); font-size: 1.05rem;">Ship State File JSON Schema</h3>
+            <span class="badge badge-flash-med">INSPECT SCHEMA 🔍</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.75rem;">
+            Stored in <code style="color:#fff">.sdlc/execution/ship-&lt;branchSlug&gt;-&lt;timestamp&gt;.json</code>. Persists active release pipeline steps, flags, and review verdicts.
+          </p>
+          <pre style="font-size:0.75rem; max-height:120px;">{
+  "branch": "main",
+  "steps": [{ "id": "review", "status": "completed", "output": { "verdict": "approved" } }],
+  "flags": { "preset": "full", "auto": false }
+}</pre>
+        </div>
+
+        <div class="card" style="padding: 1.25rem;" onclick="openContractModal('execute-state')">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <h3 style="color: var(--accent-purple); font-size: 1.05rem;">Execute State File JSON Schema</h3>
+            <span class="badge badge-pro">INSPECT SCHEMA 🔍</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.75rem;">
+            Stored in <code style="color:#fff">.sdlc/execution/execute-&lt;branchSlug&gt;-&lt;timestamp&gt;.json</code>. Tracks plan wave progress, task model escalation, and modified file sets.
+          </p>
+          <pre style="font-size:0.75rem; max-height:120px;">{
+  "branch": "feat/new-auth",
+  "waves": [{ "id": 1, "status": "completed", "tasks": [{ "id": "T1", "status": "completed" }] }]
+}</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 7: Dispatch & Context Flow -->
+    <section id="tab-context" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">Agent Dispatch & Context Lifecycle</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">Clean Context Architecture: How skills dispatch isolated subagents without sending chat history, forward context via manifests, and gather results.</p>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+        <div class="card" style="padding: 1.25rem;">
+          <div style="font-size: 1.25rem; margin-bottom: 0.5rem;">1️⃣ Clean Context Isolation</div>
+          <p style="color: var(--text-muted); font-size: 0.85rem;">
+            Orchestrator agents defined in <code style="color: var(--accent-cyan)">agents/*.md</code> run in isolated context windows. They <strong>never</strong> inherit previous user chat turns.
+          </p>
+        </div>
+
+        <div class="card" style="padding: 1.25rem;" onclick="openContractModal('explore-manifest')">
+          <div style="font-size: 1.25rem; margin-bottom: 0.5rem;">2️⃣ Forward Manifest Passing</div>
+          <p style="color: var(--text-muted); font-size: 0.85rem;">
+            Skills serialize git diffs, project config, and task scopes into temporary manifest JSON files (<code style="color: var(--accent-emerald)">.sdlc/tmp/*-manifest.json</code>).
+          </p>
+        </div>
+
+        <div class="card" style="padding: 1.25rem;" onclick="openContractModal('wave-token')">
+          <div style="font-size: 1.25rem; margin-bottom: 0.5rem;">3️⃣ Backward Result Returning</div>
+          <p style="color: var(--text-muted); font-size: 0.85rem;">
+            Subagents return bounded string tokens (<code style="color: var(--accent-purple)">WAVE_SUMMARY</code>) or write dedicated markdown files (<code style="color:#fff">review-comment.md</code>).
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 8: Skills Catalog -->
+    <section id="tab-skills" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">14 User-Facing Skills Catalog</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">Complete registry of skills available in chat with model requirements, flags, and delegated orchestrators.</p>
+      </div>
+      <div class="grid" id="skills-grid"></div>
+    </section>
+
+    <!-- Tab 9: Agents Matrix -->
+    <section id="tab-agents" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">Agents Architecture Matrix</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">7 Registered Orchestrator Agents + 4 Ad-Hoc Worker Subagents.</p>
+      </div>
+      <div class="grid" id="agents-grid"></div>
+    </section>
+
+    <!-- Tab 10: Contracts & JSON Schemas -->
+    <section id="tab-contracts" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">Data Contracts & JSON Schemas (14)</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">Categorized inventory of all State Machines, Workflow Manifests, Configuration files, and Output Artifacts. Click any card to inspect its <strong>Draft-07 JSON Schema</strong> or toggle to a <strong>Real Example Payload</strong>.</p>
+      </div>
+
+      <div class="filter-bar">
+        <button class="filter-btn active" onclick="filterContracts('all')">All Schemas (14)</button>
+        <button class="filter-btn" onclick="filterContracts('state')">⚡ Execution State (3)</button>
+        <button class="filter-btn" onclick="filterContracts('manifest')">📋 Workflow Manifests (4)</button>
+        <button class="filter-btn" onclick="filterContracts('config')">⚙️ Configuration & System (4)</button>
+        <button class="filter-btn" onclick="filterContracts('artifact')">📦 Artifacts & Tokens (3)</button>
+      </div>
+
+      <div id="contracts-container"></div>
+    </section>
+
+    <!-- Tab 11: Scripts & Utilities -->
+    <section id="tab-scripts" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">Layer 4 Helper Scripts & CI Utilities</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">Zero-dependency Node.js and Bash scripts powering state management, diff truncation, and guardrails.</p>
+      </div>
+      <div class="grid" id="scripts-grid"></div>
+    </section>
+
+    <!-- Tab 12: Plugin Evaluator & Matrix -->
+    <section id="tab-evaluator" class="tab-content">
+      <div style="margin-bottom: 1.25rem;">
+        <h2 style="font-size: 1.3rem; font-weight: 700; color: #fff;">Plugin Health Evaluator & Simulator</h2>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">Interactive diagnostic matrix and real-time SDLC scenario simulation.</p>
+      </div>
+
+      <div class="eval-grid" style="display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem;">
+        <div style="background: linear-gradient(145deg, #111827, #1e293b); border: 1px solid var(--border-accent); border-radius: 12px; padding: 1.5rem; text-align: center;">
+          <div style="color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase;">Plugin Quality Score</div>
+          <div style="font-size: 3.5rem; font-weight: 800; background: linear-gradient(90deg, var(--accent-emerald), var(--accent-cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0.5rem 0;">100%</div>
+          <div class="badge badge-flash-med">PRODUCTION READY</div>
+        </div>
+
+        <div>
+          <h3 style="color: #fff; font-size: 1rem; margin-bottom: 0.75rem;">Interactive Workflow Simulator</h3>
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <button onclick="runSimulation('ship')" class="badge badge-flash-med" style="padding: 0.5rem 1rem; cursor: pointer;">Simulate /ship-sdlc</button>
+            <button onclick="runSimulation('review')" class="badge badge-flash-low" style="padding: 0.5rem 1rem; cursor: pointer;">Simulate /review-sdlc</button>
+            <button onclick="runSimulation('plan')" class="badge badge-pro" style="padding: 0.5rem 1rem; cursor: pointer;">Simulate /plan-sdlc</button>
+          </div>
+
+          <div class="terminal" id="sim-terminal">
+            <div class="term-line"><span class="term-time">[00:00:00]</span> <span class="term-info">Ready to run simulation. Click a button above.</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Contract & JSON Schema Inspector Modal Popup -->
+  <div class="modal-overlay" id="contract-modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-contract-title">📜 Data Contract & JSON Schema Inspector</div>
+        <button class="close-btn" onclick="closeContractModal()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-contract-body"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentContractViewMode = 'schema'; // 'schema' or 'example'
+    let activeModalContractKey = null;
+    let currentContractFilter = 'all';
+
+    const DIMENSIONS_DATA = [
+      { name: 'security-review', severity: 'critical', triggers: ['src/auth/**', '**/crypto/**', '**/*.pem', '**/keys/**'], model: 'gemini-3.8-flash-medium', desc: 'Analyzes code diff for authentication bypasses, credential leakage, SQL injection, and cryptographic weaknesses.' },
+      { name: 'performance', severity: 'high', triggers: ['src/db/**', '**/queries/**', '**/cache/**', '**/*pool*'], model: 'gemini-3.8-flash-medium', desc: 'Detects N+1 query patterns, unindexed table scans, connection pool leaks, and memory bottlenecks.' },
+      { name: 'architecture', severity: 'high', triggers: ['src/core/**', 'src/lib/**', '**/interfaces/**'], model: 'gemini-3.8-flash-medium', desc: 'Validates module decoupling, clean context boundaries, circular dependency hazards, and layering integrity.' },
+      { name: 'testing', severity: 'medium', triggers: ['**/*.test.js', '**/*.spec.ts', 'tests/**'], model: 'gemini-3.8-flash-medium', desc: 'Verifies test coverage completeness, mock isolation, and edge-case boundary testing.' },
+      { name: 'docs', severity: 'low', triggers: ['**/*.md', 'docs/**', '**/README*'], model: 'gemini-3.8-flash-low', desc: 'Checks markdown link integrity, API reference synchronization, and documentation consistency.' },
+      { name: 'correctness', severity: 'high', triggers: ['**/*.js', '**/*.ts', '**/*.py'], model: 'gemini-3.8-flash-medium', desc: 'Validates algorithmic logic, null pointer safety, edge case handlers, and error propagation.' },
+      { name: 'guardrails', severity: 'critical', triggers: ['.sdlc/**', 'hooks.json', 'hooks/**'], model: 'gemini-3.8-flash-medium', desc: 'Ensures no violation of SDLC state persistence rules, atomic writes, or hook execution contracts.' }
+    ];
+
+    const CONTRACT_DETAILS = {
+      'ship-state': {
+        name: '.sdlc/execution/ship-*.json',
+        group: 'state',
+        category: 'Execution State JSON Schema',
+        type: 'JSON State File',
+        desc: 'Pipeline state machine file tracking setup, review, verify, version, and merge progress.',
+        rules: ['Atomic persistence via state.js (atomicWriteSync)', 'Restored on session resume', 'Stores review verdicts and deferred findings count'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ShipPipelineExecutionState",
+  "type": "object",
+  "required": ["branch", "steps", "flags"],
+  "properties": {
+    "branch": { "type": "string", "description": "Target git branch name" },
+    "version": { "type": "string", "description": "Target semantic version" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "properties": {
+          "id": { "type": "string", "enum": ["setup", "review", "verify", "version", "ship"] },
+          "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "failed", "skipped"] },
+          "output": { "type": "object" }
+        }
+      }
+    },
+    "flags": {
+      "type": "object",
+      "properties": {
+        "preset": { "type": "string" },
+        "auto": { "type": "boolean" },
+        "skip": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}`,
+        example: `{
+  "branch": "main",
+  "version": "0.21.0",
+  "steps": [
+    { "id": "setup", "status": "completed" },
+    { "id": "review", "status": "completed", "output": { "verdict": "approved", "deferredFindings": 0 } },
+    { "id": "verify", "status": "completed" }
+  ],
+  "flags": { "preset": "full", "auto": false, "skip": [] }
+}`
+      },
+      'execute-state': {
+        name: '.sdlc/execution/execute-*.json',
+        group: 'state',
+        category: 'Execution State JSON Schema',
+        type: 'JSON State File',
+        desc: 'State machine file persisting wave progress, task statuses, and retry escalation counts during plan execution.',
+        rules: ['Atomic writes via atomicWriteSync (.tmp + rename)', 'Tracks model engine escalation per task retry', 'Enables implicit resume across compactions'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExecutePlanState",
+  "type": "object",
+  "required": ["branch", "planPath", "waves"],
+  "properties": {
+    "branch": { "type": "string" },
+    "planPath": { "type": "string" },
+    "qualityTier": { "type": "string", "enum": ["minimal", "balanced", "full"] },
+    "waves": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "tasks"],
+        "properties": {
+          "id": { "type": "integer" },
+          "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "failed"] },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "status"],
+              "properties": {
+                "id": { "type": "string" },
+                "status": { "type": "string" },
+                "retries": { "type": "integer" },
+                "modelEngine": { "type": "string" },
+                "files": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`,
+        example: `{
+  "branch": "feat/oauth2",
+  "planPath": "implementation_plan.md",
+  "qualityTier": "balanced",
+  "waves": [
+    {
+      "id": 1,
+      "status": "completed",
+      "tasks": [
+        { "id": "T1", "status": "completed", "retries": 0, "modelEngine": "gemini-3.8-flash-low", "files": ["src/auth/jwt.js"] }
+      ]
+    }
+  ]
+}`
+      },
+      'compact-recovery': {
+        name: '.sdlc/execution/.compact-recovery-*.json',
+        group: 'state',
+        category: 'Execution Recovery JSON Schema',
+        type: 'JSON Recovery File',
+        desc: 'TTL-backed snapshot created on session stop turn by stop-state-save.js, read by session-start.js after /compact.',
+        rules: ['Enforces 1-hour TTL freshness window (COMPACT_RECOVERY_TTL_MS = 3600000)', 'Keyed per branch slug', 'Restores pipeline step index'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CompactRecoveryState",
+  "type": "object",
+  "required": ["pipelineType", "branch", "savedAt"],
+  "properties": {
+    "pipelineType": { "type": "string", "enum": ["ship-sdlc", "execute-plan-sdlc"] },
+    "branch": { "type": "string" },
+    "savedAt": { "type": "integer", "description": "Unix timestamp in ms" },
+    "currentStepIndex": { "type": "integer" },
+    "verdict": { "type": "string" }
+  }
+}`,
+        example: `{
+  "pipelineType": "ship-sdlc",
+  "branch": "feat-auth",
+  "savedAt": 1725141200000,
+  "currentStepIndex": 2,
+  "verdict": "approved"
+}`
+      },
+      'explore-manifest': {
+        name: '.sdlc/tmp/explore-manifest.json',
+        group: 'manifest',
+        category: 'Workflow Manifest JSON Schema',
+        type: 'JSON Payload',
+        desc: 'Forward task manifest serialized before dispatching plan-explore-orchestrator.',
+        rules: ['Must include user query and project root', 'Lists candidate discovery dimensions', 'Defines max diff bytes budget'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExploreManifest",
+  "type": "object",
+  "required": ["userQuery", "projectRoot", "config"],
+  "properties": {
+    "userQuery": { "type": "string", "description": "Original requirement query from user" },
+    "projectRoot": { "type": "string", "description": "Absolute working directory path" },
+    "config": {
+      "type": "object",
+      "properties": {
+        "quality": { "type": "string", "enum": ["minimal", "balanced", "full"] }
+      }
+    },
+    "discoveryDimensions": { "type": "array", "items": { "type": "string" } },
+    "budgetLimits": { "type": "object", "properties": { "maxDiffBytes": { "type": "integer" } } }
+  }
+}`,
+        example: `{
+  "userQuery": "Implement OAuth2 login flow with refresh tokens",
+  "projectRoot": "C:/projects/app",
+  "config": { "quality": "balanced" },
+  "discoveryDimensions": ["security", "architecture", "data-model"],
+  "budgetLimits": { "maxDiffBytes": 50000 }
+}`
+      },
+      'commit-manifest': {
+        name: '.sdlc/tmp/commit-manifest.json',
+        group: 'manifest',
+        category: 'Workflow Manifest JSON Schema',
+        type: 'JSON Payload',
+        desc: 'Serialized git context passed to commit-orchestrator for conventional commit generation.',
+        rules: ['Includes full staged diff', 'Lists recent 5-15 commits for style inference', 'Contains commitConfig regex rules'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CommitManifest",
+  "type": "object",
+  "required": ["currentBranch", "staged"],
+  "properties": {
+    "currentBranch": { "type": "string" },
+    "staged": {
+      "type": "object",
+      "required": ["fileCount", "diff"],
+      "properties": {
+        "fileCount": { "type": "integer" },
+        "diff": { "type": "string" },
+        "diffTruncated": { "type": "boolean" }
+      }
+    },
+    "recentCommits": { "type": "array", "items": { "type": "string" } },
+    "commitConfig": { "type": "object" }
+  }
+}`,
+        example: `{
+  "currentBranch": "feat/oauth2",
+  "staged": { "fileCount": 2, "diff": "diff --git a/src/auth.js...", "diffTruncated": false },
+  "recentCommits": ["feat(auth): add JWT parser", "fix(db): pool leak"],
+  "commitConfig": { "allowedTypes": ["feat", "fix", "docs"], "subjectPattern": "^[a-z]+(\\\\(.+\\\\))?: .+" }
+}`
+      },
+      'review-manifest': {
+        name: '.sdlc/tmp/review-manifest.json',
+        group: 'manifest',
+        category: 'Workflow Manifest JSON Schema',
+        type: 'JSON Payload',
+        desc: 'Review payload containing diff hunks, active review dimensions, and REFERENCE.md path.',
+        rules: ['Contains targeted diff hunks per dimension', 'Lists skipped & active review rules', 'Passes project configuration'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReviewManifest",
+  "type": "object",
+  "required": ["scope", "active_dimensions"],
+  "properties": {
+    "scope": { "type": "string", "enum": ["all", "committed", "staged", "working", "worktree"] },
+    "baseBranch": { "type": "string" },
+    "active_dimensions": { "type": "array", "items": { "type": "string" } },
+    "summary": { "type": "object" }
+  }
+}`,
+        example: `{
+  "scope": "committed",
+  "baseBranch": "main",
+  "active_dimensions": ["security-review", "performance", "docs"],
+  "summary": { "active_dimensions": 3, "skipped_dimensions": 1 }
+}`
+      },
+      'harden-manifest': {
+        name: '.sdlc/tmp/harden-manifest.json',
+        group: 'manifest',
+        category: 'Workflow Manifest JSON Schema',
+        type: 'JSON Payload',
+        desc: 'CI error logs and traceback payload passed to harden-orchestrator for root-cause diagnosis.',
+        rules: ['Contains filtered stderr logs', 'Includes failed test output', 'Supplies active guardrail rules'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HardenManifest",
+  "type": "object",
+  "required": ["errorLog", "failedStep"],
+  "properties": {
+    "errorLog": { "type": "string" },
+    "failedStep": { "type": "string" },
+    "activeGuardrails": { "type": "array", "items": { "type": "string" } }
+  }
+}`,
+        example: `{
+  "errorLog": "TypeError: Cannot read properties of null (reading 'token')",
+  "failedStep": "verify-pipeline",
+  "activeGuardrails": ["pre-tool-validate.js"]
+}`
+      },
+      'project-config': {
+        name: '.sdlc/config.json',
+        group: 'config',
+        category: 'Configuration Schema',
+        type: 'Project Config JSON',
+        desc: 'Repository-wide SDLC project configuration file.',
+        rules: ['Defines quality tier default', 'Sets allowed commit types & scopes', 'Configures code review subagent models'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ProjectConfig",
+  "type": "object",
+  "properties": {
+    "ship": {
+      "type": "object",
+      "properties": {
+        "quality": { "type": "string", "enum": ["minimal", "balanced", "full"] }
+      }
+    },
+    "commit": {
+      "type": "object",
+      "properties": {
+        "allowedTypes": { "type": "array", "items": { "type": "string" } },
+        "allowedScopes": { "type": "array", "items": { "type": "string" } },
+        "subjectPattern": { "type": "string" }
+      }
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "subagent_model": { "type": "string" }
+      }
+    }
+  }
+}`,
+        example: `{
+  "ship": { "quality": "full" },
+  "commit": {
+    "allowedTypes": ["feat", "fix", "docs", "chore", "refactor"],
+    "allowedScopes": ["auth", "api", "ui", "ci"],
+    "subjectPattern": "^[a-z]+(\\\\(.+\\\\))?: .+"
+  },
+  "review": { "subagent_model": "gemini-3.8-flash-medium" }
+}`
+      },
+      'local-config': {
+        name: '.sdlc/local.json',
+        group: 'config',
+        category: 'Configuration Schema',
+        type: 'Local Config JSON',
+        desc: 'Developer-local configuration overrides (gitignored).',
+        rules: ['Overrides .sdlc/config.json settings', 'Configures workspace preferences (branch vs worktree)'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LocalConfig",
+  "type": "object",
+  "properties": {
+    "ship": { "type": "object" },
+    "workspace": { "type": "string", "enum": ["branch", "worktree", "continue"] }
+  }
+}`,
+        example: `{
+  "ship": { "reviewThreshold": "high", "execute.commitWaves": false },
+  "workspace": "worktree"
+}`
+      },
+      'hooks-schema': {
+        name: 'hooks.json',
+        group: 'config',
+        category: 'Hooks Configuration Schema',
+        type: 'Hooks Config JSON',
+        desc: 'Event hook configuration file registering lifecycle guardrails and state saves.',
+        rules: ['Defines PreToolUse, PreInvocation, and Stop hooks', 'Matches tool patterns like run_command or write_to_file'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HooksConfig",
+  "type": "object",
+  "properties": {
+    "git-guard": { "type": "object", "properties": { "PreToolUse": { "type": "array" } } },
+    "session-context": { "type": "object", "properties": { "PreInvocation": { "type": "array" } } },
+    "state-save": { "type": "object", "properties": { "Stop": { "type": "array" } } }
+  }
+}`,
+        example: `{
+  "git-guard": {
+    "PreToolUse": [{ "matcher": "run_command", "hooks": [{ "command": "node ./hooks/pre-tool-git-guard.js" }] }]
+  },
+  "session-context": {
+    "PreInvocation": [{ "hooks": [{ "command": "node ./hooks/session-start.js" }] }]
+  },
+  "state-save": {
+    "Stop": [{ "hooks": [{ "command": "node ./hooks/stop-state-save.js" }] }]
+  }
+}`
+      },
+      'plugin-schema': {
+        name: 'plugin.json',
+        group: 'config',
+        category: 'Plugin Manifest Schema',
+        type: 'Plugin JSON',
+        desc: 'Antigravity plugin registration manifest.',
+        rules: ['Defines plugin name, version, and author metadata'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PluginManifest",
+  "type": "object",
+  "required": ["name", "version"],
+  "properties": {
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "version": { "type": "string" },
+    "author": { "type": "object", "properties": { "name": { "type": "string" } } }
+  }
+}`,
+        example: `{
+  "name": "lift-sdlc",
+  "description": "Software development lifecycle workflows for Antigravity",
+  "version": "0.21.0",
+  "author": { "name": "dnichyparuk" }
+}`
+      },
+      'harden-proposal': {
+        name: 'harden-proposal.json',
+        group: 'artifact',
+        category: 'Workflow Proposal JSON Schema',
+        type: 'JSON Payload',
+        desc: 'Strengthen-only guardrail proposal emitted by harden-orchestrator after failure analysis.',
+        rules: ['Classifies cause as user-code vs plugin-defect', 'Emits strengthen-only proposals', 'No deletion of existing tests'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HardenProposal",
+  "type": "object",
+  "required": ["classification", "proposals"],
+  "properties": {
+    "classification": { "type": "string", "enum": ["user-code", "plugin-defect", "ambiguous"] },
+    "failureCause": { "type": "string" },
+    "proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "target"],
+        "properties": {
+          "type": { "type": "string" },
+          "target": { "type": "string" },
+          "rule": { "type": "string" }
+        }
+      }
+    }
+  }
+}`,
+        example: `{
+  "classification": "user-code",
+  "failureCause": "Missing null check in token payload extractor",
+  "proposals": [{ "type": "add_guardrail_script", "target": "pre-tool-validate.js", "rule": "Validate non-nullity" }]
+}`
+      },
+      'wave-token': {
+        name: 'WAVE_SUMMARY JSON token',
+        group: 'artifact',
+        category: 'Subagent Completion Token Schema',
+        type: 'String JSON Token',
+        desc: 'Bounded JSON string token returned in stdout by wave-runner subagent.',
+        rules: ['Must be valid JSON', 'Summary of wave completion status', 'Includes modified file list'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WaveSummaryToken",
+  "type": "object",
+  "required": ["waveId", "status", "tasksCompleted"],
+  "properties": {
+    "waveId": { "type": "integer" },
+    "status": { "type": "string", "enum": ["SUCCESS", "FAILURE", "PARTIAL"] },
+    "tasksCompleted": { "type": "integer" },
+    "tasksFailed": { "type": "integer" },
+    "retriesCount": { "type": "integer" },
+    "modifiedFiles": { "type": "array", "items": { "type": "string" } }
+  }
+}`,
+        example: `{
+  "waveId": 1,
+  "status": "SUCCESS",
+  "tasksCompleted": 2,
+  "tasksFailed": 0,
+  "retriesCount": 0,
+  "modifiedFiles": ["src/auth/jwt.js", "src/auth/store.js"]
+}`
+      },
+      'tooling-error': {
+        name: 'ToolingError.json',
+        group: 'artifact',
+        category: 'Crash Telemetry JSON Schema',
+        type: 'JSON Report',
+        desc: 'Structured crash diagnostics written when an uncaught plugin exception occurs.',
+        rules: ['Captures command, stack trace, and active branch state'],
+        jsonSchema: `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ToolingErrorReport",
+  "type": "object",
+  "required": ["timestamp", "errorName", "message", "stack"],
+  "properties": {
+    "timestamp": { "type": "string" },
+    "errorName": { "type": "string" },
+    "message": { "type": "string" },
+    "stack": { "type": "string" },
+    "command": { "type": "string" }
+  }
+}`,
+        example: `{
+  "timestamp": "2026-08-31T22:00:00.000Z",
+  "errorName": "TypeError",
+  "message": "Cannot read property 'files' of undefined",
+  "stack": "TypeError: Cannot read property...",
+  "command": "/review-sdlc"
+}`
+      }
+    };
+
+    const SKILLS_DATA = [
+      { name: '/setup-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Initialization', desc: 'Initializes guardrails, code review dimensions, and templates for a project.', flags: ['--tier', '--force'], orchestrator: 'None' },
+      { name: '/plan-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Planning', desc: 'Scopes requirements, creates discovery brief, and generates structured implementation plan.', flags: ['--fast', '--depth'], orchestrator: 'plan-explore-orchestrator, plan-generation-orchestrator' },
+      { name: '/execute-plan-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Execution', desc: 'Executes implementation plan systematically in waves with model tier escalation.', flags: ['--quality', '--wave'], orchestrator: 'plan-execution-validator, wave-runner' },
+      { name: '/commit-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Committing', desc: 'Generates smart, conventional commit messages matching repository history.', flags: ['--auto', '--amend', '--type', '--scope'], orchestrator: 'commit-orchestrator' },
+      { name: '/review-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Review', desc: 'Scatter-gather multi-dimension automated code review.', flags: ['--committed', '--all', '--staged'], orchestrator: 'review-orchestrator' },
+      { name: '/pr-sdlc', model: 'gemini-3.8-flash-high', phase: 'Pull Request', desc: 'Generates structured PR title and description and opens pull request via gh CLI.', flags: ['--draft', '--fill'], orchestrator: 'None' },
+      { name: '/received-review-sdlc', model: 'gemini-3.8-flash-high', phase: 'Review Handling', desc: 'Analyzes code review feedback on an open PR and applies required fixes.', flags: ['--auto-fix'], orchestrator: 'None' },
+      { name: '/verify-pipeline-sdlc', model: 'gemini-3.8-flash-high', phase: 'CI Verification', desc: 'Monitors, verifies, and diagnoses CI/CD GitHub Actions pipeline runs.', flags: ['--watch', '--fix'], orchestrator: 'None' },
+      { name: '/version-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Versioning', desc: 'Manages semantic version bumping and changelog generation.', flags: ['--minor', '--patch', '--major'], orchestrator: 'None' },
+      { name: '/ship-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Release', desc: 'End-to-end shipping pipeline orchestrator (Review -> Verify -> Merge -> Release).', flags: ['--quality', '--auto', '--skip'], orchestrator: 'Delegates to sub-skills' },
+      { name: '/error-report-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Recovery', desc: 'Fills ToolingError.md for plugin bugs or runtime failures.', flags: ['--issue'], orchestrator: 'error-report-orchestrator' },
+      { name: '/harden-sdlc', model: 'gemini-3.8-flash-high', phase: 'Hardening', desc: 'Analyzes pipeline failures to strengthen guardrails and dimensions.', flags: ['--classify'], orchestrator: 'harden-orchestrator' },
+      { name: '/github-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Issue Tracking', desc: 'Integrates with GitHub Issues for ticket scoping.', flags: ['view', 'list'], orchestrator: 'None' },
+      { name: '/jira-sdlc', model: 'gemini-3.8-flash-medium', phase: 'Issue Tracking', desc: 'Integrates with Jira for ticket tracking and updates.', flags: ['view', 'issue'], orchestrator: 'None' }
+    ];
+
+    const AGENTS_DATA = [
+      { name: 'plan-explore-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/plan-explore-orchestrator.md', desc: 'Derives 3-7 discovery dimensions and dispatches parallel research subagents to produce discovery-brief.md.' },
+      { name: 'plan-generation-orchestrator', type: 'Orchestrator', model: 'gemini-3.1-pro-high', source: 'agents/plan-generation-orchestrator.md', desc: 'Receives the exploration brief and drafts the structured implementation plan.' },
+      { name: 'plan-execution-validator', type: 'Orchestrator', model: 'gemini-3.1-pro-low', source: 'agents/plan-execution-validator.md', desc: 'Validates plan integrity (circular dependencies, file conflicts, wave risks).' },
+      { name: 'commit-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/commit-orchestrator.md', desc: 'Reads commit manifest, detects repository commit style, and generates a single commit message string.' },
+      { name: 'review-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/review-orchestrator.md', desc: 'Multi-dimension review gatherer. Dispatches parallel subagents, deduplicates findings, and writes review-comment.md.' },
+      { name: 'harden-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/harden-orchestrator.md', desc: 'Classifies failure cause (user-code vs plugin-defect) and emits hardening proposals JSON.' },
+      { name: 'error-report-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/error-report-orchestrator.md', desc: 'Fills ToolingError.md template for posting upstream plugin crash reports.' },
+      { name: 'wave-runner', type: 'Ad-Hoc Subagent', model: 'gemini-3.8-flash-low (escalating)', source: 'execute-plan-sdlc', desc: 'Executes a plan wave in parallel, manages per-task retries with model tier escalation.' },
+      { name: 'per-task coding agent', type: 'Ad-Hoc Subagent', model: 'gemini-3.8-flash-low -> pro-high', source: 'execute-plan-sdlc', desc: 'Implements a single plan task, writes code, and runs local verifications.' },
+      { name: 'dimension reviewer', type: 'Ad-Hoc Subagent', model: 'gemini-3.8-flash-medium', source: 'review-sdlc', desc: 'Evaluates code diff for a single review dimension (security, performance, docs).' },
+      { name: 'discovery subagent', type: 'Ad-Hoc Subagent', model: 'gemini-3.8-flash-low / pro-low', source: 'plan-sdlc', desc: 'Explores codebase or web sources for one planning dimension.' }
+    ];
+
+    const PHASE_MAPPING = {
+      'issue': {
+        title: '1. Issue Scoping Phase',
+        desc: 'Fetches issue specs and project context before starting software planning.',
+        skills: ['/github-sdlc', '/jira-sdlc'],
+        agents: ['ad-hoc issue reader'],
+        contracts: ['GitHub Issue JSON', 'Jira Issue Payload'],
+        contractKeys: ['explore-manifest'],
+        scripts: ['scripts/lib/git.js', 'jira-sdlc/lib/*']
+      },
+      'plan': {
+        title: '2. Planning & Exploration Phase',
+        desc: 'Derives functional axes, runs parallel code/web research, and generates implementation_plan.md.',
+        skills: ['/plan-sdlc'],
+        agents: ['plan-explore-orchestrator', 'plan-generation-orchestrator', 'discovery subagent'],
+        contracts: ['.sdlc/tmp/explore-manifest.json', 'discovery-brief.md', 'implementation_plan.md'],
+        contractKeys: ['explore-manifest', 'project-config'],
+        scripts: ['scripts/lib/discovery.js', 'scripts/lib/dispatch-budget.js']
+      },
+      'exec': {
+        title: '3. Wave Execution Phase',
+        desc: 'Executes planned waves in parallel with model tier escalation on per-task failures.',
+        skills: ['/execute-plan-sdlc'],
+        agents: ['plan-execution-validator', 'wave-runner', 'per-task coding agent'],
+        contracts: ['.sdlc/execution/execute-*.json', 'WAVE_SUMMARY JSON token'],
+        contractKeys: ['execute-state', 'wave-token'],
+        scripts: ['scripts/lib/state.js', 'execute-plan-sdlc/scripts/*']
+      },
+      'commit': {
+        title: '4. Smart Commit Phase',
+        desc: 'Analyzes staged diff and repo history to draft conventional commit messages.',
+        skills: ['/commit-sdlc'],
+        agents: ['commit-orchestrator'],
+        contracts: ['.sdlc/tmp/commit-manifest.json', 'Commit Message String Token'],
+        contractKeys: ['commit-manifest'],
+        scripts: ['scripts/lib/git.js', 'scripts/util/validate-commit-subject.js']
+      },
+      'review': {
+        title: '5. Scatter-Gather Multi-Dimension Code Review',
+        desc: 'Fans out parallel dimension subagents, deduplicates findings, and emits review-comment.md.',
+        skills: ['/review-sdlc'],
+        agents: ['review-orchestrator', 'dimension reviewer'],
+        contracts: ['.sdlc/tmp/review-manifest.json', 'review-comment.md'],
+        contractKeys: ['review-manifest'],
+        scripts: ['scripts/lib/dimensions.js', 'scripts/lib/dispatch-budget.js']
+      },
+      'pr': {
+        title: '6. Pull Request Phase',
+        desc: 'Creates structured PR descriptions from commit history and manages review feedback.',
+        skills: ['/pr-sdlc', '/received-review-sdlc'],
+        agents: ['ad-hoc PR generator', 'ad-hoc review fixer'],
+        contracts: ['PR Title & Body Payload'],
+        contractKeys: ['commit-manifest'],
+        scripts: ['scripts/ci/validate-pr-template.js', 'scripts/lib/git.js']
+      },
+      'ci': {
+        title: '7. CI Verification & Failure Recovery Phase',
+        desc: 'Monitors GitHub Actions, fetches traceback logs, and generates hardening guardrails.',
+        skills: ['/verify-pipeline-sdlc', '/error-report-sdlc', '/harden-sdlc'],
+        agents: ['harden-orchestrator', 'error-report-orchestrator'],
+        contracts: ['harden-proposal.json', 'ToolingError.md'],
+        contractKeys: ['harden-proposal', 'tooling-error'],
+        scripts: ['scripts/ci/validate-guardrails.js', 'harden-sdlc/scripts/*']
+      },
+      'ship': {
+        title: '8. Release & Shipping Phase',
+        desc: 'End-to-end shipping orchestrator handling setup, review, verification, and release tag.',
+        skills: ['/ship-sdlc', '/version-sdlc'],
+        agents: ['Delegates to sub-orchestrators'],
+        contracts: ['.sdlc/execution/ship-*.json', 'CHANGELOG.md'],
+        contractKeys: ['ship-state', 'compact-recovery'],
+        scripts: ['scripts/lib/state.js', 'scripts/ci/retag-release.cjs']
+      }
+    };
+
+    const WORKFLOWS_DATA = [
+      { title: 'Plan & Execution Workflow', trigger: '/plan-sdlc -> /execute-plan-sdlc', desc: 'Explores functional axes, generates structured waves, validates plan risk, and executes tasks with retry escalation.' },
+      { title: 'Scatter-Gather Code Review', trigger: '/review-sdlc', desc: 'Extracts diff, resolves dimensions, fans out parallel review subagents, deduplicates findings, and emits review-comment.md.' },
+      { title: 'Smart Commit Workflow', trigger: '/commit-sdlc', desc: 'Serializes diff, analyzes recent commit style, validates config rules, and generates conventional commit message.' },
+      { title: 'Release & Shipping Workflow', trigger: '/ship-sdlc', desc: 'Automates setup check -> review -> verify -> version bump -> git merge -> release publish.' },
+      { title: 'CI Failure Recovery Workflow', trigger: '/verify-pipeline-sdlc -> /harden-sdlc', desc: 'Monitors CI status, extracts error traceback, classifies bug cause, and emits hardening proposals.' }
+    ];
+
+    const SCRIPTS_DATA = [
+      { name: 'state.js', path: 'scripts/lib/state.js', desc: 'Atomic state file persistence, branch slugification, state file lookup, resume detection.' },
+      { name: 'dispatch-budget.js', path: 'scripts/lib/dispatch-budget.js', desc: 'Token budget calculation and diff truncation for clean context manifests.' },
+      { name: 'dimensions.js', path: 'scripts/lib/dimensions.js', desc: 'Code review dimension resolution and rule loading.' },
+      { name: 'discovery.js', path: 'scripts/lib/discovery.js', desc: 'Functional dimension extraction for requirement planning.' },
+      { name: 'git.js', path: 'scripts/lib/git.js', desc: 'Cross-platform git execution wrapper and diff parser.' },
+      { name: 'session-start.js', path: 'hooks/session-start.js', desc: 'PreInvocation hook emitting context advisory and detecting pipeline resume.' },
+      { name: 'stop-state-save.js', path: 'hooks/stop-state-save.js', desc: 'Stop hook persisting compact recovery state snapshot.' }
+    ];
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        btn.classList.add('active');
+        const tabId = btn.getAttribute('data-tab');
+        document.getElementById(tabId).classList.add('active');
+      });
+    });
+
+    function setContractViewMode(mode) {
+      currentContractViewMode = mode;
+      document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById(`btn-mode-${mode}`);
+      if (btn) btn.classList.add('active');
+
+      if (activeModalContractKey) {
+        renderModalContent(activeModalContractKey);
+      }
+    }
+
+    function openContractModal(contractKey) {
+      activeModalContractKey = contractKey;
+      const modal = document.getElementById('contract-modal-overlay');
+      modal.classList.add('open');
+      renderModalContent(contractKey);
+    }
+
+    function renderModalContent(contractKey) {
+      const title = document.getElementById('modal-contract-title');
+      const body = document.getElementById('modal-contract-body');
+
+      const info = CONTRACT_DETAILS[contractKey] || {
+        name: contractKey,
+        category: 'Data Contract Schema',
+        type: 'JSON Payload',
+        desc: 'Data contract payload specification.',
+        rules: ['Must conform to JSON Schema rules'],
+        jsonSchema: `{\n  "$schema": "http://json-schema.org/draft-07/schema#",\n  "title": "${contractKey}"\n}`,
+        example: `{\n  "contract": "${contractKey}"\n}`
+      };
+
+      title.innerHTML = `📜 Schema Inspector: <code style="color:var(--accent-cyan)">${info.name}</code>`;
+
+      const rulesList = (info.rules || []).map(r => `<li>${r}</li>`).join('');
+      const displayCode = currentContractViewMode === 'schema' ? (info.jsonSchema || info.example) : (info.example || info.jsonSchema);
+
+      body.innerHTML = `
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <span class="badge badge-flash-med">${info.category || info.type}</span>
+            <div style="display:flex; gap:0.5rem;">
+              <button class="view-toggle-btn ${currentContractViewMode==='schema'?'active':''}" id="btn-mode-schema" onclick="setContractViewMode('schema')">Formal JSON Schema (Draft-07)</button>
+              <button class="view-toggle-btn ${currentContractViewMode==='example'?'active':''}" id="btn-mode-example" onclick="setContractViewMode('example')">Example Real Payload</button>
+            </div>
+          </div>
+          <p style="color:var(--text-muted); font-size:0.9rem;">${info.desc}</p>
+        </div>
+
+        <div style="background:#1e293b; padding:1rem; border-radius:8px; border:1px solid var(--border-color);">
+          <div style="font-weight:700; color:var(--accent-cyan); font-size:0.85rem; margin-bottom:0.5rem; text-transform:uppercase;">Contract Specification Rules</div>
+          <ul style="color:var(--text-main); font-size:0.85rem; padding-left:1.2rem; display:flex; flex-direction:column; gap:0.25rem;">
+            ${rulesList}
+          </ul>
+        </div>
+
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <div style="font-weight:700; color:#fff; font-size:0.85rem;">
+              ${currentContractViewMode==='schema' ? 'Draft-07 Formal JSON Schema Definition:' : 'Example Real Payload JSON:'}
+            </div>
+            <span style="font-size:0.75rem; color:var(--text-dim); font-family:var(--font-mono);">atomicWriteSync compatible</span>
+          </div>
+          <pre>${displayCode}</pre>
+        </div>
+      `;
+    }
+
+    function closeContractModal() {
+      document.getElementById('contract-modal-overlay').classList.remove('open');
+    }
+
+    function filterContracts(groupKey) {
+      currentContractFilter = groupKey;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      const activeBtn = Array.from(document.querySelectorAll('.filter-btn')).find(b => b.getAttribute('onclick').includes(groupKey));
+      if (activeBtn) activeBtn.classList.add('active');
+      renderContracts();
+    }
+
+    function renderDimensions() {
+      const container = document.getElementById('dimensions-grid');
+      container.innerHTML = DIMENSIONS_DATA.map(d => `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><code>${d.name}</code></div>
+            <span class="badge ${d.severity === 'critical' ? 'badge-orchestrator' : d.severity === 'high' ? 'badge-flash-high' : 'badge-flash-med'}">${d.severity}</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">${d.desc}</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Model Engine</span><span class="kv-val">${d.model}</span></div>
+              <div class="kv-row"><span class="kv-key">Triggers</span><span class="kv-val">${d.triggers.join(', ')}</span></div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderContracts() {
+      const container = document.getElementById('contracts-container');
+      const groups = [
+        { key: 'state', title: '⚡ Execution & Recovery State JSON Schemas', desc: 'Atomic state machine files persisted in .sdlc/execution/ for wave tracking and pipeline resume.' },
+        { key: 'manifest', title: '📋 Workflow Manifest JSON Schemas', desc: 'Forward context manifests serialized into .sdlc/tmp/ before dispatching clean-context orchestrator agents.' },
+        { key: 'config', title: '⚙️ Configuration & System JSON Schemas', desc: 'Repository-level and local user configuration schemas.' },
+        { key: 'artifact', title: '📦 Artifact, Proposal & Output Token Schemas', desc: 'Structured JSON tokens and proposal artifacts emitted by subagents.' }
+      ];
+
+      const allKeys = Object.keys(CONTRACT_DETAILS);
+      let html = '';
+
+      groups.forEach(g => {
+        if (currentContractFilter !== 'all' && currentContractFilter !== g.key) return;
+
+        const groupItems = allKeys.filter(k => CONTRACT_DETAILS[k].group === g.key);
+        if (groupItems.length === 0) return;
+
+        html += `
+          <div class="group-section">
+            <div class="group-header">
+              <div class="group-title">${g.title} <span class="badge badge-flash-low">${groupItems.length}</span></div>
+              <div style="font-size:0.8rem; color:var(--text-muted)">${g.desc}</div>
+            </div>
+            <div class="grid">
+              ${groupItems.map(k => {
+                const c = CONTRACT_DETAILS[k];
+                return `
+                  <div class="card" onclick="openContractModal('${k}')">
+                    <div class="card-header">
+                      <div class="card-title"><code>${c.name}</code></div>
+                      <span class="badge badge-flash-low">${c.type}</span>
+                    </div>
+                    <div class="card-body">
+                      <p class="card-desc">${c.desc}</p>
+                      <div class="kv-group">
+                        <div class="kv-row"><span class="kv-key">Category</span><span class="kv-val">${c.category}</span></div>
+                        <div class="kv-row"><span class="kv-key">Action</span><span class="kv-val" style="color:var(--accent-cyan)">Inspect JSON Schema 🔍</span></div>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function selectPhase(phaseKey) {
+      document.querySelectorAll('.pipeline-nodes .node').forEach(n => n.classList.remove('active'));
+      const activeNode = document.getElementById(`node-${phaseKey}`);
+      if (activeNode) activeNode.classList.add('active');
+
+      const data = PHASE_MAPPING[phaseKey] || PHASE_MAPPING['issue'];
+      const panel = document.getElementById('phase-details-panel');
+
+      const skillBadges = data.skills.map(sk => `<span class="badge badge-flash-med" style="font-size:0.85rem; padding:0.35rem 0.75rem;">⚡ ${sk}</span>`).join(' ');
+      const agentBadges = data.agents.map(ag => `<span class="badge badge-orchestrator" style="font-size:0.85rem; padding:0.35rem 0.75rem;">🤖 ${ag}</span>`).join(' ');
+      
+      const contractBadges = (data.contractKeys || []).map(ck => {
+        const cObj = CONTRACT_DETAILS[ck] || { name: ck };
+        return `<span class="badge badge-flash-low" onclick="openContractModal('${ck}')" style="font-size:0.85rem; padding:0.35rem 0.75rem;" title="Click to view full contract schema">📜 ${cObj.name} 🔍</span>`;
+      }).join(' ');
+
+      const scriptBadges = data.scripts.map(sc => `<span class="badge badge-adhoc" style="font-size:0.85rem; padding:0.35rem 0.75rem;">📁 ${sc}</span>`).join(' ');
+
+      panel.innerHTML = `
+        <div class="phase-header">
+          <div class="phase-title-text">${data.title}</div>
+          <span class="badge badge-flash-low">SELECTED PHASE</span>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">${data.desc}</p>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
+          <div class="entity-section">
+            <div class="entity-section-title">⚡ Involved Skills (${data.skills.length})</div>
+            <div class="entity-tags">${skillBadges}</div>
+          </div>
+          <div class="entity-section">
+            <div class="entity-section-title">🤖 Involved Agents (${data.agents.length})</div>
+            <div class="entity-tags">${agentBadges}</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
+          <div class="entity-section">
+            <div class="entity-section-title">📜 Data Contracts & Schemas (Click to inspect)</div>
+            <div class="entity-tags">${contractBadges}</div>
+          </div>
+          <div class="entity-section">
+            <div class="entity-section-title">📁 Layer-4 Helper Scripts</div>
+            <div class="entity-tags">${scriptBadges}</div>
+          </div>
+        </div>
+      `;
+
+      const container = document.getElementById('pipeline-overview-cards');
+      const matchingSkills = SKILLS_DATA.filter(s => data.skills.includes(s.name));
+      container.innerHTML = matchingSkills.map(s => `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><code>${s.name}</code></div>
+            <span class="badge badge-flash-med">${s.phase}</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">${s.desc}</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Model Engine</span><span class="kv-val">${s.model}</span></div>
+              <div class="kv-row"><span class="kv-key">Delegates To</span><span class="kv-val">${s.orchestrator}</span></div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderSkills() {
+      const container = document.getElementById('skills-grid');
+      container.innerHTML = SKILLS_DATA.map(s => `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><code>${s.name}</code></div>
+            <span class="badge badge-flash-med">${s.model}</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">${s.desc}</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Phase</span><span class="kv-val">${s.phase}</span></div>
+              <div class="kv-row"><span class="kv-key">CLI Flags</span><span class="kv-val">${s.flags.join(', ') || 'None'}</span></div>
+              <div class="kv-row"><span class="kv-key">Delegates To</span><span class="kv-val">${s.orchestrator}</span></div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderAgents() {
+      const container = document.getElementById('agents-grid');
+      container.innerHTML = AGENTS_DATA.map(a => `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${a.name}</div>
+            <span class="badge ${a.type === 'Orchestrator' ? 'badge-orchestrator' : 'badge-adhoc'}">${a.type}</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">${a.desc}</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Model Engine</span><span class="kv-val">${a.model}</span></div>
+              <div class="kv-row"><span class="kv-key">Source</span><span class="kv-val">${a.source}</span></div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderWorkflows() {
+      const container = document.getElementById('workflows-grid');
+      container.innerHTML = WORKFLOWS_DATA.map(w => `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">${w.title}</div>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">${w.desc}</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Trigger</span><span class="kv-val">${w.trigger}</span></div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderScripts() {
+      const container = document.getElementById('scripts-grid');
+      container.innerHTML = SCRIPTS_DATA.map(s => `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><code>${s.name}</code></div>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">${s.desc}</p>
+            <div class="kv-group">
+              <div class="kv-row"><span class="kv-key">Path</span><span class="kv-val">${s.path}</span></div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function runSimulation(type) {
+      const term = document.getElementById('sim-terminal');
+      term.innerHTML = '';
+
+      const logs = {
+        'ship': [
+          { t: '[00:00:01]', c: '/ship-sdlc --quality full', k: 'cmd' },
+          { t: '[00:00:02]', c: 'Initializing state machine: .sdlc/execution/ship-main-1725140000.json', k: 'info' },
+          { t: '[00:00:03]', c: 'Step 1/5: Setup Check -> Guardrails & config verified', k: 'ok' },
+          { t: '[00:00:05]', c: 'Step 2/5: Review -> Dispatching review-orchestrator (3 subagents)', k: 'info' },
+          { t: '[00:00:08]', c: 'Review Verdict: APPROVED (0 deferred findings)', k: 'ok' },
+          { t: '[00:00:10]', c: 'Step 3/5: CI Verification -> Pipelines passed', k: 'ok' },
+          { t: '[00:00:12]', c: 'Step 4/5: Version -> Bumping minor v0.21.0 -> v0.22.0', k: 'info' },
+          { t: '[00:00:15]', c: 'Step 5/5: Ship Complete! Branch merged and release tagged.', k: 'ok' }
+        ],
+        'review': [
+          { t: '[00:00:01]', c: '/review-sdlc --committed', k: 'cmd' },
+          { t: '[00:00:02]', c: 'Serializing staged diff to .sdlc/tmp/review-manifest.json', k: 'info' },
+          { t: '[00:00:03]', c: 'Dispatching sdlc:review-orchestrator (Clean Context)', k: 'info' },
+          { t: '[00:00:05]', c: 'Scatter: Dispatched security-review & performance subagents in parallel', k: 'info' },
+          { t: '[00:00:07]', c: 'Gather: Received 2 raw findings. Running deduplication critique...', k: 'info' },
+          { t: '[00:00:09]', c: 'Persisted review-comment.md. Verdict: APPROVE', k: 'ok' }
+        ],
+        'plan': [
+          { t: '[00:00:01]', c: '/plan-sdlc', k: 'cmd' },
+          { t: '[00:00:02]', c: 'Dispatching plan-explore-orchestrator', k: 'info' },
+          { t: '[00:00:04]', c: 'Derived 4 planning axes. Writing discovery-brief.md', k: 'info' },
+          { t: '[00:00:07]', c: 'Dispatching plan-generation-orchestrator (gemini-3.1-pro-high)', k: 'info' },
+          { t: '[00:00:10]', c: 'Generated implementation_plan.md with 3 waves.', k: 'ok' }
+        ]
+      };
+
+      (logs[type] || []).forEach((item, idx) => {
+        setTimeout(() => {
+          const line = document.createElement('div');
+          line.className = 'term-line';
+          line.innerHTML = `<span class="term-time">${item.t}</span> <span class="term-${item.k}">${item.c}</span>`;
+          term.appendChild(line);
+          term.scrollTop = term.scrollHeight;
+        }, idx * 400);
+      });
+    }
+
+    document.getElementById('global-search').addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      document.querySelectorAll('.card').forEach(c => {
+        const text = c.innerText.toLowerCase();
+        c.style.display = text.includes(q) ? 'flex' : 'none';
+      });
+    });
+
+    renderSkills();
+    renderAgents();
+    renderWorkflows();
+    renderDimensions();
+    renderContracts();
+    renderScripts();
+    selectPhase('plan');
+  </script>
+</body>
+</html>

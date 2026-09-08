@@ -10,7 +10,7 @@
  *   echo "$LOG" | node verify-pipeline-sdlc-classify.js
  *   node verify-pipeline-sdlc-classify.js --logs-file <path>
  *
- * Stdout: single JSON line — {"category":"...","signals":["..."]}
+ * Stdout: single JSON line — {"category":"...","signals":["..."],"routingBucket":"..."}
  *
  * No I/O, no shell-out (other than reading the log file). Exposed for unit tests.
  */
@@ -25,11 +25,18 @@ const fs = require('node:fs');
  * but any concrete signal short-circuits to its category.
  *
  * @param {string} text
- * @returns {{category: string, signals: string[]}}
+ * @returns {{category: string, signals: string[], routingBucket: string}}
  */
 function classifyLogs(text) {
   const t = String(text || '');
-  if (!t.trim()) return { category: 'unknown', signals: [] };
+
+  const ACTIONABLE = new Set(['lint', 'test-failure', 'type-error']);
+  const withBucket = (result) => ({
+    ...result,
+    routingBucket: ACTIONABLE.has(result.category) ? 'actionable' : 'always-proposal'
+  });
+
+  if (!t.trim()) return withBucket({ category: 'unknown', signals: [] });
 
   const signals = [];
 
@@ -117,14 +124,14 @@ function classifyLogs(text) {
   // (lint is most actionable; infra is least)
   const has = (prefix) => signals.some((s) => s.startsWith(prefix));
 
-  if (has('lint:')) return { category: 'lint', signals };
-  if (has('test:')) return { category: 'test-failure', signals };
-  if (has('type:')) return { category: 'type-error', signals };
-  if (has('build:')) return { category: 'build-error', signals };
-  if (has('dep:')) return { category: 'dependency', signals };
-  if (has('infra:')) return { category: 'infra', signals };
+  if (has('lint:')) return withBucket({ category: 'lint', signals });
+  if (has('test:')) return withBucket({ category: 'test-failure', signals });
+  if (has('type:')) return withBucket({ category: 'type-error', signals });
+  if (has('build:')) return withBucket({ category: 'build-error', signals });
+  if (has('dep:')) return withBucket({ category: 'dependency', signals });
+  if (has('infra:')) return withBucket({ category: 'infra', signals });
 
-  return { category: 'unknown', signals };
+  return withBucket({ category: 'unknown', signals });
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +149,7 @@ function main(argv) {
       text = fs.readFileSync(logsFile, 'utf8');
     } catch (err) {
       process.stderr.write(`classify: failed to read ${logsFile}: ${err.message}\n`);
-      process.stdout.write(JSON.stringify({ category: 'unknown', signals: [] }) + '\n');
+      process.stdout.write(JSON.stringify({ category: 'unknown', signals: [], routingBucket: 'always-proposal' }) + '\n');
       return;
     }
   } else {
@@ -157,7 +164,7 @@ if (require.main === module) {
     main(process.argv.slice(2));
   } catch (err) {
     process.stderr.write(`classify: ${err.message}\n`);
-    process.stdout.write(JSON.stringify({ category: 'unknown', signals: [] }) + '\n');
+    process.stdout.write(JSON.stringify({ category: 'unknown', signals: [], routingBucket: 'always-proposal' }) + '\n');
   }
 }
 

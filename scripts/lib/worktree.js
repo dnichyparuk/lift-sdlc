@@ -8,8 +8,8 @@
  * Must NOT import ./config or ./state (prevents circular dependency).
  */
 
-const path = require('path');
-const { execFileSync } = require('child_process');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 // ---------------------------------------------------------------------------
 // Public API

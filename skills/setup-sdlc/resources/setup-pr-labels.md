@@ -129,6 +129,7 @@ Iterate:
    - **commitType** — match if any commit subject begins with `<type>:` or `<type>(scope):`
    - **pathGlob** — match if every changed file matches one of these globs (e.g. `**/*.md`)
    - **jiraType** — match if `jiraTicket.type` is in the list (e.g. `Bug`, `Story`)
+     (accepted but not yet evaluated by pr.js — see warning at runtime)
    - **diffSizeUnder** — match if total lines changed is below this threshold
 
 4. **Enter the value(s).** Use AskUserQuestion (free text):
@@ -155,20 +156,16 @@ Build the final block:
 - `llm` → `{ mode: 'llm' }`
 - `rules` → `{ mode: 'rules', rules: [...] }`
 
-Locate the config helper:
+Merge the labels block into the existing `pr` section without clobbering
+`titlePattern`, `allowedTypes`, or any other sibling key. The write CLI locates
+and loads `scripts/lib/config.js` itself — there is no separate config-helper
+lookup step:
 
 ```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-pr-labels_load_config.sh
+WRITE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/setup-pr-labels-write.js" --section pr --value '<BLOCK_AS_JSON>')
 ```
 
-Then merge the labels block into the existing `pr` section without clobbering
-`titlePattern`, `allowedTypes`, or any other sibling key:
-
-```shell
-<PLUGIN_ROOT>/skills/setup-sdlc/scripts/setup-pr-labels_write.sh '<BLOCK_AS_JSON>'
-```
-
-Substitute `<BLOCK_AS_JSON>` with the JSON-stringified labels block.
+Substitute `<BLOCK_AS_JSON>` with the JSON-stringified labels block. The write CLI prints the path of a temp JSON manifest, not the JSON itself — read `$WRITE_OUTPUT_FILE` to confirm the write and surface any `errors`.
 
 ### Step 6 — Confirm
 

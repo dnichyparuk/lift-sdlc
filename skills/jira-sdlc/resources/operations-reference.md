@@ -11,14 +11,14 @@ conditionally after Step 2 classifies the operation type.
 > - Never guess field IDs, transition IDs, or user accountIds
 > - Never fabricate field values — use only `allowedValues` from `fieldSchemas`
 >
-> **Write-op canonical procedure (R17–R21):** every write operation below — Create, Edit, Transition, Comment, Worklog, Link — MUST follow the eight-step sequence:
+> **Write-op canonical procedure:** every write operation below — Create, Edit, Transition, Comment, Worklog, Link — MUST follow the eight-step sequence:
 >
 > 1. Gather inputs from the user request
-> 2. Resolve description template (Create + description-touching Edit only — R18)
-> 3. Detect placeholders via the C13 regex; escalate every `low`-confidence marker via `AskUserQuestion` (R19)
+> 2. Resolve description template (Create + description-touching Edit only)
+> 3. Detect placeholders via the C13 regex; escalate every `low`-confidence marker via `AskUserQuestion`
 > 4. Build the proposed payload
-> 5. Critique (R20) — emit the `Initial:` / `Critique:` / `Final:` block, then call `lib/artifact-store.js` `writeCritique(hash, ...)`
-> 6. Approval gate (R17) — `AskUserQuestion` with `approve` / `change <what>` / `cancel`; on `approve` call `lib/artifact-store.js` `writeApprovalToken(hash)`. The PreToolUse hook (`hooks/pre-tool-jira-write-guard.js`) verifies the artifacts written by steps 5–6 and BLOCKS dispatch otherwise (R21)
+> 5. Critique — emit the `Initial:` / `Critique:` / `Final:` block, then call `lib/artifact-store.js` `writeCritique(hash, ...)`
+> 6. Approval gate — `AskUserQuestion` with `approve` / `change <what>` / `cancel`; on `approve` call `lib/artifact-store.js` `writeApprovalToken(hash)`. No PreToolUse hook exists to verify the artifacts written by steps 5–6 or block dispatch if they're missing — `hooks/pre-tool-jira-write-guard.js` is not implemented and not registered in `hooks.json`. Step 7 dispatch is gated by LLM instruction-following only; verify both artifacts yourself before dispatching
 > 7. Dispatch the MCP write call
 > 8. Post-op cache update
 >
@@ -35,14 +35,14 @@ conditionally after Step 2 classifies the operation type.
    - Read cache.fieldSchemas[issueTypeName]; for each required field not provided
      by the user, ask before proceeding
 
-2. Resolve description template (R18 — required for Create)
+2. Resolve description template (required for Create)
    a. Check .sdlc/jira-templates/<issueTypeName>.md — if exists, read it (override)
    b. Else, find templates/<issueTypeName>.md relative to the resolved $SCRIPT path (shipped)
    c. If found: fill all {placeholder} markers from user context (see step 3)
    d. If neither exists: AskUserQuestion with the closed list of available templates —
       free-form descriptions are prohibited
 
-3. Detect placeholders via C13 regex (R19) — `\{[a-zA-Z_][a-zA-Z0-9_-]*\}|\[[^\]\n]{3,}\]`
+3. Detect placeholders via C13 regex — `\{[a-zA-Z_][a-zA-Z0-9_-]*\}|\[[^\]\n]{3,}\]`
    - Classify each marker `high` (explicit user input or definitive cache value) or `low`
    - For every `low` marker: AskUserQuestion to resolve before payload finalization
    - Inapplicable section removal requires explicit user consent (no silent drops)
@@ -56,7 +56,7 @@ conditionally after Step 2 classifies the operation type.
    - custom fields: use fieldId key (e.g., customfield_10016) with correct type shape
    - For Sub-task: include parent: "PROJ-123" as top-level parameter
 
-5. Critique the payload (R20) — check template completeness, field correctness,
+5. Critique the payload — check template completeness, field correctness,
    workflow validity (n/a for create), terminology consistency
    - Emit `Initial:` / `Critique:` / `Final:` block to the user
    - Compute hash and persist:
@@ -65,14 +65,13 @@ conditionally after Step 2 classifies the operation type.
        const hash = payloadHash(payload);
        writeCritique(hash, { initial, findings, final });
 
-6. Approval gate (R17) — print full final payload, AskUserQuestion approve/change/cancel
+6. Approval gate — print full final payload, AskUserQuestion approve/change/cancel
    - On `approve`: writeApprovalToken(hash)
    - On `change <what>`: revise payload, return to step 5 (new hash, fresh artifacts)
    - On `cancel`: abort — do not dispatch
 
 7. Dispatch — call mcp__atlassian__createJiraIssue with contentFormat: "markdown"
-   - The PreToolUse hook (R21) re-derives the hash from tool_input and verifies the
-     two artifacts; on hook block, surface permissionDecisionReason verbatim
+   - Before dispatch, re-derive the hash from the final `tool_input` and confirm both artifacts exist for it — no hook backstop exists; this check is yours
    - On 400 error: check fieldSchemas for the issue type; verify field shapes from
      REFERENCE.md Section 2
 
@@ -84,12 +83,12 @@ conditionally after Step 2 classifies the operation type.
 ```
 1. Gather inputs — parse: which issue key, which field(s), what new value(s)
 
-2. Resolve description template (R18) — ONLY when description is being touched
+2. Resolve description template — ONLY when description is being touched
    - Look up the issue's issueTypeName via cache or getJiraIssue
    - Resolve override `.sdlc/jira-templates/<Type>.md` then shipped `templates/<Type>.md`
    - If editing description without a template match, AskUserQuestion with a closed list
 
-3. Detect placeholders via C13 regex (R19) — applies to every string-valued field, not
+3. Detect placeholders via C13 regex — applies to every string-valued field, not
    only description; ADF text nodes traversed recursively
    - Resolve every `low`-confidence marker via AskUserQuestion before payload finalization
 
@@ -100,13 +99,13 @@ conditionally after Step 2 classifies the operation type.
    - Custom select → { value: "..." }
    - Assignee → { accountId: "..." } from cache.userMappings
 
-5. Critique (R20) — emit Initial/Critique/Final block; writeCritique(hash, ...)
+5. Critique — emit Initial/Critique/Final block; writeCritique(hash, ...)
 
-6. Approval gate (R17) — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__editJiraIssue with responseContentFormat: "markdown"
-   - On hook block (R21): surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
    - On 400: check field key spelling (customfield_XXXXX), field type, and value shape
 
 8. Post-op cache update — record any newly resolved user mappings
@@ -148,14 +147,14 @@ conditionally after Step 2 classifies the operation type.
      (e.g., { resolution: { name: "Done" } })
    - Final shape: { cloudId, issueKey, transition: { id }, fields? }
 
-5. Critique (R20) — verify transition target reachable per cached workflow graph;
+5. Critique — verify transition target reachable per cached workflow graph;
    emit Initial/Critique/Final; writeCritique(hash, ...)
 
-6. Approval gate (R17) — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__transitionJiraIssue
-   - On hook block (R21): surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
    - On 400 with requiredFields: verify all required fields were included with correct shapes
    - On "transition not found": getTransitionsForJiraIssue for fresh list (auto-refresh path)
 
@@ -169,7 +168,7 @@ conditionally after Step 2 classifies the operation type.
 
    (Step 2 — template resolution — is skipped; comments have no template.)
 
-3. Detect placeholders via C13 regex (R19) — applies to ADF text nodes recursively
+3. Detect placeholders via C13 regex — applies to ADF text nodes recursively
    - After ADF conversion, walk commentBody.body[] and resolve every `low`-confidence marker
 
 4. Build payload — convert markdown to ADF and assemble:
@@ -181,13 +180,13 @@ conditionally after Step 2 classifies the operation type.
                  responseContentFormat: "markdown" }
    Never use HTML tags, task lists (- [ ]), or footnotes in source markdown.
 
-5. Critique (R20) — emit Initial/Critique/Final block; writeCritique(hash, ...)
+5. Critique — emit Initial/Critique/Final block; writeCritique(hash, ...)
 
-6. Approval gate (R17) — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__addCommentToJiraIssue
-   - On hook block (R21): surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
 
 8. Post-op cache update — none typically required for comments
 ```
@@ -208,13 +207,13 @@ conditionally after Step 2 classifies the operation type.
    { cloudId, linkType: { name: "Blocks" },
      inwardIssue: { key: "PROJ-123" }, outwardIssue: { key: "PROJ-456" } }
 
-5. Critique (R20) — emit Initial/Critique/Final block; writeCritique(hash, ...)
+5. Critique — emit Initial/Critique/Final block; writeCritique(hash, ...)
 
-6. Approval gate (R17) — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__createIssueLink
-   - On hook block (R21): surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
 
 8. Post-op cache update — none typically required for links
 ```
@@ -229,7 +228,7 @@ conditionally after Step 2 classifies the operation type.
    - Call mcp__atlassian__lookupJiraAccountId({ cloudId, query: "<name or email>" })
    - If multiple results: show all and ask user to confirm which one
    - Once confirmed: save to cache via:
-     echo '{"<displayName>":"<accountId>"}' | node "$SCRIPT" --project "$KEY" --save-field userMappings
+     SAVE_RESULT=$(echo '{"<displayName>":"<accountId>"}' | node "<PLUGIN_ROOT>/scripts/skill/jira.js" --project "$KEY" --save-field userMappings)
 
 3. Call mcp__atlassian__editJiraIssue({
      cloudId, issueKey,
@@ -252,13 +251,13 @@ conditionally after Step 2 classifies the operation type.
    { cloudId, issueKey, timeSpent: "<Jira duration string>",
      comment: "<optional description>", adjustEstimate: "auto" }
 
-5. Critique (R20) — emit Initial/Critique/Final block; writeCritique(hash, ...)
+5. Critique — emit Initial/Critique/Final block; writeCritique(hash, ...)
 
-6. Approval gate (R17) — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__addWorklogToJiraIssue
-   - On hook block (R21): surface permissionDecisionReason verbatim
+   - On artifact mismatch: stop, show which artifact is missing/stale, return to step 5
 
 8. Post-op cache update — none typically required for worklogs
 ```

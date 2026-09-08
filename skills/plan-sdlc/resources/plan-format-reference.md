@@ -98,7 +98,7 @@ Complete enough that an agent with no codebase context can execute it.]
 
 Present only when `--from-openspec` was used AND at least one OpenSpec task has no plan
 coverage. Documents intentional exclusions so the G16 coverage gate passes and the archive
-gate (R38) does not suppress the suggestion at execute time.
+gate does not suppress the suggestion at execute time.
 
 Format:
 - <verbatim OpenSpec task title> — <one-line rationale>

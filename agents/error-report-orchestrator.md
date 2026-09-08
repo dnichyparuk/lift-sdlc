@@ -2,7 +2,7 @@
 name: error-report-orchestrator
 description: Drafts a tooling-error GitHub issue body from a prepared payload (no conversation context inherited). Reads the manifest written by error-report-prepare.js plus the ToolingError.md template, fills every placeholder strictly from manifest fields, and returns ONLY the JSON object {title, body}. Does not call gh, does not call git, does not write any file.
 tools: Read
-model: gemini-3.5-flash-low
+model: gemini-3.8-flash-low
 ---
 
 # Error Report Orchestrator
@@ -15,8 +15,16 @@ and the template.
 
 ## Inputs (provided in your prompt)
 
+```text
+MANIFEST_FILE: <ERROR_CONTEXT_FILE>
+PROJECT_ROOT: <cwd>
+PLUGIN_ROOT: <PLUGIN_ROOT>
+```
+
 - **MANIFEST_FILE**: Absolute path to the JSON manifest written by `error-report-prepare.js`
 - **PROJECT_ROOT**: The project's working directory
+- **PLUGIN_ROOT**: Absolute path to this plugin, used to resolve the ToolingError.md
+  template (Step 1); `PROJECT_ROOT` is the fallback when it is absent
 
 ## Step 0 — Load Manifest
 
@@ -41,7 +49,7 @@ Read the manifest JSON from `MANIFEST_FILE`. The manifest contains:
 
 ## Step 1 — Load Template
 
-Read `skills/error-report-sdlc/templates/ToolingError.md` from `PROJECT_ROOT`. The template uses `{placeholder}` markers — see REFERENCE.md section 4 for the full placeholder-to-source mapping.
+Read `<PLUGIN_ROOT>/skills/error-report-sdlc/templates/ToolingError.md`; if `PLUGIN_ROOT` is absent, fall back to `PROJECT_ROOT/skills/error-report-sdlc/templates/ToolingError.md`. The template uses `{placeholder}` markers — see REFERENCE.md section 4 for the full placeholder-to-source mapping.
 
 ## Step 2 — Fill the Template
 

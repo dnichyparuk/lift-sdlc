@@ -2,6 +2,17 @@
 /**
  * pre-tool-git-guard.js
  * PreToolUse hook — intercepts dangerous git commands before execution.
+ *
+ * Host: Antigravity (https://antigravity.google/docs/hooks/). This repo is an
+ * Antigravity-native plugin — hooks.json registers this hook against Antigravity
+ * tool-call matchers (`run_command`), so the payload read from stdin is the
+ * Antigravity shape `{ toolCall: { name, args: { CommandLine } } }` and the
+ * output written to stdout is `{ decision, reason }`. The legacy `args.command`
+ * field is still read as a fallback (harmless, kept for backward compatibility)
+ * but is not the primary path. Claude Code's payload/output shapes —
+ * `{ tool_name, tool_input: { command } }` input and `hookSpecificOutput`
+ * output — are intentionally NOT supported here; adding a second input shape
+ * would risk a half-ported guard that fails open on one host.
  */
 
 'use strict';
@@ -16,7 +27,11 @@ try {
     input = JSON.parse(raw);
   }
 } catch {
-  process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
+  // Stdin unreadable or non-JSON — fail closed. An unparseable payload is
+  // exactly the anomalous condition this guard must not treat as
+  // "nothing to check here" (a malformed payload must not let
+  // `git push --force`/`reset --hard`/`checkout .`/`clean -f` through unchecked).
+  process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'pre-tool-git-guard.js: could not parse tool-call input as JSON (fail-closed). If this repeats for every command, the host is sending malformed payloads — inspect hooks.json or temporarily disable this hook.' }) + '\n');
   process.exit(0);
 }
 

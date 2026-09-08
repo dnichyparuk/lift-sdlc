@@ -63,20 +63,20 @@ To migrate explicitly without waiting for the next ship run, run `/setup-sdlc --
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `schemaVersion` (top-level) | `4` | `4` | Schema version literal. Required for new configs; legacy files are auto-migrated. |
-| `steps` | `string[]` | `["execute","commit","review","version","archive-openspec","pr","learnings-commit"]` | Pipeline steps to run. Allowed values: `execute`, `commit`, `review`, `version`, `archive-openspec`, `pr`, `verify-pipeline` (opt-in, R41), `await-remote-review` (opt-in, R50), `learnings-commit`. Replaces the legacy `preset` and `skip` fields. |
-| `quick` | `string[]` | unset | Optional shortened step list activated by `--quick`. When set, `/ship-sdlc --quick` uses this list instead of `steps[]`. Unset means `--quick` is unavailable for this project. Same allowed values as `steps`. See R-quick-1. |
+| `steps` | `string[]` | `["execute","commit","review","version","archive-openspec","pr","learnings-commit"]` | Pipeline steps to run. Allowed values: `execute`, `commit`, `review`, `version`, `archive-openspec`, `pr`, `verify-pipeline` (opt-in), `await-remote-review` (opt-in), `learnings-commit`. Replaces the legacy `preset` and `skip` fields. |
+| `quick` | `string[]` | unset | Optional shortened step list activated by `--quick`. When set, `/ship-sdlc --quick` uses this list instead of `steps[]`. Unset means `--quick` is unavailable for this project. Same allowed values as `steps`. |
 | `bump` | `"patch"` \| `"minor"` \| `"major"` | `"patch"` | Default version bump type applied when the `version` step runs. Overridden by `--bump` on the CLI. |
 | `draft` | `boolean` | `false` | When `true`, PRs are created as drafts. Equivalent to `--draft`. |
 | `auto` | `boolean` | `false` | When `true`, run in non-interactive auto mode (no confirmation prompts). Equivalent to `--auto`. |
 | `reviewThreshold` | `"critical"` \| `"high"` \| `"medium"` | `"high"` | Minimum review-finding severity that triggers the received-review fix loop. See table below. |
 | `workspace` | `"branch"` \| `"worktree"` \| `"prompt"` | `"prompt"` | Workspace isolation strategy for execute-plan-sdlc. `"branch"` = use a feature branch, `"worktree"` = use a git worktree, `"prompt"` = ask each time. Forwarded to execute-plan-sdlc as a hint. |
 | `rebase` | `true` \| `false` \| `"prompt"` | `true` | When `true`, auto-rebase onto the default branch before execution (execute-plan-sdlc) and before versioning (ship-sdlc). When `false`, skip rebase. When `"prompt"`, ask each time. |
-| `verifyPipelineTimeout` | `integer` (≥30) | `1200` | Maximum seconds `verify-pipeline` polls CI checks before giving up and proceeding (R57). Only prompted in `setup-sdlc` when `verify-pipeline` is in `ship.steps[]`. |
-| `verifyPipelineInterval` | `integer` (≥10) | `60` | Seconds between `verify-pipeline` poll attempts (R57). Only prompted in `setup-sdlc` when `verify-pipeline` is in `ship.steps[]`. |
-| `verifyPipelineMaxIterations` | `integer` (1–10) | `3` | Maximum analyze-fix-recheck iterations before `verify-pipeline` gives up (R47, R57). Only prompted in `setup-sdlc` when `verify-pipeline` is in `ship.steps[]`. |
-| `awaitRemoteReviewTimeout` | `integer` (≥30) | `600` | Maximum seconds `await-remote-review` polls for a reviewer response (R57). Only prompted in `setup-sdlc` when `await-remote-review` is in `ship.steps[]`. |
-| `awaitRemoteReviewInterval` | `integer` (≥10) | `60` | Seconds between `await-remote-review` poll attempts (R57). Only prompted in `setup-sdlc` when `await-remote-review` is in `ship.steps[]`. |
-| `awaitRemoteReviewers` | `string[]` (minItems 1) | `["copilot"]` | Reviewer logins (case-insensitive) whose review satisfies the `await-remote-review` gate. Login `copilot` also requires `user.type === "Bot"` (R56, R57). Only prompted in `setup-sdlc` when `await-remote-review` is in `ship.steps[]`. |
+| `verifyPipelineTimeout` | `integer` (≥30) | `1200` | Maximum seconds `verify-pipeline` polls CI checks before giving up and proceeding. Only prompted in `setup-sdlc` when `verify-pipeline` is in `ship.steps[]`. |
+| `verifyPipelineInterval` | `integer` (≥10) | `60` | Seconds between `verify-pipeline` poll attempts. Only prompted in `setup-sdlc` when `verify-pipeline` is in `ship.steps[]`. |
+| `verifyPipelineMaxIterations` | `integer` (1–10) | `3` | Maximum analyze-fix-recheck iterations before `verify-pipeline` gives up. Only prompted in `setup-sdlc` when `verify-pipeline` is in `ship.steps[]`. |
+| `awaitRemoteReviewTimeout` | `integer` (≥30) | `600` | Maximum seconds `await-remote-review` polls for a reviewer response. Only prompted in `setup-sdlc` when `await-remote-review` is in `ship.steps[]`. |
+| `awaitRemoteReviewInterval` | `integer` (≥10) | `60` | Seconds between `await-remote-review` poll attempts. Only prompted in `setup-sdlc` when `await-remote-review` is in `ship.steps[]`. |
+| `awaitRemoteReviewers` | `string[]` (minItems 1) | `["copilot"]` | Reviewer logins (case-insensitive) whose review satisfies the `await-remote-review` gate. Login `copilot` also requires `user.type === "Bot"`. Only prompted in `setup-sdlc` when `await-remote-review` is in `ship.steps[]`. |
 
 ### reviewThreshold Levels
 
@@ -113,7 +113,7 @@ When the same setting is specified in multiple places, the order of precedence i
 
 A flag passed directly on the command line always wins. If no flag is given, the config file value is used. If the config file is absent or does not specify a field, the built-in default applies.
 
-**`--quick` and `--steps` are mutually exclusive.** Passing both on the same invocation is a hard error (R-quick-5).
+**`--quick` and `--steps` are mutually exclusive.** Passing both on the same invocation is a hard error.
 
 ---
 

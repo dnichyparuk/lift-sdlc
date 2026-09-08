@@ -1,8 +1,8 @@
 'use strict';
 
-const fs     = require('fs');
-const path   = require('path');
-const crypto = require('crypto');
+const fs     = require('node:fs');
+const path   = require('node:path');
+const crypto = require('node:crypto');
 
 const { CURRENT_SCHEMA_VERSION } = require('./config-version.js');
 const { PRESET_TO_STEPS } = require('./config-migrations.js');

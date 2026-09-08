@@ -3,8 +3,10 @@
 .local/
 analysis/
 
-# SDLC runtime cache and logs
-.sdlc/
+# SDLC runtime cache and logs — .sdlc/.gitignore owns fine-grained ignores within
+# this directory (it selectively un-ignores config.json and review-dimensions/);
+# a blanket `.sdlc/` rule here would shadow that nested file entirely, since git
+# never descends into an already-ignored directory to apply nested exceptions.
 tmp/
 *.tmp
 *.log
@@ -17,3 +19,9 @@ node_modules/
 *-manifest-*.json
 *-prepare-*.json
 # <<< lift-sdlc managed
+
+# >>> sdlc-utilities managed v3 (do not edit) — transient skill artifacts
+*-context-*.json
+*-manifest-*.json
+*-prepare-*.json
+# <<< sdlc-utilities managed

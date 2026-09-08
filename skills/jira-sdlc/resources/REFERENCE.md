@@ -139,6 +139,20 @@ sections are missing, or when an operation fails due to stale cached data.
 }
 ```
 
+**Field Type Mapping** (used when populating `fieldSchemas` from
+`getJiraIssueTypeMetaWithFields` in cache-initialization Phase 4):
+
+| API `schema.type` | Cache `type` | Notes |
+|---|---|---|
+| `string` | `string` | |
+| `number` | `number` | |
+| `priority` | `priority` | Has `allowedValues` |
+| `option` | `option` | Custom single-select |
+| `array` of `option` | `multi-option` | Custom multi-select |
+| `user` | `user` | |
+| `date` | `date` | Format `YYYY-MM-DD` |
+| `datetime` | `datetime` | ISO-8601 |
+
 **Key invariant:** Always use `cloudId` from cache — never call
 `getAccessibleAtlassianResources` again after initialization. Similarly, never re-fetch
 `issueTypes`, `fieldSchemas`, `workflows`, or `linkTypes` unless `--force-refresh` is
@@ -150,7 +164,7 @@ due to stale data. If `maxAgeHours` is set to a positive number, the TTL behavio
 compare `lastUpdated` + `maxAgeHours` against the current timestamp; if stale, run the
 full initialization sequence.
 
-**Unsampled workflow shape (R14):** When `--skip-workflow-discovery` is passed, Phase 5 is
+**Unsampled workflow shape:** When `--skip-workflow-discovery` is passed, Phase 5 is
 bypassed and each non-subtask issue type is stored with:
 
 ```json
@@ -164,7 +178,7 @@ Subtask types have no workflow entry. At runtime, any transition operation that 
 an `unsampled` marker falls back to a live `getTransitionsForJiraIssue` call per issue —
 the same stale-cache auto-refresh path handles it transparently.
 
-**`--check` output shape (R15):** The prepare script `--check` subcommand emits JSON with
+**`--check` output shape:** The prepare script `--check` subcommand emits JSON with
 these fields:
 
 ```jsonc

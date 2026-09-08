@@ -8,9 +8,9 @@
  */
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execSync } = require('node:child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 
 const { detectVersionFile } = require(path.join(LIB, 'version'));
@@ -357,7 +357,7 @@ function detect(projectRoot) {
   // Safe to fail: on any error, consumerCommitsSdlc defaults to false and
   // previewPaths returns empty strings.
   const repoName = path.basename(projectRoot);
-  const homeDir  = process.env.HOME || process.env.USERPROFILE || require('os').homedir();
+  const homeDir  = process.env.HOME || process.env.USERPROFILE || require('node:os').homedir();
   const repoContext = { repoRoot: projectRoot, repoName, home: homeDir };
   let workspaceContext = null;
   try {

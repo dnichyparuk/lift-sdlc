@@ -158,7 +158,7 @@ function buildGithubHosting(projectRoot) {
 function buildG17Dispatch() {
   const templateName = 'g17-dimension-coverage-prompt.md';
   const subagentType = 'general-purpose';
-  const model = 'gemini-3.5-flash-medium';
+  const model = 'gemini-3.8-flash-medium';
 
   // 1. Try installed plugin path via find
   const findResult = spawnSync(
@@ -239,35 +239,40 @@ function resolveSkillTemplate(templateName) {
  * @param {{ subagentType: string, model: string, promptTemplatePath: string|null }} g17Dispatch
  * @returns {Array<{ name: string, subagentType: string, model: string, promptTemplatePath: string|null, gateIds: string[] }>}
  */
-function buildLanes(g17Dispatch) {
+function buildLanes(g17Dispatch, guardrails, projectRoot) {
+  const { validateAll } = require(require('node:path').join(__dirname, '..', 'lib', 'dimensions'));
+  const hasDimensions = validateAll(projectRoot).dimensions.length > 0;
+  const hasGuardrails = guardrails && guardrails.length > 0;
+
   const laneDefs = [
     {
       name: 'static-structural',
-      model: 'gemini-3.5-flash-low',
+      model: 'gemini-3.8-flash-low',
       templateName: 'lane-static-structural-prompt.md',
-      gateIds: ['G1', 'G2', 'G3', 'G7', 'G12'],
+      gateIds: ['G1', 'G2', 'G3', 'G7', 'G12', ...(hasGuardrails ? [] : ['G14']), ...(hasDimensions ? [] : ['G17'])],
     },
     {
       name: 'content-coverage',
-      model: 'gemini-3.5-flash-medium',
+      model: 'gemini-3.8-flash-medium',
       templateName: 'lane-content-coverage-prompt.md',
       gateIds: ['G5', 'G6', 'G8', 'G9', 'G11', 'G13', 'G15', 'G16'],
     },
     {
       name: 'file-existence',
-      model: 'gemini-3.5-flash-low',
+      model: 'gemini-3.8-flash-low',
       templateName: 'lane-file-existence-prompt.md',
       gateIds: ['G4', 'G10'],
     },
-    {
+      ...(hasGuardrails ? [{
       name: 'guardrail-compliance',
-      model: 'gemini-3.5-flash-medium',
+      model: 'gemini-3.8-flash-medium',
       templateName: 'lane-guardrail-compliance-prompt.md',
       gateIds: ['G14'],
-    },
+    }] : []),
   ];
 
   const lanes = laneDefs.map(def => ({
+    id: def.name,
     name: def.name,
     subagentType: 'general-purpose',
     model: def.model,
@@ -275,14 +280,21 @@ function buildLanes(g17Dispatch) {
     gateIds: def.gateIds,
   }));
 
-  // Entry [4]: dimension-coverage — mirrors g17Dispatch verbatim (backwards compatibility)
-  lanes.push({
-    name: 'dimension-coverage',
-    subagentType: g17Dispatch.subagentType,
-    model: g17Dispatch.model,
-    promptTemplatePath: g17Dispatch.promptTemplatePath,
-    gateIds: ['G17'],
-  });
+  // dimension-coverage — mirrors g17Dispatch verbatim (backwards compatibility).
+  // Pushed last, but its position is NOT fixed: guardrail-compliance above is
+  // itself conditional on hasGuardrails, so this lane can land at index 3 or 4
+  // depending on which lanes were dropped. Select this lane by `id`, never by
+  // position (see the `lane.id` filter in main()).
+  if (hasDimensions) {
+    lanes.push({
+      id: 'dimension-coverage',
+      name: 'dimension-coverage',
+      subagentType: g17Dispatch.subagentType,
+      model: g17Dispatch.model,
+      promptTemplatePath: g17Dispatch.promptTemplatePath,
+      gateIds: ['G17'],
+    });
+  }
 
   return lanes;
 }
@@ -314,7 +326,7 @@ function buildLensReviewers() {
   return lensDefs.map(def => ({
     lens: def.lens,
     subagentType: 'general-purpose',
-    model: 'gemini-3.5-flash-medium',
+    model: 'gemini-3.8-flash-medium',
     promptTemplatePath: resolveSkillTemplate(def.templateName),
     focusCategories: def.focusCategories,
   }));
@@ -557,10 +569,14 @@ function main() {
   }
 
   // 6. P16/P17 — lane fan-out and lens reviewer signals (R35, R36 — Fixes #418)
-  const lanes = buildLanes(g17Dispatch);
+  const lanes = buildLanes(g17Dispatch, guardrails, projectRoot);
   const lensReviewers = buildLensReviewers();
-  // Warn for any lane with null promptTemplatePath (non-G17 lanes only; G17 already warned above)
-  lanes.slice(0, 4).forEach(lane => {
+  // Warn for any lane with null promptTemplatePath (non-G17 lanes only; G17 already warned above).
+  // Selected by lane.id, not a positional slice — guardrail-compliance and
+  // dimension-coverage are both conditionally present, so their index shifts
+  // and a positional slice can pull the dimension-coverage (G17) lane into
+  // this loop and emit a duplicate warning.
+  lanes.filter(lane => lane.id !== 'dimension-coverage').forEach(lane => {
     if (lane.promptTemplatePath === null) {
       process.stderr.write(`[plan-prepare] lane "${lane.name}" skipped — prompt template not found\n`);
     }
@@ -597,4 +613,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { main };
+module.exports = { main, runExplorePack, buildLanes };

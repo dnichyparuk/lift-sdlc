@@ -3,7 +3,7 @@ name: verify-pipeline-sdlc
 description: "Use this skill to analyze a failed CI run on a PR and either apply a minimal fix or emit a proposal. Dispatched automatically by ship-sdlc's verify-pipeline step under --auto, or invoked standalone via /verify-pipeline-sdlc --pr <N>. Triggers on: analyze CI failure, fix failing checks, post-PR CI verification, verify-pipeline."
 user-invocable: true
 argument-hint: "[--pr <number>] [--logs <path-or-string>] [--auto]"
-model: gemini-3.5-flash-medium
+model: gemini-3.8-flash-medium
 ---
 
 # Verify Pipeline (SDLC)
@@ -14,53 +14,65 @@ Analyze failed CI logs, classify the root cause via a deterministic Node helper,
 
 ---
 
-## Step 1: CONSUME — parse args, load logs (R1, R6)
+## Step 1: CONSUME — parse args, load logs
 
-Parse `--pr <N>`, `--logs <path-or-string>`, `--auto` from `$ARGUMENTS`.
+Parse `--pr <N>`, `--logs <path-or-string>`, `--auto` from `$ARGUMENTS`. If both `--pr` and `--logs` are missing, emit `{"status":"abort","reason":"--pr or --logs required"}` and stop.
 
-If both `--pr` and `--logs` are missing, emit `{"status":"abort","reason":"--pr or --logs required"}` and stop (E1).
+Call fetch-logs.js with `--pr-number <N>` when `--logs` is absent (fetches the PR's latest failed CI run), or with `--logs <path-or-text>` when it's provided — the script's `resolveLogsFlag` accepts either a filesystem path or inline text.
 
-If `--logs` is provided: when the value is a filesystem path, read its contents; otherwise treat the value as the log text inline.
-
-If `--logs` is omitted but `--pr` is present (R6): resolve logs internally via `lib/git.js::fetchFailedCheckLogs` for the latest failed run on the PR. The Node code path for this is inline:
+> **VERBATIM** — Run this command exactly as written, replacing `<PLUGIN_ROOT>` with the absolute path to this plugin. Note the strict script location pattern: `node "<PLUGIN_ROOT>/scripts/<group>/<script-name>.js"` — the scripts are Node CLI files invoked with `node`. Do not modify, rephrase, or simplify the commands or their flags.
 
 ```shell
-<PLUGIN_ROOT>/skills/verify-pipeline-sdlc/scripts/fetch_logs.sh
+node "<PLUGIN_ROOT>/scripts/util/fetch-logs.js" --pr-number <N>
 ```
-> **Contract (Input/Output):**
-> - **Input**: PR context.
-> - **Output**: Prints CI failure logs to stdout.
 
-If gh is unauthenticated and logs cannot be resolved, emit `{"status":"abort","reason":"gh not authenticated"}` and stop (E2).
-
-## Step 2: CLASSIFY — invoke the deterministic classifier (R2)
-
-Pipe the resolved log text into the classifier helper:
+Or when `--logs` is provided:
 
 ```shell
-<PLUGIN_ROOT>/skills/verify-pipeline-sdlc/scripts/classify_logs.sh
+node "<PLUGIN_ROOT>/scripts/util/fetch-logs.js" --logs <path-or-text>
 ```
+
 > **Contract (Input/Output):**
-> - **Input**: Log text via stdin.
-> - **Output**: Prints JSON verdict on stdout.
+> - **Input**: `--pr-number <N>` or `--logs <path-or-text>` — mutually exclusive. The `--pr-number` value is the PR number parsed from `$ARGUMENTS` and must be numeric. The `--logs` value is passed as-is.
+> - **Output**: Prints the CI failure log excerpt to stdout. Exit 0 on success — and also when no failed check is found or the run link carries no run id, in which case stdout is empty and a one-line diagnostic goes to stderr. Exit 1 on a missing/non-numeric `--pr-number`, mutually-exclusive flag violation, an unknown flag, **or `gh` not authenticated / PR lookup failed — do not treat as passing**; exit 2 on an unexpected crash.
+> - **Authentication**: If `gh` is unauthenticated when using `--pr-number`, `fetchPrChecks` returns `ghAuthenticated: false`; fetch-logs.js exits 1 with the `errorMessage` on stderr (not exit 0 — an empty stdout there would be indistinguishable from "no failed checks").
 
-Read the JSON verdict on stdout: `{"category": "<one of seven>", "signals": [...]}`.
+If logs cannot be resolved, emit `{"status":"abort","reason":"<error message from fetch-logs.js>"}` and stop.
 
-The seven categories are: `lint`, `test-failure`, `type-error`, `build-error`, `dependency`, `infra`, `unknown` (R2).
+## Step 2: CLASSIFY — invoke the deterministic classifier
 
-## Step 3: PROPOSE OR APPLY (R3, R4, R9)
+Write the resolved log text to a temp file and pass that path to the classifier helper via `--logs-file` (there is no ambient `$LOGS` env var — the classifier only reads a file or stdin).
 
-Routing by category:
+```shell
+LOGS_FILE=<path-to-temp-file-holding-the-resolved-log-text>
+node "<PLUGIN_ROOT>/scripts/skill/verify-pipeline-sdlc-classify.js" --logs-file "$LOGS_FILE"
+```
 
-- **`lint`, `test-failure`, `type-error`**: Actionable. When `--auto` is set (R9), use the `Edit` tool to apply the minimal fix (R3): correct the lint violation, fix the failing assertion, add the missing import or correct the type annotation. Do NOT scaffold abstractions or refactor.
-- **`build-error`, `dependency`, `infra`**: Non-trivial. Emit a proposal regardless of `--auto` (R4) — these typically require human judgement.
-- **`unknown`**: fall through to `proposal` verdict with the raw log excerpt as `summary` (E3).
+When the log text is already on a pipe, drop the flag and let the classifier read stdin instead:
 
-When NOT running with `--auto`, ALWAYS emit a proposal (no automatic edits) regardless of category (R4, R9).
+```shell
+<producer-of-log-text> | node "<PLUGIN_ROOT>/scripts/skill/verify-pipeline-sdlc-classify.js"
+```
 
-C1 prohibition: never run `git commit`, `git push`, or any state-changing git command. C2: never modify files outside the project root.
+Prefer the `--logs-file` form for real CI logs: it avoids the shell quoting and here-string byte limits that can silently truncate a large excerpt.
 
-## Step 4: VERDICT — single JSON line on stdout (R5)
+> **Contract (Input/Output):**
+> - **Input**: Log text, via `--logs-file <path>` or — when the flag is omitted — via stdin.
+> - **Output**: Prints the JSON verdict on stdout. Always exits 0: an unreadable `--logs-file` or an internal error still prints `{"category":"unknown","signals":[],"routingBucket":"always-proposal"}` with a diagnostic on stderr, so classification is never a hard gate.
+
+Read the JSON verdict on stdout: `{"category": "<lint|test-failure|type-error|build-error|dependency|infra|unknown>", "signals": [...], "routingBucket": "<actionable|always-proposal>"}`.
+
+## Step 3: PROPOSE OR APPLY
+
+Route by the `routingBucket` field:
+
+- **`actionable`** (`lint`, `test-failure`, `type-error`) with `--auto` set: use the `Edit` tool to apply the minimal fix — correct the lint violation, fix the failing assertion, add the missing import, or correct the type annotation. Do NOT scaffold abstractions or refactor.
+- **Everything else** — `always-proposal` categories (`build-error`, `dependency`, `infra`), or `actionable` without `--auto`: emit a proposal, no edits.
+- **`unknown`** — falls through to `proposal` verdict **with the raw log excerpt as `summary`**: the classifier could not identify a category, so there is no diagnosis to summarize beyond the excerpt itself.
+
+Constraints: never run `git commit`, `git push`, or any state-changing git command; never modify files outside the project root.
+
+## Step 4: VERDICT — single JSON line on stdout
 
 Emit exactly one of:
 
@@ -74,7 +86,7 @@ The single JSON line is the contract with the parent dispatcher (ship-sdlc) — 
 
 ## What's Next
 
-When `fix-applied`: ship-sdlc's verify-pipeline branch dispatches `commit-sdlc` to commit and push the fix, then re-polls CI (R7 — this skill MUST NOT commit itself).
+When `fix-applied`: ship-sdlc's verify-pipeline branch dispatches `commit-sdlc` to commit and push the fix, then re-polls CI. This skill MUST NOT commit itself.
 
 When `proposal`: the user (interactive) or ship-sdlc (logging) reads the proposal and decides whether to apply.
 

@@ -18,6 +18,8 @@ const fs   = require('node:fs');
 const os   = require('node:os');
 const path = require('node:path');
 
+const { HOUR_MS, DAY_MS } = require('../scripts/lib/time-constants');
+
 const pluginRoot = path.resolve(__dirname, '..');
 
 // ---------------------------------------------------------------------------
@@ -165,11 +167,11 @@ try {
     const { resolveSdlcRoot } = require('../scripts/lib/config');
     recoveryDir = path.join(resolveSdlcRoot(), '.sdlc', 'execution');
     // Fallback when state lib is unreachable — match the canonical TTL.
-    maxAgeMs = 60 * 60 * 1000;
+    maxAgeMs = HOUR_MS;
   }
   // Defensive: if the lib returned something unexpected, fall back to 1h.
   if (typeof maxAgeMs !== 'number' || !Number.isFinite(maxAgeMs) || maxAgeMs <= 0) {
-    maxAgeMs = 60 * 60 * 1000;
+    maxAgeMs = HOUR_MS;
   }
 
   // Per-branch recovery file (issue #256). Read only the file matching the
@@ -215,7 +217,7 @@ try {
   // unlink never fired (JSON parse error, permission failure, session kill, etc.).
   // The sweep threshold (24h) is an order of magnitude beyond the freshness gate
   // (1h), so the sweep cannot delete a file the consume path above would still want.
-  const staleThresholdMs = 24 * 60 * 60 * 1000; // 24 hours
+  const staleThresholdMs = DAY_MS;
   try {
     const sweepEntries = fs.readdirSync(recoveryDir);
     for (const entry of sweepEntries) {
@@ -405,7 +407,7 @@ try {
     if (!lastUpdated) continue;
 
     const ageMs = Date.now() - new Date(lastUpdated).getTime();
-    const ageHours = ageMs / (1000 * 60 * 60);
+    const ageHours = ageMs / HOUR_MS;
 
     let ageDisplay;
     if (ageHours < 1) {

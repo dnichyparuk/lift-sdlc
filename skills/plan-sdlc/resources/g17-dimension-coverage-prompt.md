@@ -4,7 +4,7 @@ Use this template in plan-sdlc Step 3 when dispatching the G17 Dimension Coverag
 
 **Purpose:** Detect coverage gaps in the active review-dimension catalog and in the Copilot mirror at `.github/instructions/`, given a finalized plan file. Emit structured findings for Step 4 to splice as a `## Suggested Review Dimensions` advisory block.
 
-**Model:** gemini-3.5-flash-medium (from `g17Dispatch.model` in prepare output — do NOT hardcode)
+**Model:** gemini-3.8-flash-medium (from `g17Dispatch.model` in prepare output — do NOT hardcode)
 
 **Dispatch parameters (from prepare output — `agent-dispatch-script-driven` guardrail):**
 - `subagent_type`: `g17Dispatch.subagentType`
@@ -68,7 +68,7 @@ Task tool (general-purpose):
     using minimatch glob semantics. Record which dimensions have ≥1 matching path
     (covered) and which have no match (uncovered paths).
 
-    ### Step E — Evaluate CREATE criteria (C1–C6)
+    ### Step E — Evaluate CREATE criteria
 
     Apply these criteria to uncovered paths (paths that matched no dimension trigger):
 
@@ -204,7 +204,7 @@ After the subagent returns, in main context:
    ```
    ## YYYY-MM-DD — plan-sdlc: G17 dispatch failed — <error summary>
    ```
-   Continue to Step 4. Never block plan finalization on a G17 fault (R31).
+   Continue to Step 4. Never block plan finalization on a G17 fault.
 4. Ensure G17 has returned and `g17Findings` is populated **before** writing the `critiqueRan` marker.
 
 ## Template Variable Reference

@@ -157,7 +157,7 @@ function main() {
   if (hasFailureText && hasFromIssue) {
     const msg = '--failure-text and --from-issue are mutually exclusive — provide one or the other, not both';
     process.stderr.write(`harden-prepare: ${msg}\n`);
-    writeOutput({ errors: [msg], warnings: [] }, 'sdlc-harden', 2);
+    writeOutput({ errors: [msg], warnings: [] }, 'sdlc-harden', 1);
     return;
   }
 

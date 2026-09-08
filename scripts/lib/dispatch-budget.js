@@ -17,7 +17,7 @@
 // Antigravity 4 family: all models have 200K token input limit.
 // ---------------------------------------------------------------------------
 const MODEL_MAX_INPUT_BYTES = {
-  'gemini-3.5-flash': Math.floor(1_000_000 * 4 * 0.75),
+  'gemini-3.8-flash': Math.floor(1_000_000 * 4 * 0.75),
   'gemini-3.1-pro': Math.floor(1_000_000 * 4 * 0.75), // all models share 1M token window
 };
 
@@ -56,7 +56,7 @@ function staticCap(totalRemainingTasks) {
  * @param {number}   opts.guardrailsBytes           - bytes for rendered guardrails block
  * @param {number[]} opts.perTaskFactSheetBytes      - array of fact-sheet sizes, one per candidate task
  * @param {number}   opts.priorWaveContextBytes      - bytes for prior-wave context summary
- * @param {string}   opts.model                     - "haiku" | "sonnet" | "opus"
+ * @param {string}   opts.model                     - "gemini-3.8-flash" | "gemini-3.1-pro"
  * @param {number}   [opts.modelMaxInputBytes]       - override model limit (for testing)
  * @param {number}   [opts.totalRemainingTasks]      - used for static-cap lookup (default: perTaskFactSheetBytes.length)
  *
@@ -67,14 +67,14 @@ function computeWaveBudget({
   guardrailsBytes = 0,
   perTaskFactSheetBytes = [],
   priorWaveContextBytes = 0,
-  model = 'gemini-3.5-flash',
+  model = 'gemini-3.8-flash',
   modelMaxInputBytes: modelMaxInputBytesOverride,
   totalRemainingTasks,
 }) {
   const baseModel = model.replace(/-(low|medium|high)$/, '');
   const maxInputBytes = modelMaxInputBytesOverride != null
     ? modelMaxInputBytesOverride
-    : (MODEL_MAX_INPUT_BYTES[baseModel] || MODEL_MAX_INPUT_BYTES['gemini-3.5-flash']);
+    : (MODEL_MAX_INPUT_BYTES[baseModel] || MODEL_MAX_INPUT_BYTES['gemini-3.8-flash']);
 
   const numCandidates = perTaskFactSheetBytes.length;
   const totalRemaining = totalRemainingTasks != null ? totalRemainingTasks : numCandidates;

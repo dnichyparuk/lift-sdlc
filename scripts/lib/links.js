@@ -35,8 +35,8 @@
  *   exit 0 if ok, 1 if violations.
  */
 
-const { execFileSync } = require('child_process');
-const { readFileSync } = require('fs');
+const { execFileSync } = require('node:child_process');
+const { readFileSync } = require('node:fs');
 
 let parseRemoteOwner;
 try {
@@ -186,8 +186,8 @@ function discoverJiraSiteFromCache() {
   // Returns { site: <hostname>|null, ambiguous: boolean }
   const home = process.env.HOME;
   if (!home) return { site: null, ambiguous: false };
-  const path = require('path');
-  const fs = require('fs');
+  const path = require('node:path');
+  const fs = require('node:fs');
   const dir = path.join(home, '.sdlc-cache', 'jira');
   let entries;
   try {

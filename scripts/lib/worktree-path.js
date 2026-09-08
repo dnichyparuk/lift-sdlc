@@ -8,8 +8,8 @@
  * Zero npm dependencies — Node.js built-ins only.
  */
 
-const path = require('path');
-const os   = require('os');
+const path = require('node:path');
+const os   = require('node:os');
 
 // ---------------------------------------------------------------------------
 // Name template resolution

@@ -233,4 +233,4 @@ When `/ship-sdlc` is invoked while plan mode is active, Step 0 calls `skill/ship
 
 The `planModeBlocked` flag does NOT appear in the state file — it is an annotation in the prepare output only, telling SKILL.md what happened.
 
-On the user's next `/ship-sdlc` invocation (after exiting plan mode), `detectResumeState` finds the state file by branch slug and sets `flags.implicitResume = true`. The pipeline resumes from the first pending step with the originally-resolved `flags` snapshot (including `bump`, `steps`, etc.). (Fixes #400.)
+On the user's next `/ship-sdlc` invocation (after exiting plan mode), `detectResumeState` finds the state file by branch slug and sets `flags.implicitResume = true`. The pipeline resumes from the first pending step with the originally-resolved `flags` snapshot (including `bump`, `steps`, etc.).

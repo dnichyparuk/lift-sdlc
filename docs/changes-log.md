@@ -16,19 +16,19 @@ Previously, the plugin dynamically calculated byte budgets using `compute_contex
 - **`dispatch-budget.js`**: Removed the `contextSuffix` calculation and return. The utility now purely computes wave-size caps without modifying the target execution model.
 
 #### 2. Static Routing in `ship-sdlc` Pipeline
-Replaced generic `gemini-3.5-flash` base model placeholders in `ship.js` with explicitly appended static suffixes that define the reasoning depth natively required per step:
+Replaced generic `gemini-3.8-flash` base model placeholders in `ship.js` with explicitly appended static suffixes that define the reasoning depth natively required per step:
 - **`gemini-3.1-pro-low`**: `execute` (requires pro logic for DAG sorting, but skips extended thinking loops to minimize orchestration latency)
-- **`gemini-3.5-flash-medium`**: `review`, `received-review` (needs moderate reasoning budget to analyze requirements and guardrails)
-- **`gemini-3.5-flash-low`**: `commit`, `commit-fixes`, `version`, `pr`, `cleanup`, `archive-openspec`, `learnings-commit` (simple tasks requiring maximum speed).
+- **`gemini-3.8-flash-medium`**: `review`, `received-review` (needs moderate reasoning budget to analyze requirements and guardrails)
+- **`gemini-3.8-flash-low`**: `commit`, `commit-fixes`, `version`, `pr`, `cleanup`, `archive-openspec`, `learnings-commit` (simple tasks requiring maximum speed).
 
 #### 3. Static Routing in `plan-sdlc` Subagents
 Assigned static logic depths to `plan.js` critique subagents previously sharing a generic base flash model:
-- **`gemini-3.5-flash-medium`**: Applied to `content-coverage`, `guardrail-compliance`, `dimension-coverage`, and all three `lensReviewers` (Architecture, Requirements, Risk).
-- **`gemini-3.5-flash-low`**: Applied to `static-structural` and `file-existence` checks.
+- **`gemini-3.8-flash-medium`**: Applied to `content-coverage`, `guardrail-compliance`, `dimension-coverage`, and all three `lensReviewers` (Architecture, Requirements, Risk).
+- **`gemini-3.8-flash-low`**: Applied to `static-structural` and `file-existence` checks.
 
-- **Orchestrator Lock:** Permanently locked the `wave-runner` orchestrator Agent to `gemini-3.5-flash-low`. It performs mechanical string parsing and looping, and thus never needs deep reasoning loops.
+- **Orchestrator Lock:** Permanently locked the `wave-runner` orchestrator Agent to `gemini-3.8-flash-low`. It performs mechanical string parsing and looping, and thus never needs deep reasoning loops.
 - **Worker Suffix Presets:** Attached explicit reasoning suffixes directly to the workers in the Model Presets table to match the Quality presets (`-low`, `-medium`, `-high`), forming a perfect continuum of cost vs capability.
-- **Dynamic Retry Escalation:** Per-task retries now actively escalate the reasoning budget before escalating the model architecture. (e.g., `gemini-3.5-flash-medium` -> `gemini-3.5-flash-high` -> `gemini-3.1-pro-low`).
+- **Dynamic Retry Escalation:** Per-task retries now actively escalate the reasoning budget before escalating the model architecture. (e.g., `gemini-3.8-flash-medium` -> `gemini-3.8-flash-high` -> `gemini-3.1-pro-low`).
 
 #### 5. Documentation Upgrades
 - **`docs/model-references.md`**: Updated the Inventory Mapping table to replace "Bypasses dynamic suffix" with "Uses static suffixes assigned in ship.js" and updated default pipeline mappings.

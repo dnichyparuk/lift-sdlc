@@ -152,15 +152,15 @@ Rather than using a single model for all tasks, the plugin utilizes **quality-ti
 ### A. Quality Presets
 The `--quality` flag (provided in `ship-sdlc` or `execute-plan-sdlc`) configures the routing engine as follows:
 
-1. **`minimal` (Speed):** Forces `gemini-3.5-flash` for all tasks (assigning `-medium` for standard and `-high` for complex), bypassing pro models and compliance checks. Ideal for simple refactors or fast iterations.
-2. **`balanced` (Default):** Dynamically assigns tasks. Trivial/standard tasks are routed to `gemini-3.5-flash-medium`, while architectural design or complex failures escalate to `gemini-3.1-pro-low`.
+1. **`minimal` (Speed):** Forces `gemini-3.8-flash` for all tasks (assigning `-medium` for standard and `-high` for complex), bypassing pro models and compliance checks. Ideal for simple refactors or fast iterations.
+2. **`balanced` (Default):** Dynamically assigns tasks. Trivial/standard tasks are routed to `gemini-3.8-flash-medium`, while architectural design or complex failures escalate to `gemini-3.1-pro-low`.
 3. **`full` (Quality):** Forces `gemini-3.1-pro` for all non-trivial tasks (`-low` for standard, `-high` for complex), enabling spec compliance audits and deeper critique steps.
 
 ### B. Reasoning Budget Suffixing
 For agent dispatches, computational reasoning limits are assigned statically via hardcoded suffixes appended to the target model identifier:
-* **`-low`:** Minimizes latency and costs by skipping extended reasoning loops (e.g., `gemini-3.5-flash-low`). Permanently mapped to orchestrators (like `wave-runner` and `error-report-orchestrator`), simple extractors, and fast mechanical validators.
-* **`-medium`:** Balanced reasoning depth and cost optimization (e.g., `gemini-3.5-flash-medium`). Mapped to workers executing standard, multi-file code generation.
-* **`-high`:** Allocates maximum dynamic reasoning and computation steps (e.g., `gemini-3.5-flash-high` or `gemini-3.1-pro-high`). Reserved strictly for workers executing ambiguous, high-stakes architectural tasks and complex coding/review.
+* **`-low`:** Minimizes latency and costs by skipping extended reasoning loops (e.g., `gemini-3.8-flash-low`). Permanently mapped to orchestrators (like `wave-runner` and `error-report-orchestrator`), simple extractors, and fast mechanical validators.
+* **`-medium`:** Balanced reasoning depth and cost optimization (e.g., `gemini-3.8-flash-medium`). Mapped to workers executing standard, multi-file code generation.
+* **`-high`:** Allocates maximum dynamic reasoning and computation steps (e.g., `gemini-3.8-flash-high` or `gemini-3.1-pro-high`). Reserved strictly for workers executing ambiguous, high-stakes architectural tasks and complex coding/review.
 
 *Note: Per-task workers dynamically inherit reasoning suffixes through the Model Presets, while orchestrators are permanently locked to `-low` or `-medium` budgets since they only perform mechanical string parsing and routing.*
 
@@ -168,26 +168,26 @@ For agent dispatches, computational reasoning limits are assigned statically via
 
 | File Type | Component / Prompt | Target Model | Reasoning Allocation & Rationale |
 |---|---|---|---|
-| **Skill** | `harden-sdlc` | `gemini-3.5-flash-high` | High cognitive context for error analysis |
-| **Skill** | `error-report-sdlc` | `gemini-3.5-flash-medium` | Standard routing, formats error reports |
-| **Skill** | `commit-sdlc` | `gemini-3.5-flash-medium` | Standard routine parsing and generation |
-| **Skill** | `ship-sdlc` (Explicit dispatch) | `gemini-3.5-flash-medium` / `-high` | Uses static suffixes assigned in ship.js |
-| **Skill** | `ship-sdlc` (Default pipeline) | `gemini-3.5-flash-medium` | State-machine orchestrator |
-| **Skill** | `plan-sdlc` | `gemini-3.5-flash-medium` | Orchestrator routing and check logic |
-| **Agent** | `error-report-orchestrator` | `gemini-3.5-flash-low` | Structured markdown parser. |
-| **Agent** | `harden-orchestrator` | `gemini-3.5-flash-low` | Structured JSON classification output. |
-| **Agent** | `commit-orchestrator` | `gemini-3.5-flash-low` | Subject & body construction under 72 chars. |
-| **Agent** | `plan-explore-orchestrator` | `gemini-3.5-flash-low` | Initial scoping agent. |
-| **Agent** | `review-orchestrator` | `gemini-3.5-flash-low` | Diff-gathering coordination. |
-| **Agent** | `wave-runner` | `gemini-3.5-flash-low` | Strict string parser & orchestrator loop. |
-| **Prompt** | `lane-static-structural` | `gemini-3.5-flash-low` | Basic structural verification checks. |
-| **Prompt** | `lens-requirements` | `gemini-3.5-flash-medium` | Balanced reasoning for deep requirements analysis. |
-| **Prompt** | `lane-guardrail-compliance` | `gemini-3.5-flash-medium` | Evaluates requirements against project-specific rule lists. |
-| **Prompt** | `lens-risk` | `gemini-3.5-flash-medium` | Balanced reasoning for risk analysis. |
-| **Prompt** | `lens-architecture` | `gemini-3.5-flash-medium` | Architecture dependency tracer. |
-| **Prompt** | `g17-dimension-coverage` | `gemini-3.5-flash-medium` | Custom dimensions analyzer. |
-| **Prompt** | `lane-file-existence` | `gemini-3.5-flash-low` | Basic filepath existence checks. |
-| **Prompt** | `lane-content-coverage` | `gemini-3.5-flash-medium` | Code content checklist coverage analyzer. |
+| **Skill** | `harden-sdlc` | `gemini-3.8-flash-high` | High cognitive context for error analysis |
+| **Skill** | `error-report-sdlc` | `gemini-3.8-flash-medium` | Standard routing, formats error reports |
+| **Skill** | `commit-sdlc` | `gemini-3.8-flash-medium` | Standard routine parsing and generation |
+| **Skill** | `ship-sdlc` (Explicit dispatch) | `gemini-3.8-flash-medium` / `-high` | Uses static suffixes assigned in ship.js |
+| **Skill** | `ship-sdlc` (Default pipeline) | `gemini-3.8-flash-medium` | State-machine orchestrator |
+| **Skill** | `plan-sdlc` | `gemini-3.8-flash-medium` | Orchestrator routing and check logic |
+| **Agent** | `error-report-orchestrator` | `gemini-3.8-flash-low` | Structured markdown parser. |
+| **Agent** | `harden-orchestrator` | `gemini-3.8-flash-low` | Structured JSON classification output. |
+| **Agent** | `commit-orchestrator` | `gemini-3.8-flash-low` | Subject & body construction under 72 chars. |
+| **Agent** | `plan-explore-orchestrator` | `gemini-3.8-flash-low` | Initial scoping agent. |
+| **Agent** | `review-orchestrator` | `gemini-3.8-flash-low` | Diff-gathering coordination. |
+| **Agent** | `wave-runner` | `gemini-3.8-flash-low` | Strict string parser & orchestrator loop. |
+| **Prompt** | `lane-static-structural` | `gemini-3.8-flash-low` | Basic structural verification checks. |
+| **Prompt** | `lens-requirements` | `gemini-3.8-flash-medium` | Balanced reasoning for deep requirements analysis. |
+| **Prompt** | `lane-guardrail-compliance` | `gemini-3.8-flash-medium` | Evaluates requirements against project-specific rule lists. |
+| **Prompt** | `lens-risk` | `gemini-3.8-flash-medium` | Balanced reasoning for risk analysis. |
+| **Prompt** | `lens-architecture` | `gemini-3.8-flash-medium` | Architecture dependency tracer. |
+| **Prompt** | `g17-dimension-coverage` | `gemini-3.8-flash-medium` | Custom dimensions analyzer. |
+| **Prompt** | `lane-file-existence` | `gemini-3.8-flash-low` | Basic filepath existence checks. |
+| **Prompt** | `lane-content-coverage` | `gemini-3.8-flash-medium` | Code content checklist coverage analyzer. |
 
 ---
 
@@ -218,7 +218,7 @@ Since conversation history is regularly compacted by the IDE sandbox to save tok
 Parallel worker dispatches (such as fanning out 5 plan lanes or multiple review dimensions) are gated by a context-budget calculator in [dispatch-budget.js](scripts/lib/dispatch-budget.js).
 
 1. **Input Budget Allocation:** The engine reserves **75%** of the model's total context window for inputs (e.g., templates, guardrails, diffs, logs), leaving **25%** for reasoning output space.
-   * `gemini-3.5-flash` and `gemini-3.1-pro` variants context ceiling: 1M tokens (~3MB) (all models uniformly share the same window)
+   * `gemini-3.8-flash` and `gemini-3.1-pro` variants context ceiling: 1M tokens (~3MB) (all models uniformly share the same window)
 2. **Task Pack Algorithm:** Candidate tasks are sorted by their fact-sheet sizes in ascending order. The budget calculator packs tasks until the byte budget is consumed or the static concurrency limits are reached.
 3. **Static Concurrency Caps:** To prevent API rate-limit errors and excessive parallel overhead, a progressive cap system is enforced:
 

@@ -576,7 +576,7 @@ function main() {
   const pr = !isLocalScope ? fetchPrMetadata() : { exists: false };
 
   const reviewSection = readSection(projectRoot, 'review') || {};
-  const configuredModel = reviewSection.subagent_model || 'gemini-3.5-flash-medium';
+  const configuredModel = reviewSection.subagent_model || 'gemini-3.8-flash-medium';
 
   const manifest = {
     version:        1,

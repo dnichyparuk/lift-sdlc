@@ -7,10 +7,12 @@
  *   - $TMPDIR/jira-sdlc/critique-<hash>.json   (R20 critique block)
  *   - $TMPDIR/jira-sdlc/approval-<hash>.token  (R17 approval grant)
  *
- * The PreToolUse hook re-derives <hash> from `tool_input` and verifies
- * both files exist with matching mtime < TTL_MS, then consumes (deletes)
- * them on success. Atomic writes (tmp+rename) so the hook never reads a
- * partial file.
+ * Before dispatching a write MCP call, the LLM re-derives <hash> from the
+ * final `tool_input` and verifies both files exist with mtime < TTL_MS, then
+ * consumes (deletes) them on success. There is no hook backstop —
+ * `hooks/pre-tool-jira-write-guard.js` does not exist and is not registered in
+ * `hooks.json`; this check is the skill's own (see SKILL.md Step 3). Atomic
+ * writes (tmp+rename) so a reader never sees a partial file.
  */
 
 const fs = require('fs');
@@ -21,10 +23,10 @@ const crypto = require('crypto');
 const TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Canonicalize tmpdir once at module load to resolve macOS symlinks
-// (`/var/folders/...` → `/private/var/folders/...`). Both writers (skill)
-// and readers (PreToolUse hook) inherit the same canonical base, so the
-// hook can reliably locate artifacts written by the skill regardless of
-// which symlink form `os.tmpdir()` returned at process start.
+// (`/var/folders/...` → `/private/var/folders/...`). Writers and readers are
+// both the skill itself, so they inherit the same canonical base and can
+// reliably locate artifacts regardless of which symlink form `os.tmpdir()`
+// returned at process start.
 const TMPDIR_REAL = fs.realpathSync(os.tmpdir());
 
 function storeDir() {

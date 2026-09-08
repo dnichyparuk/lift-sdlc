@@ -2,7 +2,7 @@
 name: plan-explore-orchestrator
 description: Dispatches parallel dynamic-dimension discovery for plan-sdlc; derives 3–7 task-specific dimensions, fans out code/web/hybrid subagents, critiques findings, and produces discovery-brief.md
 tools: Read, Write, Glob, Grep, Bash, Agent, WebSearch, WebFetch
-model: gemini-3.5-flash-low
+model: gemini-3.8-flash-low
 ---
 
 # Plan Explore Orchestrator
@@ -45,7 +45,7 @@ Read `MANIFEST_FILE`. Extract:
     "description": "One sentence describing what this dimension explores",
     "files": ["path/relative/to/project/root.ts"],
     "mode": "code | web | hybrid",
-    "model": "gemini-3.5-flash-low | gemini-3.5-flash-medium | gemini-3.1-pro-low"
+    "model": "gemini-3.8-flash-low | gemini-3.8-flash-medium | gemini-3.1-pro-low"
   }
 ]
 ```
@@ -68,8 +68,8 @@ Read `MANIFEST_FILE`. Extract:
 - MUST NOT include any `web`/`hybrid` dimension when USER_PROMPT indicates pure internal refactor (rename/move/dead-code removal) AND `webResearchSignal: false`
 
 **Model assignment:**
-- `gemini-3.5-flash-low` — fast surface scan, file enumeration, simple pattern matching
-- `gemini-3.5-flash-medium` — moderate analysis requiring judgement, cross-file reasoning
+- `gemini-3.8-flash-low` — fast surface scan, file enumeration, simple pattern matching
+- `gemini-3.8-flash-medium` — moderate analysis requiring judgement, cross-file reasoning
 - `gemini-3.1-pro-low` — complex architectural analysis, deep integration tracing
 
 **Files array:** Populated from `scopeHintFiles` + your own judgement about which files are most relevant to each dimension. Empty array is valid when the dimension is exploratory (e.g., web research).

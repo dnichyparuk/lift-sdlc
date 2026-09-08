@@ -37,13 +37,13 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 
-const { exec, checkGitState, detectBaseBranch, parseRemoteOwner, probeGhAuth, formatAccountMismatch, probeRepoAccess, formatAccessDenied } = require(path.join(LIB, 'git'));
+const { getDiffStat, exec, checkGitState, detectBaseBranch, parseRemoteOwner, probeGhAuth, formatAccountMismatch, probeRepoAccess, formatAccessDenied } = require(path.join(LIB, 'git'));
 const { resolveMainWorktree, detectResumeState: detectResumeStateLib, readState, slugifyBranch } = require(path.join(LIB, 'state'));
 const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
 const { writeOutput } = require(path.join(LIB, 'output'));
@@ -439,7 +439,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'execute',
       skill: 'execute-plan-sdlc',
-      model: 'gemini-3.5-flash-medium',
+      model: 'gemini-3.8-flash-medium',
       status: (!flags.hasPlan || !isIn('execute')) ? 'skipped' : 'will_run',
       skipSource: !flags.hasPlan && isIn('execute')
         ? 'none'
@@ -474,7 +474,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'commit',
       skill: 'commit-sdlc',
-      model: 'gemini-3.5-flash-medium',
+      model: 'gemini-3.8-flash-medium',
       status: isIn('commit') ? 'will_run' : 'skipped',
       skipSource: skipSource('commit'),
       args: [
@@ -489,7 +489,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'review',
       skill: 'review-sdlc',
-      model: 'gemini-3.5-flash-medium',
+      model: 'gemini-3.8-flash-medium',
       status: isIn('review') ? 'will_run' : 'skipped',
       skipSource: skipSource('review'),
       args: '--committed',
@@ -501,7 +501,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'received-review',
       skill: 'received-review-sdlc',
-      model: 'gemini-3.5-flash-high',
+      model: 'gemini-3.8-flash-high',
       status: 'conditional',
       skipSource: 'none',
       args: flags.auto ? '--auto' : '',
@@ -513,7 +513,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'commit-fixes',
       skill: 'commit-sdlc',
-      model: 'gemini-3.5-flash-medium',
+      model: 'gemini-3.8-flash-medium',
       status: 'conditional',
       skipSource: 'none',
       args: [
@@ -528,7 +528,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'version',
       skill: 'version-sdlc',
-      model: 'gemini-3.5-flash-medium',
+      model: 'gemini-3.8-flash-medium',
       status: (!isIn('version') || flags.workspace === 'worktree') ? 'skipped' : 'will_run',
       skipSource: !isIn('version')
         ? skipSource('version')
@@ -563,7 +563,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
         return {
           name: 'archive-openspec',
           skill: null,
-          model: 'gemini-3.5-flash-medium',
+          model: 'gemini-3.8-flash-medium',
           status: 'skipped',
           skipSource: skipSource('archive-openspec'),
           args: '',
@@ -577,7 +577,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
         return {
           name: 'archive-openspec',
           skill: null,
-          model: 'gemini-3.5-flash-medium',
+          model: 'gemini-3.8-flash-medium',
           status: 'skipped',
           skipSource: 'condition',
           args: '',
@@ -592,7 +592,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
       return {
         name: 'archive-openspec',
         skill: null,
-        model: 'gemini-3.5-flash-medium',
+        model: 'gemini-3.8-flash-medium',
         status: 'conditional',
         skipSource: 'none',
         args: `--change ${changeName}${flags.auto ? ' --auto' : ''}`,
@@ -605,7 +605,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'pr',
       skill: 'pr-sdlc',
-      model: 'gemini-3.5-flash-high',
+      model: 'gemini-3.8-flash-high',
       status: isIn('pr') ? 'will_run' : 'skipped',
       skipSource: skipSource('pr'),
       args: [
@@ -720,7 +720,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
       // orchestrator runs inline (see ship-sdlc SKILL.md). The model field
       // is unused but kept for table-rendering consistency.
       skill: null,
-      model: 'gemini-3.5-flash-medium',
+      model: 'gemini-3.8-flash-medium',
       status: isIn('learnings-commit') ? 'will_run' : 'skipped',
       skipSource: skipSource('learnings-commit'),
       args: '',
@@ -753,7 +753,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
   steps.push({
     name: 'cleanup',
     skill: null,
-    model: 'gemini-3.5-flash-medium',
+    model: 'gemini-3.8-flash-medium',
     status: 'will_run',
     skipSource: 'none',
     args: '',
@@ -1434,7 +1434,25 @@ function main() {
   };
 
   // Exit with 1 if there are fatal errors, 0 otherwise
+  
+  let lowComplexity = false;
+  try {
+    const stat = getDiffStat(defaultBranch, projectRoot);
+    if (stat) {
+      const matchFiles = stat.match(/(\d+) files? changed/);
+      const matchIns = stat.match(/(\d+) insertions?/);
+      const matchDel = stat.match(/(\d+) deletions?/);
+      const filesChanged = parseInt(matchFiles ? matchFiles[1] : 0, 10);
+      const insertions = parseInt(matchIns ? matchIns[1] : 0, 10);
+      const deletions = parseInt(matchDel ? matchDel[1] : 0, 10);
+      if (filesChanged === 1 && (insertions + deletions) < 15) {
+        lowComplexity = true;
+      }
+    }
+  } catch (e) { /* diff stat unavailable — leave lowComplexity at its default */ }
+  result.lowComplexity = lowComplexity;
   const exitCode = errors.length > 0 ? 1 : 0;
+  
   writeOutput(result, 'ship-prepare', exitCode);
 }
 

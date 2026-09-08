@@ -35,6 +35,10 @@
 
 const DEFAULT_DIFF_MAX_BYTES = 8000;
 
+const LOCKFILE_NAMES = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'];
+const LOCKFILE_EXCLUDED_MARKER = '# [LOCKFILE EXCLUDED - SEE --STAT SUMMARY]';
+const DIFF_ELLIPSIS = ' ...';
+
 /**
  * File-aware diff truncation. The caller MUST inject
  * `splitDiffByFile(diff) -> Map<filePath, chunkText>` (typically
@@ -64,9 +68,64 @@ function truncateDiff(fullDiff, { splitDiffByFile, maxBytes = DEFAULT_DIFF_MAX_B
 
   const fileChunks = splitDiffByFile(fullDiff);
 
-  // Guard: if diff doesn't parse into files, return original unchanged
+  // Guard: if the diff doesn't parse into per-file chunks, return the original
+  // unchanged. Must run before any code below derives `currentDiff` from
+  // `fileChunks` — an empty Map joins to `''`, which is `<= maxBytes` and would
+  // otherwise trigger an early return of an empty diff instead of this fallback.
   if (fileChunks.size === 0) {
     return { diff: fullDiff, diffTruncated: false, truncatedFiles: [] };
+  }
+
+  // 1. Lockfile Exclusions
+  let lockfilesExcluded = false;
+  for (const [filePath, chunk] of fileChunks.entries()) {
+    if (LOCKFILE_NAMES.some(name => filePath.endsWith(name))) {
+      fileChunks.set(filePath, `diff --git a/${filePath} b/${filePath}\n${LOCKFILE_EXCLUDED_MARKER}`);
+      lockfilesExcluded = true;
+    }
+  }
+
+  let currentDiff = Array.from(fileChunks.values()).join('');
+  if (currentDiff.length <= maxBytes) {
+    return { diff: currentDiff, diffTruncated: lockfilesExcluded, truncatedFiles: [] };
+  }
+
+  // 2. Diff-Hunk Budgeting (Context Reduction - pseudo -U1)
+  let contextReduced = false;
+  for (const [filePath, chunk] of fileChunks.entries()) {
+    if (chunk.includes(LOCKFILE_EXCLUDED_MARKER)) continue;
+    
+    const lines = chunk.split('\n');
+    const reducedLines = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.startsWith(' ') && !line.startsWith(' +') && !line.startsWith(' -')) {
+        // Unchanged line
+        const prev = i > 0 ? lines[i-1] : '';
+        const next = i < lines.length - 1 ? lines[i+1] : '';
+        const prevIsChange = prev.startsWith('+') || prev.startsWith('-');
+        const nextIsChange = next.startsWith('+') || next.startsWith('-');
+        const isHeader = prev.startsWith('@@') || next.startsWith('@@');
+        
+        if (prevIsChange || nextIsChange || isHeader) {
+          reducedLines.push(line);
+        } else if (reducedLines.length > 0 && reducedLines[reducedLines.length - 1] !== DIFF_ELLIPSIS) {
+          reducedLines.push(DIFF_ELLIPSIS);
+        }
+      } else {
+        reducedLines.push(line);
+      }
+    }
+    const reducedChunk = reducedLines.join('\n');
+    if (reducedChunk.length < chunk.length) {
+      fileChunks.set(filePath, reducedChunk);
+      contextReduced = true;
+    }
+  }
+
+  currentDiff = Array.from(fileChunks.values()).join('');
+  if (currentDiff.length <= maxBytes) {
+    return { diff: currentDiff, diffTruncated: true, truncatedFiles: [] };
   }
 
   // Sort descending by chunk size (largest first — most signal)
