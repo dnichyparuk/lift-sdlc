@@ -152,8 +152,8 @@ Rather than using a single model for all tasks, the plugin utilizes **quality-ti
 ### A. Quality Presets
 The `--quality` flag (provided in `ship-sdlc` or `execute-plan-sdlc`) configures the routing engine as follows:
 
-1. **`minimal` (Speed):** Forces `gemini-3.8-flash` for all tasks (assigning `-medium` for standard and `-high` for complex), bypassing pro models and compliance checks. Ideal for simple refactors or fast iterations.
-2. **`balanced` (Default):** Dynamically assigns tasks. Trivial/standard tasks are routed to `gemini-3.8-flash-medium`, while architectural design or complex failures escalate to `gemini-3.1-pro-low`.
+1. **`minimal` (Speed):** Forces `gemini-3.8-flash` for all tasks (assigning `-medium` for standard and `-high` for complex), bypassing pro models and compliance checks. Ideal for simple refactors or fast iterations (100% Flash).
+2. **`balanced` (Default — Hybrid):** Uses hybrid routing (*Flash Hands, Pro Brain & Eyes*). Trivial/standard tasks run on `gemini-3.8-flash-low`/`-medium`, complex tasks run on `gemini-3.8-flash-high` with automatic escalation to `gemini-3.1-pro-low` upon failure. High-level planning and critical review dimensions leverage Gemini Pro.
 3. **`full` (Quality):** Forces `gemini-3.1-pro` for all non-trivial tasks (`-low` for standard, `-high` for complex), enabling spec compliance audits and deeper critique steps.
 
 ### B. Reasoning Budget Suffixing
@@ -178,6 +178,8 @@ For agent dispatches, computational reasoning limits are assigned statically via
 | **Agent** | `harden-orchestrator` | `gemini-3.8-flash-low` | Structured JSON classification output. |
 | **Agent** | `commit-orchestrator` | `gemini-3.8-flash-low` | Subject & body construction under 72 chars. |
 | **Agent** | `plan-explore-orchestrator` | `gemini-3.8-flash-low` | Initial scoping agent. |
+| **Agent** | `plan-execution-validator` | `gemini-3.8-flash-high` | Fast deterministic graph circularity & collision check. |
+| **Agent** | `plan-generation-orchestrator` | `gemini-3.1-pro-high` | Deep multi-wave architectural plan drafting. |
 | **Agent** | `review-orchestrator` | `gemini-3.8-flash-low` | Diff-gathering coordination. |
 | **Agent** | `wave-runner` | `gemini-3.8-flash-low` | Strict string parser & orchestrator loop. |
 | **Prompt** | `lane-static-structural` | `gemini-3.8-flash-low` | Basic structural verification checks. |

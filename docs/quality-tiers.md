@@ -23,7 +23,7 @@ There are three predefined quality tiers available:
 | Tier | Name | Dynamic Routing Behavior | Use Case |
 |---|---|---|---|
 | **`minimal`** | Speed | Forces `gemini-3.8-flash` for all tasks, but dynamically allocates reasoning budgets: `-low` (Trivial), `-medium` (Standard), `-high` (Complex). | Rapid prototyping, mechanical refactoring, or low-cost runs. |
-| **`balanced`** | Balanced (Default) | Matches model architecture and reasoning loop to task complexity. Trivial: `gemini-3.8-flash-medium`, Standard: `gemini-3.8-flash-high`, Complex: `gemini-3.1-pro-low`. | General day-to-day development. |
+| **`balanced`** | Balanced (Default — Hybrid) | Hybrid routing (*Flash Hands, Pro Brain & Eyes*). Trivial: `gemini-3.8-flash-low`, Standard: `gemini-3.8-flash-medium`, Complex: `gemini-3.8-flash-high` (auto-escalates to `gemini-3.1-pro-low` on verification failure). Security/architecture review on `gemini-3.1-pro-low`. | General day-to-day development with maximum throughput and automated Pro escalation. |
 | **`full`** | Quality | Forces `gemini-3.1-pro` for non-trivial tasks (`-low` for Standard, `-high` for Complex) and routes Trivial to `gemini-3.8-flash-medium`. Runs a spec-compliance review. | Critical code paths, production deployments, or complex features requiring maximum reasoning capability. |
 
 ---

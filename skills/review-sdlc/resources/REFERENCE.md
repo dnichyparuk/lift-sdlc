@@ -134,7 +134,7 @@ requires-full-diff: false   # OPTIONAL. Default: false. If true, subagent receiv
 | `severity` | No | string | `medium` | One of: `critical`, `high`, `medium`, `low`, `info` |
 | `max-files` | No | integer | `100` | Positive integer |
 | `requires-full-diff` | No | boolean | `false` | — |
-| `model` | No | string | `null` | One of: `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.1-pro-low`. Per-dimension model override; falls back to `manifest.subagent_model` when null. Antigravity-Code-only — Copilot transform omits it. |
+| `model` | No | string | `null` | One of: `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high`, `gemini-3.1-pro-low`, `gemini-3.1-pro-high`. Per-dimension model override; falls back to `manifest.subagent_model` when null. Antigravity-Code-only — Copilot transform omits it. |
 
 ### Body content
 

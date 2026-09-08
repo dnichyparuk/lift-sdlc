@@ -84,7 +84,7 @@ Read `./dimension-catalog.md` for dimension definitions. Propose dimensions matc
 - Distinguish `documentation-review` (docs presence/structure) from `documentation-quality-review` (docs content accuracy); flag if both are proposed
 - When `openspec/config.yaml` is detected, propose `spec-compliance-review` (high severity) — this dimension verifies that code changes satisfy the delta spec requirements from the active OpenSpec change. The dimension body should reference `openspec/changes/*/specs/` as the authoritative requirements source and include checklist items for: every ADDED requirement has corresponding implementation, every MODIFIED requirement's changes are reflected in code, no REMOVED requirements still have active code paths.
 
-For each proposed dimension, prepare: name (lowercase-hyphenated), description (one sentence, max 256 chars), why relevant (cite specific evidence), trigger patterns (match actual directory names), skip-when patterns, and a tailored body checklist.
+For each proposed dimension, prepare: name (lowercase-hyphenated), description (one sentence, max 256 chars), why relevant (cite specific evidence), trigger patterns (match actual directory names), skip-when patterns, model (per catalog: `gemini-3.1-pro-low` for security, architecture, contracts, migrations, and concurrency; `gemini-3.8-flash-medium` or `gemini-3.8-flash-low` for routine/docs), and a tailored body checklist.
 
 **Customization is mandatory** — reference the project's actual stack in the body (e.g., "Check SQLAlchemy ORM usage — avoid raw `session.execute()` with string concatenation", not just "avoid raw SQL").
 

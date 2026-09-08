@@ -1635,7 +1635,7 @@ openspec-task:
     const AGENTS_DATA = [
       { name: 'plan-explore-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/plan-explore-orchestrator.md', desc: 'Derives 3-7 discovery dimensions and dispatches parallel research subagents to produce discovery-brief.md.' },
       { name: 'plan-generation-orchestrator', type: 'Orchestrator', model: 'gemini-3.1-pro-high', source: 'agents/plan-generation-orchestrator.md', desc: 'Receives the exploration brief and drafts the structured implementation plan.' },
-      { name: 'plan-execution-validator', type: 'Orchestrator', model: 'gemini-3.1-pro-low', source: 'agents/plan-execution-validator.md', desc: 'Validates plan integrity (circular dependencies, file conflicts, wave risks).' },
+      { name: 'plan-execution-validator', type: 'Orchestrator', model: 'gemini-3.8-flash-high', source: 'agents/plan-execution-validator.md', desc: 'Validates plan integrity (circular dependencies, file conflicts, wave risks).' },
       { name: 'commit-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/commit-orchestrator.md', desc: 'Reads commit manifest, detects repository commit style, and generates a single commit message string.' },
       { name: 'review-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/review-orchestrator.md', desc: 'Multi-dimension review gatherer. Dispatches parallel subagents, deduplicates findings, and writes review-comment.md.' },
       { name: 'harden-orchestrator', type: 'Orchestrator', model: 'gemini-3.8-flash-low', source: 'agents/harden-orchestrator.md', desc: 'Classifies failure cause (user-code vs plugin-defect) and emits hardening proposals JSON.' },
