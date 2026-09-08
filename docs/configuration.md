@@ -88,9 +88,9 @@ To save plans to a folder within a specific project (such as inside the `.sdlc` 
 
 The plugin automatically creates the directory structure if it does not already exist.
 
-## Review & Execution Configuration (`.sdlc/config.json`)
+## Review & Execution Configuration (`.sdlc/local.json`)
 
-You can customize subagent defaults and review behavior on a per-workspace basis by creating or modifying `.sdlc/config.json` in your project root:
+You can customize subagent defaults and review behavior on a per-workspace basis by creating or modifying `.sdlc/local.json` in your project root (local-only settings ignored by git):
 
 ```json
 {
@@ -100,4 +100,4 @@ You can customize subagent defaults and review behavior on a per-workspace basis
 }
 ```
 
-- **`review.subagent_model`**: Sets the default model for `/review-sdlc` subagents when a review dimension does not explicitly specify a `model:` override in its YAML frontmatter.
+- **`review.subagent_model`**: Sets the default model for `/review-sdlc` subagents when a review dimension does not explicitly specify a `model:` override in its YAML frontmatter. Read from `.sdlc/local.json`.

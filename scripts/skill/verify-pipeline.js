@@ -226,4 +226,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { evaluateChecks, extractRunId };
+module.exports = { evaluateChecks, extractRunId, main };

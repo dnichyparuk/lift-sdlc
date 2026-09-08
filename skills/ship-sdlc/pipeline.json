@@ -1,0 +1,147 @@
+{
+  "pipeline": "ship-sdlc",
+  "version": 1,
+  "statePrefix": "ship",
+  "configSection": "ship",
+  "orchestratorModel": "gemini-3.8-flash-medium",
+  "prepareScript": "scripts/skill/ship.js",
+  "stateScript": "scripts/state/pipeline.js",
+  "steps": [
+    {
+      "id": "execute",
+      "skill": "execute-plan-sdlc",
+      "dispatchMode": "agent",
+      "defaultModel": "gemini-3.8-flash-medium",
+      "isolation": null,
+      "postGates": [
+        { "script": "scripts/util/verify-completeness.js", "args": "--state-file $STATE_FILE --plan-file $PLAN_FILE", "haltExitCode": 65 },
+        { "script": "scripts/util/ship-git-ops.js", "args": "stage-post-execute" }
+      ]
+    },
+    {
+      "id": "commit",
+      "skill": "commit-sdlc",
+      "dispatchMode": "agent",
+      "defaultModel": "gemini-3.8-flash-medium",
+      "isolation": null
+    },
+    {
+      "id": "review",
+      "skill": "review-sdlc",
+      "dispatchMode": "agent",
+      "defaultModel": "gemini-3.8-flash-medium",
+      "isolation": null
+    },
+    {
+      "id": "received-review",
+      "skill": "received-review-sdlc",
+      "dispatchMode": "agent",
+      "defaultModel": "gemini-3.8-flash-high",
+      "isolation": null,
+      "defaultStatus": "conditional",
+      "condition": "review.findings >= reviewThreshold"
+    },
+    {
+      "id": "commit-fixes",
+      "skill": "commit-sdlc",
+      "dispatchMode": "agent",
+      "defaultModel": "gemini-3.8-flash-medium",
+      "isolation": null,
+      "defaultStatus": "conditional",
+      "condition": "received-review made changes"
+    },
+    {
+      "id": "version",
+      "skill": "version-sdlc",
+      "dispatchMode": "agent",
+      "defaultModel": "gemini-3.8-flash-medium",
+      "isolation": null,
+      "postGates": [
+        { "script": "scripts/util/verify-ancestry.js", "args": "--new-tag $NEW_TAG --execute-branch $EXECUTE_BRANCH" }
+      ]
+    },
+    {
+      "id": "archive-openspec",
+      "skill": null,
+      "dispatchMode": null,
+      "defaultModel": "gemini-3.8-flash-medium",
+      "isolation": null,
+      "defaultStatus": "conditional",
+      "inlineHandler": "openspec-archive"
+    },
+    {
+      "id": "pr",
+      "skill": "pr-sdlc",
+      "dispatchMode": "agent",
+      "defaultModel": "gemini-3.8-flash-high",
+      "isolation": null
+    },
+    {
+      "id": "verify-pipeline",
+      "skill": null,
+      "dispatchMode": null,
+      "defaultModel": null,
+      "isolation": null,
+      "defaultStatus": "will_run",
+      "optIn": true,
+      "inlineHandler": "ci-polling",
+      "loop": {
+        "maxIterationsFlag": "verifyPipelineMaxIterations",
+        "defaultMaxIterations": 3,
+        "triggerCondition": "status === 'failed'",
+        "subDispatch": [
+          { "skill": "verify-pipeline-sdlc", "model": "gemini-3.8-flash-high" },
+          { "skill": "commit-sdlc", "model": "gemini-3.8-flash-medium", "condition": "fix-applied" }
+        ]
+      }
+    },
+    {
+      "id": "await-remote-review",
+      "skill": null,
+      "dispatchMode": null,
+      "defaultModel": null,
+      "isolation": null,
+      "defaultStatus": "will_run",
+      "optIn": true,
+      "inlineHandler": "remote-review-polling",
+      "loop": {
+        "triggerCondition": "status === 'actionable'",
+        "subDispatch": [
+          { "skill": "received-review-sdlc", "model": "gemini-3.8-flash-high" },
+          { "skill": "commit-sdlc", "model": "gemini-3.8-flash-medium", "condition": "changes-detected" }
+        ]
+      }
+    },
+    {
+      "id": "learnings-commit",
+      "skill": null,
+      "dispatchMode": null,
+      "defaultModel": "gemini-3.8-flash-medium",
+      "isolation": null,
+      "inlineHandler": "learnings"
+    },
+    {
+      "id": "cleanup",
+      "skill": null,
+      "dispatchMode": null,
+      "defaultModel": "gemini-3.8-flash-medium",
+      "isolation": null,
+      "reserved": true,
+      "inlineHandler": "cleanup"
+    }
+  ],
+  "canonicalSteps": [
+    "execute",
+    "commit",
+    "review",
+    "version",
+    "archive-openspec",
+    "pr",
+    "verify-pipeline",
+    "await-remote-review",
+    "learnings-commit"
+  ],
+  "reservedSteps": [
+    "cleanup"
+  ]
+}

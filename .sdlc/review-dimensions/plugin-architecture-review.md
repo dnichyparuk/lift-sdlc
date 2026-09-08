@@ -13,8 +13,8 @@ model: gemini-3.1-pro-high
 # Plugin Architecture Review
 
 This repository is itself an Antigravity plugin (`plugin.json`), and `hooks.json` registers
-five `PreToolUse`/`PreInvocation` hook interceptors (`pre-tool-git-guard.js`,
-`pre-tool-file-guard.js`, `pre-tool-validate.js`, `session-start.js`, `stop-state-save.js`).
+hook interceptors (`pre-tool-git-guard.js`, `pre-tool-validate.js`, `session-start.js`,
+`stop-state-save.js`, `stop-block.js`, `question-suppression.js`, `post-tool-nudge.js`).
 Every user of this plugin runs these hooks on every matching tool call — a bug here is not a
 local defect, it either silently fails to guard something it should, or blocks something it
 shouldn't.
@@ -25,9 +25,9 @@ shouldn't.
       registered event (`PreToolUse`/`PreInvocation`) — a malformed return can be silently
       ignored by the host, which looks like the hook "passing" when it actually never ran
       its check
-- [ ] `pre-tool-git-guard.js` and `pre-tool-file-guard.js` changes don't narrow their
-      matcher/condition in a way that lets a previously-blocked destructive operation
-      through (verify against what the hook was specifically added to prevent)
+- [ ] `pre-tool-git-guard.js` changes don't narrow their matcher/condition in a way that
+      lets a previously-blocked destructive operation through (verify against what the hook
+      was specifically added to prevent)
 - [ ] A new or modified hook fails closed (blocks/warns) rather than fails open (silently
       allows) on an unexpected error inside the hook itself
 - [ ] `hooks.json` matcher patterns are still scoped to the intended tool/event — an

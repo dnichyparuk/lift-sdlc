@@ -1,6 +1,7 @@
 ---
 name: harden-orchestrator
 description: Drafts hardening proposals from a prepared manifest after an SDLC pipeline failure. Reads the manifest written by harden-prepare.js, classifies the failure (user-code | plugin-defect | ambiguous), and emits a single JSON object with per-surface strengthen-only proposals. Returns ONLY the JSON object — no prose, no markdown around it. Does not call gh, does not call git, does not write any file.
+subagent: true
 tools: Read
 model: gemini-3.8-flash-low
 ---

@@ -10,11 +10,10 @@
  *   --changelog       Include changelog CI scripts/workflows
  *   --force           Overwrite existing files
  *   --check-only      Report version status without writing files
- *   --output-file     Write JSON to temp file (path on stdout)
  *
  * Exit codes:
- *   0 = success, JSON on stdout (or temp file path with --output-file)
- *   1 = validation error (JSON with non-empty errors[])
+ *   0 = success (prints temp file path on stdout via writeOutput)
+ *   1 = validation error (prints temp file path on stdout with non-empty errors[])
  *   2 = unexpected script crash (message on stderr)
  *
  * Uses only Node.js built-in modules. No npm install required.
@@ -86,11 +85,24 @@ function extractVersion(content, regex) {
 
 function parseArgs(argv) {
   const args = argv.slice(2);
-  return {
-    changelog: args.includes('--changelog'),
-    force:     args.includes('--force'),
-    checkOnly: args.includes('--check-only'),
+  const result = {
+    changelog: false,
+    force: false,
+    checkOnly: false,
   };
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--changelog') {
+      result.changelog = true;
+    } else if (a === '--force') {
+      result.force = true;
+    } else if (a === '--check-only') {
+      result.checkOnly = true;
+    }
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +168,7 @@ function main() {
         action = 'skipped';
       }
 
-      if (action === 'created' || action === 'overwritten' || action === 'migrated') {
+      if (action === 'created' || action === 'overwritten') {
         const destDir = path.dirname(destPath);
         if (!fs.existsSync(destDir)) {
           fs.mkdirSync(destDir, { recursive: true });
@@ -187,4 +199,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { MANIFEST, extractVersion };
+module.exports = { MANIFEST, extractVersion, parseArgs };

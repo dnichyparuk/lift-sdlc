@@ -63,6 +63,16 @@ const BLOCKED = [
     test: (cmd) => /\bgit\s+clean\s+[^;&|]*-[a-zA-Z]*f/.test(cmd),
     message: 'Blocked: git clean -f permanently deletes untracked files. Use git clean -n for a dry run first.',
   },
+  {
+    test: (cmd) => /\bgit\s+add\s+(-A|--all)\b/.test(cmd) && !/--\s+.*:!\S*\.sdlc/.test(cmd),
+    message: 'Blocked: git add -A may stage internal state files in .sdlc/. Use explicit file paths or exclude patterns (e.g. git add -A -- ":!.sdlc/").',
+  },
+  {
+    test: (cmd) => /\bgit\s+push\b/.test(cmd)
+      && /\b(main|master|develop|release)\b/.test(cmd)
+      && /(?:--force(?!-with-lease)|-f\b)/.test(cmd),
+    message: 'Blocked: force push to protected branch.',
+  },
 ];
 
 for (const rule of BLOCKED) {
@@ -70,6 +80,46 @@ for (const rule of BLOCKED) {
     process.stdout.write(JSON.stringify({ decision: 'deny', reason: rule.message }) + '\n');
     process.exit(0);
   }
+}
+
+// 4. Two-Dimensional Identity & Safe Branch Guard (C10)
+try {
+  const isMutating = /\bgit\s+(commit|push|tag|merge|stash)\b/.test(command);
+  if (isMutating) {
+    const { pipelineAdvancing } = require('../scripts/lib/state');
+    const { exec } = require('../scripts/lib/git');
+    const adv = pipelineAdvancing();
+
+    if (adv && adv.advancing) {
+      // Q6 Safe Branch fallback for merge in auto mode
+      if (adv.auto && /\bgit\s+merge\b/.test(command)) {
+        process.stdout.write(JSON.stringify({
+          decision: 'deny',
+          reason: 'Blocked: git merge in auto mode risks unresolved conflicts. Safe alternative: rebase onto base branch.',
+        }) + '\n');
+        process.exit(0);
+      }
+
+      // Branch identity check
+      const expectedBranch = adv.data && adv.data.branch;
+      if (expectedBranch) {
+        let currentBranch = null;
+        try {
+          currentBranch = exec('git branch --show-current', { cwd: args.Cwd || process.cwd() });
+        } catch (_) {}
+
+        if (currentBranch && currentBranch !== expectedBranch) {
+          process.stdout.write(JSON.stringify({
+            decision: 'deny',
+            reason: `Blocked: git mutation on branch "${currentBranch}" but active pipeline expects "${expectedBranch}". Switch to the expected branch before proceeding.`,
+          }) + '\n');
+          process.exit(0);
+        }
+      }
+    }
+  }
+} catch (_) {
+  // Fail-silent on identity lookup errors
 }
 
 process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');

@@ -20,7 +20,7 @@ const fs   = require('node:fs');
 const path = require('node:path');
 
 try {
-  const { findStateFile, readState, slugifyBranch, resolveStateDir } = require('../scripts/lib/state');
+  const { findStateFile, readState, slugifyBranch, resolveStateDir, getRegisteredPrefixes } = require('../scripts/lib/state');
   const { exec } = require('../scripts/lib/git');
 
   const branch = exec('git branch --show-current');
@@ -31,13 +31,25 @@ try {
 
   const branchSlug = slugifyBranch(branch);
 
+  const registered = typeof getRegisteredPrefixes === 'function' ? getRegisteredPrefixes() : ['ship', 'execute'];
+  const priorityOrder = ['ship', 'execute', ...registered.filter(p => p !== 'ship' && p !== 'execute')];
+
+  let activePrefix = null;
+  for (const p of priorityOrder) {
+    if (findStateFile(p, branchSlug)) {
+      activePrefix = p;
+      break;
+    }
+  }
+
   // Fast bail — no active pipeline means no work to do
-  const shipFound    = findStateFile('ship', branchSlug);
-  const executeFound = findStateFile('execute', branchSlug);
-  if (!shipFound && !executeFound) {
+  if (!activePrefix) {
     process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
     process.exit(0);
   }
+
+  const shipFound = activePrefix === 'ship' ? findStateFile('ship', branchSlug) : null;
+  const executeFound = activePrefix === 'execute' ? findStateFile('execute', branchSlug) : null;
 
   let recovery = null;
 
@@ -104,6 +116,33 @@ try {
         completedWaves,
         totalWaves,
         preset: (data.preset) || null,
+      };
+    }
+  }
+
+  // Fall back to generic pipeline state
+  if (!recovery && activePrefix) {
+    const pipeState = readState(activePrefix, branchSlug);
+    if (pipeState && pipeState.data) {
+      const data = pipeState.data;
+      let currentStep = null;
+      if (Array.isArray(data.steps)) {
+        const inProgress = data.steps.find(s => s.status === 'in_progress');
+        const lastCompleted = [...data.steps].reverse().find(s => s.status === 'completed');
+        const step = inProgress || lastCompleted;
+        if (step) {
+          currentStep = step.name || step.id || null;
+        }
+      }
+
+      recovery = {
+        savedAt: new Date().toISOString(),
+        pipeline: data.pipeline || activePrefix,
+        branch: data.branch || branch,
+        currentStep,
+        flags: {
+          auto: (data.flags && data.flags.auto) || false,
+        },
       };
     }
   }

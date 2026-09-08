@@ -54,6 +54,27 @@ const { detectActiveChanges, isArchived } = require(path.join(LIB, 'openspec'));
 const { getAdvisory } = require(path.join(LIB, 'context-advisory'));
 const { PRE_RELEASE_LABEL_RE } = require(path.join(LIB, 'version'));
 
+// R-postgates: pipeline.json is the declarative source of truth for which
+// steps carry postGates (e.g. execute's completeness halt, version's
+// ancestry check). computeSteps() builds its own steps[] independently of
+// pipeline.json, so postGates must be merged in explicitly or run-workflow's
+// Step 4c.3 gate check silently never sees them.
+function loadPipelineGates() {
+  try {
+    const pipelineJsonPath = path.join(__dirname, '..', '..', 'skills', 'ship-sdlc', 'pipeline.json');
+    const manifest = JSON.parse(fs.readFileSync(pipelineJsonPath, 'utf8'));
+    const gates = {};
+    for (const step of manifest.steps || []) {
+      if (Array.isArray(step.postGates) && step.postGates.length > 0) {
+        gates[step.id] = step.postGates;
+      }
+    }
+    return gates;
+  } catch (_) {
+    return {};
+  }
+}
+
 const VALID_QUALITY = ['full', 'balanced', 'minimal'];
 
 // Bump value space accepted by --bump and ship config `ship.bump`. Mirrors
@@ -771,6 +792,13 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     dispatchMode: null,
   });
 
+  const postGatesByStepId = loadPipelineGates();
+  for (const step of steps) {
+    if (postGatesByStepId[step.name]) {
+      step.postGates = postGatesByStepId[step.name];
+    }
+  }
+
   return steps;
 }
 
@@ -1093,6 +1121,8 @@ function main() {
     }
     const { filePath, prunedOrphans } = JSON.parse(result.stdout);
     writeOutput({
+      pipeline: 'ship-sdlc',
+      version: 1,
       flags: { ...flags, planModeBlocked: true },
       stateFile: filePath,
       prunedOrphans,
@@ -1373,6 +1403,8 @@ function main() {
   }
 
   const result = {
+    pipeline: 'ship-sdlc',
+    version: 1,
     errors,
     warnings,
     config: {

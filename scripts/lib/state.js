@@ -357,6 +357,7 @@ function deleteState(filePath) {
  */
 function resolveBranch(argBranch) {
   if (argBranch) return argBranch;
+  if (process.env.SDLC_BRANCH_OVERRIDE) return process.env.SDLC_BRANCH_OVERRIDE;
   const branch = exec('git branch --show-current');
   if (!branch) {
     throw new Error('Could not determine current branch');
@@ -368,9 +369,83 @@ function resolveBranch(argBranch) {
 // Garbage collection
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Prefix Registry
+// ---------------------------------------------------------------------------
+
+const KNOWN_PREFIXES = ['run-workflow', 'execute', 'commit', 'ship', 'plan'];
+const SORTED_PREFIXES = [...KNOWN_PREFIXES].sort((a, b) => b.length - a.length);
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Register an additional state prefix dynamically.
+ * Sorted longest-first to ensure greedy prefix matching.
+ * @param {string} prefix
+ */
+function registerStatePrefix(prefix) {
+  if (typeof prefix === 'string' && prefix && !KNOWN_PREFIXES.includes(prefix)) {
+    KNOWN_PREFIXES.push(prefix);
+    SORTED_PREFIXES.length = 0;
+    SORTED_PREFIXES.push(...[...KNOWN_PREFIXES].sort((a, b) => b.length - a.length));
+  }
+}
+
+/**
+ * Get all currently registered state prefixes.
+ *
+ * NOTE: `registerStatePrefix` only mutates this process's in-memory list —
+ * it provides no cross-process guarantee. Hooks run as fresh `node`
+ * processes per tool call/event and never see a prefix registered by the
+ * process that called `init` with `--pipeline <customId>`. Code that must
+ * detect an active pipeline reliably across processes (e.g.
+ * `pipelineAdvancing`) should discover prefixes from state filenames on
+ * disk via `discoverStatePrefixes` rather than relying solely on this list.
+ * @returns {string[]}
+ */
+function getRegisteredPrefixes() {
+  return [...KNOWN_PREFIXES];
+}
+
+/**
+ * Discover state-file prefixes actually present on disk for a given branch
+ * slug, by scanning `resolveStateDir()` filenames instead of relying on the
+ * process-local prefix registry. This lets cross-process consumers (hooks)
+ * detect a pipeline started with an arbitrary `--pipeline <id>` value that
+ * this process never registered.
+ *
+ * @param {string} branchSlug  Slugified branch name (via slugifyBranch)
+ * @returns {string[]}  Distinct prefixes found, e.g. `["ship", "my-custom-id"]`
+ */
+function discoverStatePrefixes(branchSlug) {
+  const stateDir = resolveStateDir();
+  if (!fs.existsSync(stateDir)) return [];
+
+  let entries;
+  try {
+    entries = fs.readdirSync(stateDir);
+  } catch (_) {
+    return [];
+  }
+
+  const re = new RegExp(`^(.+)-${escapeRegex(branchSlug)}-\\d{8}T\\d{6}Z\\.json$`);
+  const found = new Set();
+  for (const name of entries) {
+    const m = name.match(re);
+    if (m) found.add(m[1]);
+  }
+  return [...found];
+}
+
 /**
  * Parse a state-file basename into its components.
  * Format: <prefix>-<branchSlug>-<timestamp>.json
+ *
+ * Uses the dynamic prefix registry, tested longest-first, so multi-hyphen
+ * prefixes (e.g. `run-workflow`) match reliably without ambiguity against
+ * slugs with hyphens.
  *
  * The slug may itself contain dashes (e.g. `fix-220-foo`) and the timestamp
  * is always 16 chars of `YYYYMMDDTHHmmssZ`. We anchor on the trailing
@@ -383,9 +458,85 @@ function resolveBranch(argBranch) {
 function parseStateFilename(name) {
   // Trailing `-<16 chars>.json` where timestamp pattern is ISO-compact:
   // 8 digits (date) + 'T' + 6 digits (time) + 'Z'.
-  const m = name.match(/^(ship|execute|plan|commit)-(.+)-(\d{8}T\d{6}Z)\.json$/);
-  if (!m) return null;
-  return { prefix: m[1], slug: m[2], timestamp: m[3] };
+  for (const prefix of SORTED_PREFIXES) {
+    const re = new RegExp(`^(${escapeRegex(prefix)})-(.+)-(\\d{8}T\\d{6}Z)\\.json$`);
+    const m = name.match(re);
+    if (m) return { prefix: m[1], slug: m[2], timestamp: m[3] };
+  }
+  return null;
+}
+
+/**
+ * Determine whether any registered pipeline is currently advancing.
+ * Used by lifecycle hooks and orchestrators to gate behavior safely.
+ *
+ * @param {object} [opts]
+ * @param {string} [opts.branch] Optional branch name override
+ * @returns {{ advancing: boolean, prefix: string|null, step: string|null, auto: boolean, stateFile: string|null, data: object|null }}
+ */
+function pipelineAdvancing(opts = {}) {
+  try {
+    const stateDir = resolveStateDir();
+    if (!fs.existsSync(stateDir)) {
+      return { advancing: false, prefix: null, step: null, auto: false, stateFile: null, data: null };
+    }
+
+    let branch = opts.branch;
+    if (!branch) {
+      try {
+        branch = resolveBranch();
+      } catch (_) {
+        return { advancing: false, prefix: null, step: null, auto: false, stateFile: null, data: null };
+      }
+    }
+    const branchSlug = slugifyBranch(branch);
+    const prefixes = [...new Set([...discoverStatePrefixes(branchSlug), ...getRegisteredPrefixes()])];
+
+    for (const prefix of prefixes) {
+      const found = findStateFile(prefix, branchSlug);
+      if (!found) continue;
+
+      const state = readState(prefix, branchSlug);
+      if (!state || !state.data) continue;
+
+      const data = state.data;
+      if (Array.isArray(data.steps)) {
+        const inProgress = data.steps.find(s => s.status === 'in_progress');
+        if (inProgress) {
+          return {
+            advancing: true,
+            prefix,
+            step: inProgress.name || inProgress.id || null,
+            auto: Boolean(data.flags && data.flags.auto === true),
+            stateFile: state.filePath,
+            data,
+          };
+        }
+
+        const isAuto = Boolean(data.flags && data.flags.auto === true);
+        if (isAuto) {
+          const hasHalted = data.steps.some(s => s.status === 'failed' || s.status === 'suspended' || s.status === 'needs_input');
+          if (!hasHalted) {
+            const hasPending = data.steps.some(s => s.status === 'pending');
+            if (hasPending) {
+              return {
+                advancing: true,
+                prefix,
+                step: null,
+                auto: true,
+                stateFile: state.filePath,
+                data,
+              };
+            }
+          }
+        }
+      }
+    }
+  } catch (_) {
+    // Fail silent
+  }
+
+  return { advancing: false, prefix: null, step: null, auto: false, stateFile: null, data: null };
 }
 
 /**
@@ -816,6 +967,10 @@ module.exports = {
   resolveBranch,
   detectResumeState,
   parseStateFilename,
+  registerStatePrefix,
+  getRegisteredPrefixes,
+  discoverStatePrefixes,
+  pipelineAdvancing,
   gcStateFiles,
   gcTempdirs,
   pruneStateFiles,

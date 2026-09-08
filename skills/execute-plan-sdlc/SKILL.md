@@ -274,7 +274,7 @@ Fix each issue from the critique. Then present the final wave structure showing 
 
 **Quality auto-selection:** If the user invoked the skill with `--quality <full|balanced|minimal>` (e.g., `/execute-plan-sdlc --quality balanced`), apply the specified quality tier (preset) without presenting the selection prompt. Show the wave structure with the applied tier and proceed directly to Step 5. (When invoked from ship-sdlc, `--quality` is forwarded only when the user explicitly passed `--quality` to ship.)
 
-Valid values: `full` (Speed), `balanced` (Balanced), `minimal` (Quality). Legacy `A`/`B`/`C` are accepted and normalized. Invalid values → fall back to interactive selection.
+Valid values: `minimal` (Speed), `balanced` (Balanced), `full` (Quality). Legacy `A`/`B`/`C` are accepted and normalized. Invalid values → fall back to interactive selection.
 
 ```
 Execution Plan

@@ -1,4 +1,5 @@
 {
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "lift-sdlc",
   "description": "Skills and commands for software development lifecycle workflows: pull requests, code reviews, release",
   "version": "0.21.0",

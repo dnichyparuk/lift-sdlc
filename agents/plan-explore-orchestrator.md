@@ -1,6 +1,7 @@
 ---
 name: plan-explore-orchestrator
 description: Dispatches parallel dynamic-dimension discovery for plan-sdlc; derives 3–7 task-specific dimensions, fans out code/web/hybrid subagents, critiques findings, and produces discovery-brief.md
+subagent: true
 tools: Read, Write, Glob, Grep, Bash, Agent, WebSearch, WebFetch
 model: gemini-3.8-flash-low
 ---
