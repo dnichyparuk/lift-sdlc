@@ -36,8 +36,10 @@ try {
       process.exit(0);
     }
   }
-} catch (_) {
-  // Graceful degradation / fail-silent
+} catch (e) {
+  // Graceful degradation / fail-silent — but log so a corrupted state file
+  // silently disabling ADR-001 enforcement is at least diagnosable.
+  process.stderr.write(`stop-block.js: pipelineAdvancing() threw, allowing stop (fail-open): ${e && e.message}\n`);
 }
 
 process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');

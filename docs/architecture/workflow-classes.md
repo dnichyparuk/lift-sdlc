@@ -44,7 +44,7 @@ Lift-SDLC classifies all skills and workflows into three distinct operational cl
   - Maintains persistent state files in `.sdlc/execution/`.
   - Dispatches sub-skills via isolated Agent tool calls with dynamic model selection.
   - Coordinates conditional branching, loops, and terminal cleanup sweeps.
-  - Protected by the Auto-Mode Enforcement Hook Ring (`stop-block`, `question-suppression`, `drift-nudge`, `pre-tool-git-guard`).
+  - Protected by the Auto-Mode Enforcement Hook Ring (`stop-block`, `question-suppression`, `drift-nudge`, `git-guard` (`hooks/pre-tool-git-guard.js`)).
 - **Obligations:**
   - Must define a declarative manifest (`pipeline.json`) and prepare script.
   - Must manage lifecycle transitions through `scripts/state/pipeline.js`.

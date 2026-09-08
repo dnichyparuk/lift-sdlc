@@ -32,12 +32,21 @@ echo "STATUS: $EXIT_CODE"
 
 1. If `EXIT_CODE` is non-zero, read errors from `$PREPARE_OUTPUT_FILE`, display them to the user, and stop.
 2. Parse the JSON manifest from `$PREPARE_OUTPUT_FILE`.
-3. Extract `pipeline`, `version`, `statePrefix` (fallback: `pipeline`), `steps[]`, `flags`, and `validation`. Extract `<branch>` from `context.currentBranch` (or `git branch --show-current`). Extract `$PLAN_FILE` from `context.planFile` (or `flags.planFile`). Retain `statePrefix` for all state CLI calls to match session resume and hook conventions.
-4. Clean up: `rm -f "$PREPARE_OUTPUT_FILE"`.
+3. Extract `pipeline`, `version`, `statePrefix` (fallback: `pipeline`), `steps[]`, `flags`, and `validation`. Extract `<branch>` from `context.currentBranch` (or `git branch --show-current`). Extract `$PLAN_FILE` from `context.planFile` (or `flags.planFile`). Retain `statePrefix` for all state CLI calls to match session resume and hook conventions. Also extract `resume` (`resume.found`, `resume.stateFile`, `resume.nextPendingStep`) when present — `scripts/skill/run-workflow.js` injects this generically for any `prepareScript` that doesn't compute its own resume state (see Step 2/3 below).
+4. **Missing-state prompt:** if `errors[]` contains an entry with `id === "implicitResumeNoState"`, display its `message` and stop — `--resume` was passed but no state file exists for this pipeline+branch. Do not fall through to Step 2.
+5. Clean up: `rm -f "$PREPARE_OUTPUT_FILE"`.
 
 ---
 
 ## Step 2 — Display Pipeline Plan & User Confirmation
+
+**Resume banner:** When `flags.resume === true`, print the following banner verbatim BEFORE the pipeline table, sourcing `<nextPendingStep>` from `resume.nextPendingStep` and the step lists from the state file at `resume.stateFile`:
+
+```
+Resuming <pipeline> from step <nextPendingStep>.
+Completed: <comma-separated step names where status === "completed">.
+Pending:   <comma-separated step names where status !== "completed" && status !== "skipped">.
+```
 
 Format and display the pipeline table:
 
@@ -53,7 +62,7 @@ Format and display the pipeline table:
 1. **If `--dry-run` was passed**: Stop here. Do not initialize state or execute steps.
 2. **If `flags.auto === true`**: Announce "Auto mode active — executing pipeline without interactive prompts" and proceed immediately to Step 3.
 3. **If interactive mode**:
-   Use `ask_question` to ask:
+   Use `AskUserQuestion` to ask:
    > Run this pipeline?
    - **yes** — execute as shown
    - **cancel** — stop here
@@ -62,7 +71,9 @@ Format and display the pipeline table:
 
 ## Step 3 — Initialize Pipeline State
 
-Initialize the execution state file via the state CLI using `<statePrefix>`:
+**Skip on resume** (`flags.resume === true`): do not call `init` — it would create a fresh state file and discard prior progress. Use `resume.stateFile` (already known from Step 1) as `<stateFile>` directly, and proceed to Step 4 starting at `resume.nextPendingStep`.
+
+**Otherwise**, initialize the execution state file via the state CLI using `<statePrefix>`:
 
 ```shell
 node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" init --branch "<branch>" --flags '<flags_json>' --steps '<steps_json>'
@@ -74,7 +85,7 @@ Extract the created `stateFile` path from stdout (`const stateFile = JSON.parse(
 
 ## Step 4 — Execute Pipeline Steps
 
-Iterate sequentially through each step in `steps[]`:
+Iterate sequentially through each step in `steps[]`. **When resuming** (`flags.resume === true`), start iteration at the step named `resume.nextPendingStep` instead of the first step — steps before it are already `completed`/`skipped` in the loaded state file and must not be re-run.
 
 ### 4a. Handle Skipped Steps
 If `step.status === "skipped"`:

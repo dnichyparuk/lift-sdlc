@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * question-suppression.js
- * PreToolUse hook — intercepts `ask_question` during unattended pipeline runs (--auto).
+ * PreToolUse hook — intercepts `AskUserQuestion` during unattended pipeline runs (--auto).
  * Prevents mid-turn pauses on non-blocking questions (ADR-001 mid-turn pause hole).
  *
  * Gating logic:
@@ -49,7 +49,7 @@ try {
 
   if (adv && adv.advancing && adv.auto) {
     const toolCall = input.toolCall || {};
-    if (toolCall.name && toolCall.name !== 'ask_question') {
+    if (toolCall.name && toolCall.name !== 'AskUserQuestion') {
       process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
       process.exit(0);
     }
@@ -87,8 +87,10 @@ try {
       process.exit(0);
     }
   }
-} catch (_) {
-  // Fail-silent
+} catch (e) {
+  // Fail-silent — but log so a corrupted state file silently disabling
+  // ADR-001 question suppression is at least diagnosable.
+  process.stderr.write(`question-suppression.js: internal error, allowing (fail-open): ${e && e.message}\n`);
 }
 
 process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');

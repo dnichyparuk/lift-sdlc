@@ -64,11 +64,13 @@ const BLOCKED = [
     message: 'Blocked: git clean -f permanently deletes untracked files. Use git clean -n for a dry run first.',
   },
   {
-    test: (cmd) => /\bgit\s+add\s+(-A|--all)\b/.test(cmd) && !cmd.includes(':!'),
+    test: (cmd) => /\bgit\s+add\s+(-A|--all)\b/.test(cmd) && !/--\s+.*:!\S*\.sdlc/.test(cmd),
     message: 'Blocked: git add -A may stage internal state files in .sdlc/. Use explicit file paths or exclude patterns (e.g. git add -A -- ":!.sdlc/").',
   },
   {
-    test: (cmd) => /\bgit\s+push\b.*?\b(main|master|develop|release)\b.*?(?:--force|-f\b)/.test(cmd),
+    test: (cmd) => /\bgit\s+push\b/.test(cmd)
+      && /\b(main|master|develop|release)\b/.test(cmd)
+      && /(?:--force(?!-with-lease)|-f\b)/.test(cmd),
     message: 'Blocked: force push to protected branch.',
   },
 ];

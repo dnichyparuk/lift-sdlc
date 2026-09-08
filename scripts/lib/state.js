@@ -395,10 +395,48 @@ function registerStatePrefix(prefix) {
 
 /**
  * Get all currently registered state prefixes.
+ *
+ * NOTE: `registerStatePrefix` only mutates this process's in-memory list —
+ * it provides no cross-process guarantee. Hooks run as fresh `node`
+ * processes per tool call/event and never see a prefix registered by the
+ * process that called `init` with `--pipeline <customId>`. Code that must
+ * detect an active pipeline reliably across processes (e.g.
+ * `pipelineAdvancing`) should discover prefixes from state filenames on
+ * disk via `discoverStatePrefixes` rather than relying solely on this list.
  * @returns {string[]}
  */
 function getRegisteredPrefixes() {
   return [...KNOWN_PREFIXES];
+}
+
+/**
+ * Discover state-file prefixes actually present on disk for a given branch
+ * slug, by scanning `resolveStateDir()` filenames instead of relying on the
+ * process-local prefix registry. This lets cross-process consumers (hooks)
+ * detect a pipeline started with an arbitrary `--pipeline <id>` value that
+ * this process never registered.
+ *
+ * @param {string} branchSlug  Slugified branch name (via slugifyBranch)
+ * @returns {string[]}  Distinct prefixes found, e.g. `["ship", "my-custom-id"]`
+ */
+function discoverStatePrefixes(branchSlug) {
+  const stateDir = resolveStateDir();
+  if (!fs.existsSync(stateDir)) return [];
+
+  let entries;
+  try {
+    entries = fs.readdirSync(stateDir);
+  } catch (_) {
+    return [];
+  }
+
+  const re = new RegExp(`^(.+)-${escapeRegex(branchSlug)}-\\d{8}T\\d{6}Z\\.json$`);
+  const found = new Set();
+  for (const name of entries) {
+    const m = name.match(re);
+    if (m) found.add(m[1]);
+  }
+  return [...found];
 }
 
 /**
@@ -452,7 +490,7 @@ function pipelineAdvancing(opts = {}) {
       }
     }
     const branchSlug = slugifyBranch(branch);
-    const prefixes = getRegisteredPrefixes();
+    const prefixes = [...new Set([...discoverStatePrefixes(branchSlug), ...getRegisteredPrefixes()])];
 
     for (const prefix of prefixes) {
       const found = findStateFile(prefix, branchSlug);
@@ -931,6 +969,7 @@ module.exports = {
   parseStateFilename,
   registerStatePrefix,
   getRegisteredPrefixes,
+  discoverStatePrefixes,
   pipelineAdvancing,
   gcStateFiles,
   gcTempdirs,

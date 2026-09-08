@@ -30,8 +30,10 @@ try {
     }) + '\n');
     process.exit(0);
   }
-} catch (_) {
-  // Fail-silent
+} catch (e) {
+  // Fail-silent — but log so a corrupted state file silently disabling the
+  // ADR-001 drift nudge is at least diagnosable.
+  process.stderr.write(`post-tool-nudge.js: internal error, suppressing nudge (fail-open): ${e && e.message}\n`);
 }
 
 process.stdout.write(JSON.stringify({}) + '\n');

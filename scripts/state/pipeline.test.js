@@ -67,8 +67,22 @@ test('pipeline.js: full lifecycle with custom pipeline prefix', () => {
     const suspendRes = run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'suspend', '--step', 'step2', '--question', JSON.stringify({ q: 'need token' }), '--branch', branch], tempDir);
     assert.strictEqual(suspendRes.status, 0);
 
+    const readAfterSuspend = run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'read', '--branch', branch], tempDir);
+    assert.strictEqual(readAfterSuspend.status, 0);
+    const step2AfterSuspend = readAfterSuspend.json.steps.find((s) => s.name === 'step2');
+    assert.strictEqual(step2AfterSuspend.status, 'needs_input');
+    assert.ok(typeof step2AfterSuspend.suspendedAt === 'string' && step2AfterSuspend.suspendedAt.length > 0);
+    assert.deepStrictEqual(step2AfterSuspend.question, { q: 'need token' });
+
     const resumeRes = run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'resume', '--step', 'step2', '--answer', JSON.stringify({ a: 'token123' }), '--branch', branch], tempDir);
     assert.strictEqual(resumeRes.status, 0);
+
+    const readAfterResume = run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'read', '--branch', branch], tempDir);
+    assert.strictEqual(readAfterResume.status, 0);
+    const step2AfterResume = readAfterResume.json.steps.find((s) => s.name === 'step2');
+    assert.strictEqual(step2AfterResume.status, 'in_progress');
+    assert.ok(typeof step2AfterResume.resumedAt === 'string' && step2AfterResume.resumedAt.length > 0);
+    assert.deepStrictEqual(step2AfterResume.answer, { a: 'token123' });
 
     const skipRes = run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'skip', '--step', 'step2', '--reason', 'not needed', '--branch', branch], tempDir);
     assert.strictEqual(skipRes.status, 0);
@@ -78,6 +92,40 @@ test('pipeline.js: full lifecycle with custom pipeline prefix', () => {
     assert.strictEqual(cleanupRes.status, 0);
     assert.strictEqual(cleanupRes.json.currentRun.cleaned, true);
     assert.strictEqual(fs.existsSync(initRes.json.filePath), false);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('pipeline.js: suspend/resume fall back to a raw string when --question/--answer is not valid JSON', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-test-'));
+  try {
+    const branch = 'feature-raw-answer';
+
+    run(PIPELINE_SCRIPT, [
+      '--pipeline', 'custom-pipe',
+      'init',
+      '--branch', branch,
+      '--flags', JSON.stringify({ auto: false }),
+      '--steps', JSON.stringify(['step1']),
+    ], tempDir);
+    run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'start', '--step', 'step1', '--branch', branch], tempDir);
+
+    const suspendRes = run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'suspend', '--step', 'step1', '--question', 'need a token, not JSON', '--branch', branch], tempDir);
+    assert.strictEqual(suspendRes.status, 0);
+
+    const readAfterSuspend = run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'read', '--branch', branch], tempDir);
+    const step1AfterSuspend = readAfterSuspend.json.steps.find((s) => s.name === 'step1');
+    assert.strictEqual(step1AfterSuspend.status, 'needs_input');
+    assert.strictEqual(step1AfterSuspend.question, 'need a token, not JSON');
+
+    const resumeRes = run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'resume', '--step', 'step1', '--answer', 'plain-text-token', '--branch', branch], tempDir);
+    assert.strictEqual(resumeRes.status, 0);
+
+    const readAfterResume = run(PIPELINE_SCRIPT, ['--pipeline', 'custom-pipe', 'read', '--branch', branch], tempDir);
+    const step1AfterResume = readAfterResume.json.steps.find((s) => s.name === 'step1');
+    assert.strictEqual(step1AfterResume.status, 'in_progress');
+    assert.strictEqual(step1AfterResume.answer, 'plain-text-token');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

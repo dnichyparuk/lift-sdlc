@@ -115,7 +115,7 @@ function resolveBranchOrExit(argBranch) {
     return resolveBranch(argBranch);
   } catch (e) {
     process.stderr.write(`Error: ${e.message}\n`);
-    process.exit(1);
+    process.exit(2);
   }
 }
 

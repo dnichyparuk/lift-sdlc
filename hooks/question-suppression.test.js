@@ -11,12 +11,12 @@ const HOOK_PATH = path.join(__dirname, 'question-suppression.js');
 const { initState } = require('../scripts/lib/state');
 const { exec } = require('../scripts/lib/git');
 
-test('question-suppression: allows ask_question when no state file exists', () => {
+test('question-suppression: allows AskUserQuestion when no state file exists', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'q-supp-test-'));
   try {
     const payload = JSON.stringify({
       toolCall: {
-        name: 'ask_question',
+        name: 'AskUserQuestion',
         args: { questions: [{ question: 'Pick an option', options: ['A', 'B'] }] },
       },
     });
@@ -34,7 +34,7 @@ test('question-suppression: allows ask_question when no state file exists', () =
   }
 });
 
-test('question-suppression: allows ask_question in interactive mode (auto=false)', () => {
+test('question-suppression: allows AskUserQuestion in interactive mode (auto=false)', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'q-supp-test-'));
   const prevOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
   process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
@@ -50,7 +50,7 @@ test('question-suppression: allows ask_question in interactive mode (auto=false)
 
     const payload = JSON.stringify({
       toolCall: {
-        name: 'ask_question',
+        name: 'AskUserQuestion',
         args: { questions: [{ question: 'Which library?', options: ['A', 'B'] }] },
       },
     });
@@ -89,7 +89,7 @@ test('question-suppression: denies non-approval questions in auto mode with corr
 
     const payload = JSON.stringify({
       toolCall: {
-        name: 'ask_question',
+        name: 'AskUserQuestion',
         args: { questions: [{ question: 'Which style?', options: ['Style1', 'Style2'] }] },
       },
     });
@@ -130,7 +130,7 @@ test('question-suppression: allows questions containing approval gate markers ev
 
     const payload = JSON.stringify({
       toolCall: {
-        name: 'ask_question',
+        name: 'AskUserQuestion',
         args: { questions: [{ question: 'Do you approve and wish to proceed with the release?', options: ['Yes', 'No'] }] },
       },
     });
