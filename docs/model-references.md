@@ -8,14 +8,14 @@ Lift-SDLC uses a **quality-tier model routing system** to assign different model
 
 - **Trivial/Standard Tasks:** Routed to `gemini-3.8-flash-low` or `gemini-3.8-flash-medium` to prioritize speed, low latency, and cost-efficiency.
 - **Complex Tasks:** In Balanced mode, executed on `gemini-3.8-flash-high` for fast execution and low latency, with automatic escalation to `gemini-3.1-pro-low` upon verification failure. In Full mode, routed directly to `gemini-3.1-pro-high`.
-- **Architectural Planning & Auditing:** The plan generation orchestrator uses `gemini-3.1-pro-high`, while security, architecture, and concurrency review dimensions use `gemini-3.1-pro-low` to provide true model diversity.
+- **Architectural Planning & Auditing:** The plan generation orchestrator uses `gemini-3.1-pro-high`, while core security, data integrity, and concurrency review dimensions use `gemini-3.1-pro-low` (with API contracts and architecture using `gemini-3.8-flash-high`) to provide true model diversity.
 
 ## Quality Presets
 
 The SDLC execution and ship skills expose a `--quality` flag that adjusts the model selection dynamically:
 
 - **`--quality minimal` (Speed):** Forces `gemini-3.8-flash` for all tasks, allocating budgets dynamically: `-low` (Trivial), `-medium` (Standard), and `-high` (Complex). Perfect for rapid prototyping where throughput is prioritized (100% Flash).
-- **`--quality balanced` (Default — Hybrid):** Uses hybrid routing (*Flash Hands, Pro Brain & Eyes*). Assigns `gemini-3.8-flash-low` (Trivial), `gemini-3.8-flash-medium` (Standard), and `gemini-3.8-flash-high` (Complex). If a complex task fails verification, it automatically escalates to `gemini-3.1-pro-low` on Retry 1. Security and architecture review dimensions run on `gemini-3.1-pro-low`.
+- **`--quality balanced` (Default — Hybrid):** Uses hybrid routing (*Flash Hands, Pro Brain & Eyes*). Assigns `gemini-3.8-flash-low` (Trivial), `gemini-3.8-flash-medium` (Standard), and `gemini-3.8-flash-high` (Complex). If a complex task fails verification, it automatically escalates to `gemini-3.1-pro-low` on Retry 1. Critical security and concurrency review dimensions run on `gemini-3.1-pro-low`, while structural and contract dimensions run on `gemini-3.8-flash-high`.
 - **`--quality full` (Quality):** Forces `gemini-3.1-pro` for non-trivial tasks (`-low` for Standard, `-high` for Complex) and routes Trivial to `gemini-3.8-flash-medium`. Runs a spec-compliance review.
 
 ## Future Model Upgrades
@@ -95,7 +95,7 @@ The following tables map exactly where specific models are hardcoded or referenc
 | `pr-sdlc` | [skills/pr-sdlc/SKILL.md](../skills/pr-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 | `received-review-sdlc` | [skills/received-review-sdlc/SKILL.md](../skills/received-review-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
 | `review-sdlc` | [skills/review-sdlc/resources/EXAMPLES.md](../skills/review-sdlc/resources/EXAMPLES.md) | `gemini-3.8-flash-medium` |
-| `review-sdlc` | [skills/review-sdlc/resources/REFERENCE.md](../skills/review-sdlc/resources/REFERENCE.md) | `gemini-3.1-pro-low`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium` |
+| `review-sdlc` | [skills/review-sdlc/resources/REFERENCE.md](../skills/review-sdlc/resources/REFERENCE.md) | `gemini-3.1-pro-low`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
 | `review-sdlc` | [skills/review-sdlc/SKILL.md](../skills/review-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 | `run-workflow` | [skills/run-workflow/SKILL.md](../skills/run-workflow/SKILL.md) | `gemini-3.8-flash-medium` |
 | `setup-sdlc` | [skills/setup-sdlc/SKILL.md](../skills/setup-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |

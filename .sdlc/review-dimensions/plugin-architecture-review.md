@@ -7,7 +7,7 @@ triggers:
   - "plugin.json"
   - "skills/*/SKILL.md"
 severity: medium
-model: gemini-3.1-pro-high
+model: gemini-3.8-flash-high
 ---
 
 # Plugin Architecture Review

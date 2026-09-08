@@ -10,7 +10,7 @@ dimension when the corresponding evidence is found during the Step 1 scan.
 | --- | --- | --- | --- |
 | Auth dirs, JWT/OAuth/session deps | `security-review` | high | `gemini-3.1-pro-low` |
 | ORM deps, migration files, SQL dirs | `data-integrity-review` | high | `gemini-3.1-pro-low` |
-| Route/controller/handler dirs, OpenAPI/Swagger files | `api-review` | high | `gemini-3.8-flash-medium` |
+| Route/controller/handler dirs, API route definitions | `api-review` | high | `gemini-3.8-flash-medium` |
 | Queue libs, worker dirs, async patterns, thread pools | `concurrency-review` | high | `gemini-3.1-pro-low` |
 | Cache libs (Redis, Memcached), service/repo layers | `performance-review` | medium | `gemini-3.8-flash-medium` |
 | Test files present (`*.test.*`, `*.spec.*`) | `test-coverage-review` | medium | `gemini-3.8-flash-medium` |
@@ -26,7 +26,7 @@ dimension when the corresponding evidence is found during the Step 1 scan.
 | Mixed casing styles across files, ESLint naming rules configured | `naming-conventions-review` | low | `gemini-3.8-flash-low` |
 | JSDoc/docstring config, CHANGELOG.md, README quality signals | `documentation-quality-review` | low | `gemini-3.8-flash-low` |
 | `.github/workflows/`, `.circleci/`, `Jenkinsfile`, CI config | `ci-cd-pipeline-review` | medium | `gemini-3.8-flash-medium` |
-| OpenAPI/Swagger/GraphQL schemas (`*.graphql`, `openapi.*`), `*.proto` files | `api-contract-review` | high | `gemini-3.1-pro-low` |
+| OpenAPI/Swagger/GraphQL schemas (`*.graphql`, `openapi.*`), `*.proto` files | `api-contract-review` | high | `gemini-3.8-flash-high` |
 | Lock files (`package-lock.json`, `yarn.lock`, `poetry.lock`), `.npmrc`, license-checking deps | `dependency-management-review` | medium | `gemini-3.8-flash-medium` |
 | `.env*` files, `config/` directory, feature flag libs (LaunchDarkly, Unleash, ConfigCat) | `configuration-management-review` | medium | `gemini-3.8-flash-medium` |
 | Error boundary files, custom error classes, retry/circuit-breaker patterns | `error-handling-review` | medium | `gemini-3.8-flash-medium` |
@@ -44,9 +44,9 @@ dimension when the corresponding evidence is found during the Step 1 scan.
 | Evidence found | Dimension | Severity | Model |
 | --- | --- | --- | --- |
 | `packages/`/`apps/` dirs + workspace config (`lerna.json`, `pnpm-workspace.yaml`, `nx.json`, or `workspaces` in package.json) | `monorepo-governance-review` | medium | `gemini-3.8-flash-medium` |
-| `plugins/` or `extensions/` dirs + manifest files (`plugin.json`, `manifest.json`) or hook registration patterns | `plugin-architecture-review` | medium | `gemini-3.1-pro-low` |
-| Package exports, `index.ts`/`index.js` barrel files, semver in package.json, `CHANGELOG.md` | `sdk-library-design-review` | high | `gemini-3.1-pro-low` |
+| `plugins/` or `extensions/` dirs + manifest files (`plugin.json`, `manifest.json`) or hook registration patterns | `plugin-architecture-review` | medium | `gemini-3.8-flash-high` |
+| Package exports, `index.ts`/`index.js` barrel files, semver in package.json, `CHANGELOG.md` | `sdk-library-design-review` | high | `gemini-3.8-flash-high` |
 | `android/`/`ios/` dirs, React Native/Flutter/Capacitor deps | `mobile-app-review` | medium | `gemini-3.8-flash-medium` |
-| DAG definitions, ETL scripts, `pipeline/` dirs, Spark/Airflow/Dagster deps | `data-pipeline-review` | high | `gemini-3.1-pro-low` |
+| DAG definitions, ETL scripts, `pipeline/` dirs, Spark/Airflow/Dagster deps | `data-pipeline-review` | high | `gemini-3.8-flash-high` |
 | Model files, `training/` dirs, ML libs (torch, tensorflow, sklearn) in requirements | `ml-ai-review` | medium | `gemini-3.8-flash-medium` |
-| Docker Compose with multiple services, `services/` dir, API gateway config, contract test files | `microservices-review` | medium | `gemini-3.1-pro-low` |
+| Docker Compose with multiple services, `services/` dir, API gateway config, contract test files | `microservices-review` | medium | `gemini-3.8-flash-high` |
