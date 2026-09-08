@@ -71,7 +71,7 @@ flowchart TD
 
 ### Step 5.1: Plan Execution & Wave Review (`/execute-plan-sdlc`)
 * 🔍 **Plan Review 1 (Plan Execution Validator)**:
-  - Dispatches [`plan-execution-validator`](../agents/plan-execution-validator.md) (`gemini-3.1-pro-low`) in clean context to validate plan integrity, circular dependencies, file collision risks, and wave structure.
+  - Dispatches [`plan-execution-validator`](../agents/plan-execution-validator.md) (`gemini-3.8-flash-high`) in clean context to validate plan integrity, circular dependencies, file collision risks, and wave structure.
 * ⚡ **Parallel Wave Runner**:
   - Dispatches `wave-runner` (`gemini-3.8-flash-low`) to execute tasks wave-by-wave.
   - Fans out `per-task coding agent` subagents in parallel to write files and run local unit tests.
@@ -175,7 +175,7 @@ Lift-SDLC segments work across the latest **`gemini-3.8-flash`** (`-low`, `-medi
 | `harden-orchestrator` | Orchestrator Agent | `gemini-3.8-flash-low` | Bug cause classification & proposal emission |
 | `plan-explore-orchestrator` | Orchestrator Agent | `gemini-3.8-flash-low` | Planning axes derivation & subagent coordinator |
 | `review-orchestrator` | Orchestrator Agent | `gemini-3.8-flash-low` | Scatter-gather review consolidation |
-| `plan-execution-validator` | Orchestrator Agent | `gemini-3.1-pro-low` | Static analysis of plan circularity & collision risks |
+| `plan-execution-validator` | Orchestrator Agent | `gemini-3.8-flash-high` | Static analysis of plan circularity & collision risks |
 | `plan-generation-orchestrator` | Orchestrator Agent | `gemini-3.1-pro-high` | Multi-wave architecture plan drafting |
 | `/setup-sdlc`, `/plan-sdlc`, `/execute-plan-sdlc` | User Skills | `gemini-3.8-flash-medium` | Interactive coordinators |
 | `/pr-sdlc`, `/received-review-sdlc`, `/verify-pipeline-sdlc`, `/harden-sdlc` | User Skills | `gemini-3.8-flash-high` | High cognitive context skills |

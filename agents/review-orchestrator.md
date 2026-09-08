@@ -213,4 +213,4 @@ Before returning:
 - Implement `yes` / `save` / `cancel` branches or no-PR menu options
 - Invoke the `pr-sdlc` skill
 - Delete `manifest.diff_dir` or the manifest file — the skill cleans both up
-- Dispatch dimension subagents without `model:` — omitting the parameter defaults to gemini-3.1-pro-low. Use `dimension.model || manifest.subagent_model` (per-dimension override wins; manifest is the fallback)
+- Dispatch dimension subagents without `model:` — omitting the parameter defaults to the parent context model. Use `dimension.model || manifest.subagent_model` (per-dimension override wins; manifest is the fallback)

@@ -49,7 +49,7 @@ const SHIP_FIELDS = [
     type: 'enum',
     options: ['full', 'balanced', 'minimal'],
     default: 'balanced',
-    description: 'The model execution quality tier applied to the plan execution step. minimal (Speed), balanced (Balanced, default), full (Quality). Forwarded to execute-plan-sdlc automatically.',
+    description: 'The model execution quality tier applied to the plan execution step. minimal (Speed: 100% Flash), balanced (Balanced: hybrid Flash execution with Pro escalation and review, default), full (Quality: maximum Pro reasoning). Forwarded to execute-plan-sdlc automatically.',
   },
   {
     name: 'bump',

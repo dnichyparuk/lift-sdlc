@@ -32,7 +32,7 @@ batchedTrivialTemplate — full inline content of classifying-and-waving-tasks.m
   "complexity": "Trivial | Standard | Complex",
   "risk": "Low | Medium | High",
   "factSheetPath": "absolute path to the per-task fact sheet written by wave-start",
-  "assignedModel": "gemini-3.8-flash-low | gemini-3.8-flash-medium | gemini-3.1-pro-low | gemini-3.1-pro-high",
+  "assignedModel": "gemini-3.8-flash-low | gemini-3.8-flash-medium | gemini-3.8-flash-high | gemini-3.1-pro-low | gemini-3.1-pro-high",
   "verifyToken": "optional — symbol in file"
 }
 ```

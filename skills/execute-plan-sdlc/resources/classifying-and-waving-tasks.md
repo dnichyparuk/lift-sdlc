@@ -63,12 +63,14 @@ Always present 3 presets in Step 4, regardless of plan size. The actual subagent
 | Preset | Trivial | Standard | Complex | Best when |
 |---|---|---|---|---|
 | **Speed** | gemini-3.8-flash-low | gemini-3.8-flash-medium | gemini-3.8-flash-high | Plan is well-specified, changes are mechanical |
-| **Balanced** | gemini-3.8-flash-medium | gemini-3.8-flash-high | gemini-3.1-pro-low | Default — matches complexity to capability |
-| **Quality** | gemini-3.8-flash-medium | gemini-3.1-pro-low | gemini-3.1-pro-high | Codebase is unfamiliar, tasks are ambiguous |
+| **Balanced** | gemini-3.8-flash-low | gemini-3.8-flash-medium | gemini-3.8-flash-high* | Default (hybrid) — fast Flash execution, Pro escalation on retry |
+| **Quality** | gemini-3.8-flash-medium | gemini-3.1-pro-low | gemini-3.1-pro-high | Codebase is unfamiliar, high-stakes tasks requiring deep Pro reasoning |
+
+\* In Balanced tier, Complex tasks start on `gemini-3.8-flash-high` for maximum execution speed and low latency. If a task fails verification, it automatically escalates to `gemini-3.1-pro-low` on Retry 1 and `gemini-3.1-pro-high` on Retry 2.
 
 ### Model Dispatch Enforcement
 
-The `model:` parameter is REQUIRED on every Agent tool dispatch — no exception. Omitting it causes the agent to inherit gemini-3.1-pro-low from the parent context, defeating the preset system's cost optimization.
+The `model:` parameter is REQUIRED on every Agent tool dispatch — no exception. Omitting it causes the agent to inherit the parent context model, defeating the preset system's cost optimization.
 When dispatching a wave-runner Agent, permanently lock the orchestrator to `gemini-3.8-flash-low` regardless of the preset. The presets above apply strictly to the *per-task worker subagents* that the wave-runner spawns.
 
 ## Wave-Building Algorithm

@@ -7,15 +7,16 @@ This document outlines how models are utilized across Lift-SDLC, how the dynamic
 Lift-SDLC uses a **quality-tier model routing system** to assign different models based on the complexity, risk, and size of the task. Instead of using a single global model for every action, orchestrators dispatch sub-agents dynamically. 
 
 - **Trivial/Standard Tasks:** Routed to `gemini-3.8-flash-low` or `gemini-3.8-flash-medium` to prioritize speed, low latency, and cost-efficiency.
-- **Complex/Architectural Tasks:** Routed to `gemini-3.1-pro-high` (or `gemini-3.1-pro-low` in full mode) to ensure maximum correctness and deep reasoning.
+- **Complex Tasks:** In Balanced mode, executed on `gemini-3.8-flash-high` for fast execution and low latency, with automatic escalation to `gemini-3.1-pro-low` upon verification failure. In Full mode, routed directly to `gemini-3.1-pro-high`.
+- **Architectural Planning & Auditing:** The plan generation orchestrator uses `gemini-3.1-pro-high`, while core security, data integrity, and concurrency review dimensions use `gemini-3.1-pro-low` (with API contracts and architecture using `gemini-3.8-flash-high`) to provide true model diversity.
 
 ## Quality Presets
 
 The SDLC execution and ship skills expose a `--quality` flag that adjusts the model selection dynamically:
 
-- **`--quality minimal` (Speed):** Forces `gemini-3.8-flash` for all tasks, allocating budgets dynamically: `-low` (Trivial), `-medium` (Standard), and `-high` (Complex). Perfect for rapid prototyping where throughput is prioritized.
-- **`--quality balanced` (Default):** Uses dynamic routing. Assigns `gemini-3.8-flash-medium` to standard tasks, and automatically escalates to `gemini-3.1-pro-low` for complex tasks or critical pipeline steps.
-- **`--quality full` (Quality):** Forces `gemini-3.1-pro` for non-trivial tasks, assigning `-low` for standard and `-high` for complex tasks, guaranteeing maximum correctness.
+- **`--quality minimal` (Speed):** Forces `gemini-3.8-flash` for all tasks, allocating budgets dynamically: `-low` (Trivial), `-medium` (Standard), and `-high` (Complex). Perfect for rapid prototyping where throughput is prioritized (100% Flash).
+- **`--quality balanced` (Default — Hybrid):** Uses hybrid routing (*Flash Hands, Pro Brain & Eyes*). Assigns `gemini-3.8-flash-low` (Trivial), `gemini-3.8-flash-medium` (Standard), and `gemini-3.8-flash-high` (Complex). If a complex task fails verification, it automatically escalates to `gemini-3.1-pro-low` on Retry 1. Critical security and concurrency review dimensions run on `gemini-3.1-pro-low`, while structural and contract dimensions run on `gemini-3.8-flash-high`.
+- **`--quality full` (Quality):** Forces `gemini-3.1-pro` for non-trivial tasks (`-low` for Standard, `-high` for Complex) and routes Trivial to `gemini-3.8-flash-medium`. Runs a spec-compliance review.
 
 ## Future Model Upgrades
 
@@ -45,6 +46,8 @@ The following table summarizes the explicit model mappings across Lift-SDLC skil
 | Agent | `commit-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
 | Agent | `plan-explore-orchestrator`| `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
 | Agent | `review-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
+| Agent | `plan-execution-validator` | `gemini-3.8-flash-high` | Fast deterministic graph circularity & collision check |
+| Agent | `plan-generation-orchestrator` | `gemini-3.1-pro-high` | Deep multi-wave architectural plan drafting |
 | Prompt | `lane-static-structural` | `gemini-3.8-flash-low` | Simple file structure check |
 | Prompt | `lens-requirements` | `gemini-3.8-flash-medium` | Needs reasoning buffer for planning |
 | Prompt | `lane-guardrail-compliance`| `gemini-3.8-flash-medium` | Needs reasoning buffer for planning |
@@ -68,7 +71,7 @@ The following tables map exactly where specific models are hardcoded or referenc
 | `commit-orchestrator` | [agents/commit-orchestrator.md](../agents/commit-orchestrator.md) | `gemini-3.8-flash-low` |
 | `error-report-orchestrator` | [agents/error-report-orchestrator.md](../agents/error-report-orchestrator.md) | `gemini-3.8-flash-low` |
 | `harden-orchestrator` | [agents/harden-orchestrator.md](../agents/harden-orchestrator.md) | `gemini-3.8-flash-low` |
-| `plan-execution-validator` | [agents/plan-execution-validator.md](../agents/plan-execution-validator.md) | `gemini-3.1-pro-low` |
+| `plan-execution-validator` | [agents/plan-execution-validator.md](../agents/plan-execution-validator.md) | `gemini-3.8-flash-high` |
 | `plan-explore-orchestrator` | [agents/plan-explore-orchestrator.md](../agents/plan-explore-orchestrator.md) | `gemini-3.8-flash-low` |
 | `plan-generation-orchestrator` | [agents/plan-generation-orchestrator.md](../agents/plan-generation-orchestrator.md) | `gemini-3.1-pro-high` |
 | `review-orchestrator` | [agents/review-orchestrator.md](../agents/review-orchestrator.md) | `gemini-3.8-flash-low` |
@@ -92,7 +95,7 @@ The following tables map exactly where specific models are hardcoded or referenc
 | `pr-sdlc` | [skills/pr-sdlc/SKILL.md](../skills/pr-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 | `received-review-sdlc` | [skills/received-review-sdlc/SKILL.md](../skills/received-review-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
 | `review-sdlc` | [skills/review-sdlc/resources/EXAMPLES.md](../skills/review-sdlc/resources/EXAMPLES.md) | `gemini-3.8-flash-medium` |
-| `review-sdlc` | [skills/review-sdlc/resources/REFERENCE.md](../skills/review-sdlc/resources/REFERENCE.md) | `gemini-3.1-pro-low`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium` |
+| `review-sdlc` | [skills/review-sdlc/resources/REFERENCE.md](../skills/review-sdlc/resources/REFERENCE.md) | `gemini-3.1-pro-low`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
 | `review-sdlc` | [skills/review-sdlc/SKILL.md](../skills/review-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
 | `run-workflow` | [skills/run-workflow/SKILL.md](../skills/run-workflow/SKILL.md) | `gemini-3.8-flash-medium` |
 | `setup-sdlc` | [skills/setup-sdlc/SKILL.md](../skills/setup-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |

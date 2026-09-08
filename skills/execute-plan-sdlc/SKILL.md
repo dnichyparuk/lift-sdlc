@@ -283,21 +283,21 @@ Pre-wave (1 batch agent, 2 trivial tasks):
   - Task 1: "short description"     [Trivial → gemini-3.8-flash-medium]
   - Task 2: "short description"     [Trivial → gemini-3.8-flash-medium]
 Wave 1 (N agents — includes 1 batch):
-  Batch (2 trivial tasks → 1 gemini-3.8-flash-medium agent):
-    - Task A: "short description"   [Trivial → gemini-3.8-flash-medium]
-    - Task B: "short description"   [Trivial → gemini-3.8-flash-medium]
-  - Task C: "short description"     [Standard → gemini-3.8-flash-high]
-  - Task D: "short description"     [Complex  → gemini-3.1-pro-low]
+  Batch (2 trivial tasks → 1 gemini-3.8-flash-low agent):
+    - Task A: "short description"   [Trivial → gemini-3.8-flash-low]
+    - Task B: "short description"   [Trivial → gemini-3.8-flash-low]
+  - Task C: "short description"     [Standard → gemini-3.8-flash-medium]
+  - Task D: "short description"     [Complex  → gemini-3.8-flash-high*]
 Wave 2 (N tasks, parallel):
-  - Task E: "short description"     [Standard → gemini-3.8-flash-high]
+  - Task E: "short description"     [Standard → gemini-3.8-flash-medium]
 Wave 3 (N tasks — HIGH RISK, will pause):
-  - Task F: "short description"     [Complex  → gemini-3.1-pro-low]
+  - Task F: "short description"     [Complex  → gemini-3.8-flash-high*]
 ────────────────────────────────────────────
 Total: N tasks across N waves + pre-wave
 
 Quality Tiers (Model Presets):
   minimal) Speed:      N × gemini-3.8-flash-low, N × gemini-3.8-flash-medium, N × gemini-3.8-flash-high  — fast, low cost
-  balanced) Balanced:  N × gemini-3.8-flash-medium, N × gemini-3.8-flash-high, N × gemini-3.1-pro-low      — default ✓
+  balanced) Balanced:  N × gemini-3.8-flash-low, N × gemini-3.8-flash-medium, N × gemini-3.8-flash-high* — default (hybrid: Flash workers, Pro escalation & review) ✓
   full) Quality:       N × gemini-3.8-flash-medium, N × gemini-3.1-pro-low, N × gemini-3.1-pro-high         — max correctness
 
 Use AskUserQuestion to select a quality tier:
@@ -401,7 +401,7 @@ Options:
 Dispatch with:
 - `model: gemini-3.8-flash-low` — The wave-runner orchestrator is permanently locked to flash-low because it performs strict string parsing and routing. It never escalates.
 - `mode: bypassPermissions`
-- **`model:` is REQUIRED — no exceptions.** Omitting it causes the wave-runner to inherit the parent model (gemini-3.1-pro-low), defeating the quality-tier system.
+- **`model:` is REQUIRED — no exceptions.** Omitting it causes the wave-runner to inherit the parent context model, defeating the quality-tier system.
 - **DO NOT pass `isolation: "worktree"` (or any other `isolation` value) to the Agent tool.** The SDLC `--workspace worktree` flag controls a separate concept (a sibling git worktree created via `util/worktree-create.js`). Adding `isolation` here creates ephemeral `.sdlc/worktrees/agent-<id>` paths that are not the intended SDLC worktree. (Mirrors the analogous constraint in ship-sdlc/SKILL.md.)
 
 The wave-runner Agent handles in-wave per-task fan-out internally — it dispatches one per-task Agent per Standard/Complex task and one batch Agent (running on the tier's Trivial model, e.g. gemini-3.8-flash-medium in Balanced) for any 2+ Trivials, all within its own context. A single Trivial in a wave is dispatched by the wave-runner as an inline single-agent, not a batch. Per-task retries are the wave-runner's responsibility: max 2 retries per task, escalating one step per retry along the fixed ladder `gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high` — see `./resources/wave-runner-template.md` Algorithm §4 for the exact per-starting-model retry chain.
@@ -804,7 +804,7 @@ On failure or interruption (not all tasks completed), preserve the state file. P
 - Write state files for small-plan direct execution (≤3 tasks) — they execute without waves and are fast enough to re-run
 - Auto-override error-severity guardrail violations in `--auto` mode — guardrails exist to prevent drift; always block
 - Evaluate warning-severity guardrails pre-wave — warnings are assessed post-wave against actual changes, not intent
-- Dispatch agents without the `model:` parameter — every agent dispatch must include `model: "<X>"` per the quality-tier table. Omitting it defaults to gemini-3.1-pro-low, defeating the cost optimization of the quality-tier system.
+- Dispatch agents without the `model:` parameter — every agent dispatch must include `model: "<X>"` per the quality-tier table. Omitting it defaults to the parent context model, defeating the cost optimization of the quality-tier system.
 - Touch `ship-*` state files or invoke `state/ship.js` — ship-sdlc owns the entire ship-state lifecycle. Use `state/execute.js` for execute-state operations only.
 
 ## Gotchas
