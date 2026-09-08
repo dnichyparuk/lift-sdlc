@@ -43,11 +43,11 @@ Read and parse `COMMIT_CONTEXT_FILE` as `COMMIT_CONTEXT_JSON`.
 **On non-zero `EXIT_CODE`:**
 
 - Exit 1: show `COMMIT_CONTEXT_JSON.errors[]`, run `rm -f "$COMMIT_CONTEXT_FILE"`, stop.
-- Exit 2 (crash): show `Script error — see output above`, same cleanup, then invoke error-report-sdlc (Glob `**/error-report-sdlc/REFERENCE.md`; skill=commit-sdlc, step=Step 0, error=stderr).
+- Exit 2 (crash): show `Script error — see output above`, same cleanup, then invoke error-report-sdlc (find_by_name `**/error-report-sdlc/REFERENCE.md`; skill=commit-sdlc, step=Step 0, error=stderr).
 
 If `COMMIT_CONTEXT_JSON.warnings` is non-empty, show them before continuing.
 
-**Default-branch guard:** `onDefaultBranch === true` is already surfaced by the handling above — `--auto` without `--force-default-branch` blocks via `errors[]`, otherwise the warning is shown and Step 5's AskUserQuestion still lets the user decide. Never re-derive branch state via `git symbolic-ref` or re-parse `$ARGUMENTS`.
+**Default-branch guard:** `onDefaultBranch === true` is already surfaced by the handling above — `--auto` without `--force-default-branch` blocks via `errors[]`, otherwise the warning is shown and Step 5's ask_question still lets the user decide. Never re-derive branch state via `git symbolic-ref` or re-parse `$ARGUMENTS`.
 
 ### Step 0.5 (BRANCH-GUARD): HARD GATE — Expected Branch Check
 
@@ -66,46 +66,45 @@ If `branchGuard.active === false` (flag was not passed) or `branchGuard.ok === t
 
 Read just enough from `COMMIT_CONTEXT_JSON` for the main-context flow (Step 5 onwards): `currentBranch`, `flags`, `staged.files`, `staged.fileCount`, `staged.diffStat`, `unstaged.hasChanges`, `commitConfig.subjectPattern`, `commitConfig.subjectPatternError`. Heavy fields — `staged.diff`, `recentCommits`, `lastCommitMessage`, full `commitConfig` — are consumed by the orchestrator agent below; do **not** read or quote them in main context.
 
-### Step 1c (WIP-commit squash detection)
+**WIP squash (when `wipSquash.active === true`):** Run the squash script before dispatching the orchestrator:
 
-`COMMIT_CONTEXT_JSON.wipSquash` reports `wip(execute):` commits from execute-plan-sdlc per-wave commits between the branch's fork-point and `HEAD`: `{ commits: [<sha>,...], stagedClean, forkPoint }`.
+```shell
+node "<PLUGIN_ROOT>/scripts/skill/commit.js" --squash-execute --fork-point "<wipSquash.forkPoint>"
+```
+> **Contract (Input/Output):**
+> - **Input**: `--fork-point <sha>` — the value from `wipSquash.forkPoint` (never re-derived via `git merge-base`).
+> - **Output**: `{"status": "squashed", "forkPoint": "<sha>"}` on success (exit 0), or `{"status": "failed", ..., "message": "<reason>"}` on failure (exit 1). On failure, show `message` and stop — do not proceed to Step 2.
 
-- `commits.length === 0`: skip silently, proceed to Step 2 with the staged diff unchanged.
-- `commits.length > 0` and `flags.noSquashWip === true`: print `Detected N wip(execute): commit(s) — preserving (--no-squash-wip).` and proceed to Step 2 unchanged; the WIP commits stay in history.
-- `commits.length > 0` and `flags.noSquashWip === false` (default): print `Detected N wip(execute): commit(s). The final commit will subsume them via soft-reset.`, then run:
-  ```shell
-  node "<PLUGIN_ROOT>/scripts/skill/commit.js" --squash-execute --fork-point "<wipSquash.forkPoint>"
-  ```
-  > **Contract (Input/Output):**
-  > - **Input**: `--fork-point <sha>` — the value from `wipSquash.forkPoint` (never re-derived via `git merge-base`).
-  > - **Output**: `{"status": "squashed", "forkPoint": "<sha>"}` on success (exit 0), or `{"status": "failed", ..., "message": "<reason>"}` on failure (exit 1). On failure, show `message` and stop — do not proceed to Step 2.
-
-  On success the staged diff reflects the full squashed change (every WIP'd file plus any hand-edits); proceed to Step 2, where the orchestrator generates one conventional-commit subject for it.
+On success the staged diff reflects the full squashed change (every WIP'd file plus any hand-edits); proceed to Step 2, where the orchestrator generates one conventional-commit subject for it.
 
 **No `wip:` prefix in the final subject:** enforced twice — a reminder in the Step 2 orchestrator prompt, and a deterministic regex check (`^wip(\(|:)`) in `commit.js` before the approval prompt fires (reject + re-dispatch on match).
 
-### Step 2 (PLAN): Dispatch the commit-orchestrator Agent
+### Step 2 (PLAN): Dispatch the commit-orchestrator Subagent
 
 To keep the main context clean and bound the orchestrator's input to the prepared payload only, dispatch the dedicated `commit-orchestrator` agent.
 
-Use the `Agent` tool with:
+Use `invoke_subagent` with:
 
-- `subagent_type`: `sdlc:commit-orchestrator`
-- `model`: `gemini-3.8-flash-low` (overrides agent frontmatter to keep this bounded task on a lightweight model)
-- `prompt` (exactly two lines, no other content):
+```json
+{
+  "Subagents": [
+    {
+      "TypeName": "commit-orchestrator",
+      "Role": "Commit Message Orchestrator",
+      "Model": "flash_lite",
+      "Prompt": "MANIFEST_FILE: <COMMIT_CONTEXT_FILE>\nPROJECT_ROOT: <cwd>"
+    }
+  ]
+}
+```
 
-  ```text
-  MANIFEST_FILE: <COMMIT_CONTEXT_FILE>
-  PROJECT_ROOT: <cwd>
-  ```
-
-  Substitute `<COMMIT_CONTEXT_FILE>` with the absolute temp-file path captured in Step 0. Substitute `<cwd>` with the current working directory.
+Substitute `<COMMIT_CONTEXT_FILE>` with the absolute temp-file path captured in Step 0. Substitute `<cwd>` with the current working directory.
 
 The orchestrator reads the manifest, applies every `commitConfig` constraint (`subjectPattern`, `allowedTypes`, `allowedScopes`, `requireBodyFor`, `requiredTrailers`), detects style from `recentCommits`, runs its own self-critique loop, and returns ONLY the final commit message string. It does not call `git`, does not write files, does not invoke `gh`.
 
 Capture the orchestrator's return value as `MESSAGE`. If `MESSAGE` is empty, the orchestrator detected an `errors[]` array in the manifest — surface those errors and stop.
 
-**OpenSpec scope hint (main context, optional):** If `flags.scope` is NOT set, Glob for `openspec/config.yaml`. If found, Glob `openspec/changes/*/proposal.md` (exclude `archive/`). If exactly one active change exists, or one matches the current branch name, append an `OpenSpec-Change: <change-directory-name>` trailer to `MESSAGE` (after a blank line; only if `MESSAGE` already has a body — do not add a body solely for the trailer). If recent commits don't use scopes, the trailer is still optional.
+**OpenSpec scope hint (main context, optional):** If `flags.scope` is NOT set, search via `find_by_name` for `openspec/config.yaml`. If found, search `openspec/changes/*/proposal.md` (exclude `archive/`). If exactly one active change exists, or one matches the current branch name, append an `OpenSpec-Change: <change-directory-name>` trailer to `MESSAGE` (after a blank line; only if `MESSAGE` already has a body — do not add a body solely for the trailer). If recent commits don't use scopes, the trailer is still optional.
 
 ### Step 3 (CRITIQUE) and Step 4 (IMPROVE)
 
@@ -113,13 +112,13 @@ The orchestrator agent owns Steps 3 (CRITIQUE) and 4 (IMPROVE) internally. The m
 
 ### Step 5 (DO): Present and Execute
 
-Show the full commit plan to the user with the `MESSAGE` returned by the orchestrator and the staged-file summary read in Step 1. **Do not execute any git commands before receiving explicit user approval via AskUserQuestion.**
+Show the full commit plan to the user with the `MESSAGE` returned by the orchestrator and the staged-file summary read in Step 1. **Do not execute any git commands before receiving explicit user approval via ask_question.**
 
-**Auto mode:** When `flags.auto` is true, skip the AskUserQuestion prompt entirely. Still display the full commit plan for visibility, then proceed directly to execution. Treat the response as an implicit `yes`. The orchestrator's internal critique already ran in Step 2 — only the interactive approval prompt is skipped.
+**Auto mode:** When `flags.auto` is true, skip the `ask_question` prompt entirely. Still display the full commit plan for visibility, then proceed directly to execution. Treat the response as an implicit `yes`. The orchestrator's internal critique already ran in Step 2 — only the interactive approval prompt is skipped.
 
 Show a heading (`Commit`/`Amend`), the message (subject + body), the staged file list with diffstat, a `Trailer:` line when an OpenSpec trailer applies, and a `Stash:` line naming the unstaged files that will be stashed and restored.
 
-Use AskUserQuestion to ask:
+Use `ask_question` to ask:
 > Commit as shown?
 
 Options:
@@ -137,7 +136,7 @@ Show `Amend:` instead of `Commit:` heading when `flags.amend` is true.
    ```shell
    node "<PLUGIN_ROOT>/scripts/util/validate-commit-subject.js" "<subjectPattern>" "<subject line>"
    ```
-   Exit 0 → continue to step 1. Exit 1 → show `commitConfig.subjectPatternError` (fallback: the pattern itself), do not commit, and use AskUserQuestion:
+   Exit 0 → continue to step 1. Exit 1 → show `commitConfig.subjectPatternError` (fallback: the pattern itself), do not commit, and use `ask_question`:
    - **edit subject** — revise and re-run the gate
    - **harden** — dispatch `Skill(harden-sdlc)` with `--failure-text "Subject pattern reject: subject '<line>' does not match pattern '<subjectPattern>' — error: <subjectPatternError>"`, `--skill commit-sdlc`, `--step "Step 5 — subject pattern gate"`, `--operation "subject pattern validation"` (opt-in, targets the regex/error message not the subject; suppressed under `--auto`)
    - **cancel** — abort

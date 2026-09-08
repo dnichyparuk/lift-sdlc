@@ -115,7 +115,7 @@ Read and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. Run `rm -f "$PR_CONTEXT_F
 **Step 0.5 (BRANCH-GUARD): HARD GATE.** If `PR_CONTEXT_JSON.branchGuard.active === true` and `.ok === false`: surface `branchGuard.message` verbatim and halt immediately — do not proceed to Step 1 or any `gh pr create`/`gh pr edit`, and do not re-derive the current branch via shell commands (use the resolved field only). Otherwise (`active === false` or `ok === true`) proceed.
 
 **If `PR_CONTEXT_JSON.warnings` is non-empty**, show the warnings prominently before continuing.
-Do not ask for confirmation — the Step 5 approval gate (AskUserQuestion) is the consent point before PR creation.
+Do not ask for confirmation — the Step 5 approval gate (`ask_question`) is the consent point before PR creation.
 
 **If `PR_CONTEXT_JSON.ghAuth` is not null**, inform the user before continuing (no confirmation needed):
 
@@ -145,10 +145,10 @@ Using data from `PR_CONTEXT_JSON`, draft all sections of the active PR template 
 
 **OpenSpec enrichment (automatic when detected):**
 
-1. Glob for `openspec/config.yaml`. If absent, skip this block entirely.
-2. Identify the active change: Glob `openspec/changes/*/proposal.md` (exclude `archive/`). If one matches, use it. If multiple, match against `PR_CONTEXT_JSON.currentBranch`. If ambiguous, skip — do not ask during PR creation.
-3. If an active change is found, Read in parallel:
-   - `proposal.md` — use intent and scope to pre-fill **Business Context** and **Business Benefits** (reduces need for AskUserQuestion clarification)
+1. Search via `find_by_name` for `openspec/config.yaml`. If absent, skip this block entirely.
+2. Identify the active change: search via `find_by_name` for `openspec/changes/*/proposal.md` (exclude `archive/`). If one matches, use it. If multiple, match against `PR_CONTEXT_JSON.currentBranch`. If ambiguous, skip — do not ask during PR creation.
+3. If an active change is found, read via `view_file` in parallel:
+   - `proposal.md` — use intent and scope to pre-fill **Business Context** and **Business Benefits** (reduces need for `ask_question` clarification)
    - `design.md` (if exists) — use architectural approach for **Technical Design** section
 4. Add to the PR description, below the title: `**OpenSpec:** openspec/changes/<name>/`
 
@@ -158,7 +158,7 @@ For each section, apply the fill rules:
 
 - **Summary**: Plain-language, no jargon, 1-3 sentences
 - **Issue Ticket**: Use `context.issueTicket` or "Not detected"
-- **Business Context / Benefits**: Infer from `context.commits` and `context.diffContent`. If insufficient evidence, **use AskUserQuestion** to ask the user before writing. Don't guess. Acceptable question: *"What business problem does this PR solve? Who benefits and how?"*
+- **Business Context / Benefits**: Infer from `context.commits` and `context.diffContent`. If insufficient evidence, **use `ask_question`** to ask the user before writing. Don't guess. Acceptable question: *"What business problem does this PR solve? Who benefits and how?"*
 - **Technical Design**: Infer from `context.diffContent` — architecture, patterns, key decisions
 - **Technical Impact**: Identify affected systems/APIs/services from the diff
 - **Changes Overview**: Group by logical concern — each bullet describes a concept or behavior change (e.g. "Added retry deduplication", "New database migration for event tracking"). Never list file paths. Think about what a reviewer needs to understand, not which files were touched.
@@ -275,7 +275,7 @@ Fix each issue found in Step 3:
 - Rewrite vague sections with specifics from the diff
 - Replace invented content with "N/A" or "Not detected" plus a note
 - If a business section still can't be filled confidently after revision,
-  **use AskUserQuestion** to ask a targeted clarifying question and incorporate the answer
+  **use `ask_question`** to ask a targeted clarifying question and incorporate the answer
 - Re-check all quality gates after revisions
 
 Continue until all gates pass (max 2 iterations per gate).
@@ -283,9 +283,9 @@ Continue until all gates pass (max 2 iterations per gate).
 ### Step 5 (DO): Present for Review
 
 Show the complete title, labels (if any), and description. **Do not execute any `gh` command
-before receiving explicit user approval via AskUserQuestion.**
+before receiving explicit user approval via `ask_question`.**
 
-**Auto mode:** When `PR_CONTEXT_JSON.isAuto` is true, skip the AskUserQuestion prompt entirely. Still display the full title, labels, and description for visibility, then proceed directly to Step 6 (execution). Treat the response as an implicit `yes`. All critique gates (Steps 3–4) still run — only the interactive approval prompt is skipped.
+**Auto mode:** When `PR_CONTEXT_JSON.isAuto` is true, skip the `ask_question` prompt entirely. Still display the full title, labels, and description for visibility, then proceed directly to Step 6 (execution). Treat the response as an implicit `yes`. All critique gates (Steps 3–4) still run — only the interactive approval prompt is skipped.
 
 Display format — create mode uses the `Labels:` line, update mode uses the `Existing labels`/`New labels` lines instead:
 
@@ -305,7 +305,7 @@ PR Description:
 - **Update mode:** show "Existing labels (preserved)" whenever `existingPr.labels` is non-empty; show "New labels" only when there are new suggestions. Omit either line when its list is empty — never show "Labels: none".
 
 ```text
-Use AskUserQuestion to ask (adapt question to mode):
+Use `ask_question` to ask (adapt question to mode):
 
 For create mode:
 > Create this PR as shown?

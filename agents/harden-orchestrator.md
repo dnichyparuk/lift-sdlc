@@ -2,7 +2,7 @@
 name: harden-orchestrator
 description: Drafts hardening proposals from a prepared manifest after an SDLC pipeline failure. Reads the manifest written by harden-prepare.js, classifies the failure (user-code | plugin-defect | ambiguous), and emits a single JSON object with per-surface strengthen-only proposals. Returns ONLY the JSON object — no prose, no markdown around it. Does not call gh, does not call git, does not write any file.
 subagent: true
-tools: Read
+tools: view_file
 model: gemini-3.8-flash-low
 ---
 
@@ -40,8 +40,8 @@ Read the manifest JSON from `MANIFEST_FILE`. The manifest contains:
 | `pluginRepoUrl` | Constant URL of the plugin's GitHub repository (issue #288) — read directly from `MANIFEST_FILE` by SKILL.md (Steps 5c and 6) to construct the user-facing prompt; NOT included in orchestrator output JSON |
 
 If you need the full body of a specific dimension or copilot instruction file to
-draft a proposal, you MAY Read the file via the `path` field in the manifest. Do
-not Read files outside `PROJECT_ROOT`.
+draft a proposal, you MAY view the file via `view_file` using the `path` field in the manifest. Do
+not read files outside `PROJECT_ROOT`.
 
 ## Step 1 — Classify the Failure
 
@@ -224,7 +224,7 @@ chain-of-thought.
 
 - **Do not call `gh`.** No `gh issue create`, no `gh api`, no `gh label`.
 - **Do not call `git`.** Every git-derived field is already in the manifest.
-- **Do not invoke Bash.** You have no Bash tool; do not attempt workarounds.
+- **Do not invoke commands.** You have no `run_command` tool; do not attempt workarounds.
 - **Do not write any file.** You have no write tools — the no-silent-write
   invariant is enforced at the tool boundary.
 - **Do not delete the manifest.** The skill body owns cleanup.

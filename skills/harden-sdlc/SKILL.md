@@ -99,20 +99,24 @@ to Step 3.
 
 ---
 
-## Step 3 — ANALYZE: Dispatch the harden-orchestrator Agent
+## Step 3 — ANALYZE: Dispatch the harden-orchestrator Subagent
 
-Use the `Agent` tool with:
+Use `invoke_subagent` with:
 
-- `subagent_type`: `sdlc:harden-orchestrator`
-- `model`: `gemini-3.8-flash-low`
-- `prompt` (exactly two lines, no other content):
+```json
+{
+  "Subagents": [
+    {
+      "TypeName": "harden-orchestrator",
+      "Role": "Hardening Orchestrator",
+      "Model": "flash_lite",
+      "Prompt": "MANIFEST_FILE: <ERROR_CONTEXT_FILE>\nPROJECT_ROOT: <cwd>"
+    }
+  ]
+}
+```
 
-  ```text
-  MANIFEST_FILE: <ERROR_CONTEXT_FILE>
-  PROJECT_ROOT: <cwd>
-  ```
-
-  Substitute `<ERROR_CONTEXT_FILE>` with the absolute path captured in Step 1
+Substitute `<ERROR_CONTEXT_FILE>` with the absolute path captured in Step 1
   (`MANIFEST_FILE`) and `<cwd>` with the current working directory.
 
 The orchestrator returns ONLY a JSON object:
@@ -161,7 +165,7 @@ failure signal does not point at any of the loaded surfaces.` and exit cleanly
 4. **Halt on failure:** if validation or the write itself fails, do not silently advance — halt for this proposal and surface the error per 5a.
 
 For each proposal in `RESULT.proposals`, present the full patch preview to the
-user. Then use `AskUserQuestion`:
+user. Then use `ask_question`:
 
 > Proposal {i+1} of {N}: {action} on {surface}
 > Target: {targetFile}
@@ -203,7 +207,7 @@ dimension file) is never transiently invalid:
   On exit 0: `fs.renameSync(tmp, target)` (or `mv`) — this is the only write
   `.sdlc/config.json` ever receives, and it happens only after validation
   passes. On non-zero exit: delete the temp file, surface the validator's
-  error, and use AskUserQuestion to offer **retry** (let the user adjust the
+  error, and use `ask_question` to offer **retry** (let the user adjust the
   patch inline) or **cancel** (skip this proposal). Never silently commit a
   schema-invalid edit.
 
@@ -220,12 +224,12 @@ dimension file) is never transiently invalid:
   On success: `fs.renameSync(tmp, target)` (or `mv`) — this is the only write
   the real path ever receives, and it happens only after validation passes.
   On non-zero exit: delete the temp file, surface the validator's error, and
-  use AskUserQuestion to offer **retry** (let the user adjust the patch
+  use `ask_question` to offer **retry** (let the user adjust the patch
   inline) or **cancel** (skip this proposal). Never silently commit a
   schema-invalid edit.
 
 - For `surface == "copilot-instructions"`: no schema — apply the edit with
-  Edit (preferred) or Write directly.
+  `replace_file_content` (preferred) or `write_to_file` directly.
 
 ### 5b. Confirm and Handle Consolidation
 
@@ -256,9 +260,9 @@ opt-in upstream-report offer:
 > This failure may also be a plugin defect. File a GitHub issue at
 > `<pluginRepoUrl>`?
 
-Use AskUserQuestion with options: **dispatch error-report-sdlc** | **skip**.
+Use `ask_question` with options: **dispatch error-report-sdlc** | **skip**.
 
-- On `dispatch error-report-sdlc`: Glob `**/error-report-sdlc/REFERENCE.md`,
+- On `dispatch error-report-sdlc`: search via `find_by_name` for `**/error-report-sdlc/REFERENCE.md`,
   follow it, and dispatch with the orchestrator-supplied
   `RESULT.errorReportPayload` fields (same shape and idiom as Step 6 — no
   duplicate dispatch logic).
@@ -275,8 +279,8 @@ When `RESULT.classification == "plugin-defect"`:
    `error-report-sdlc` dispatch payload, naming the target repository as
    `<pluginRepoUrl>` (sourced from the prepare-script manifest, not
    hardcoded in this SKILL).
-2. Use AskUserQuestion: **dispatch error-report-sdlc** | **cancel**.
-3. On `dispatch error-report-sdlc`: Glob `**/error-report-sdlc/REFERENCE.md`,
+2. Use `ask_question`: **dispatch error-report-sdlc** | **cancel**.
+3. On `dispatch error-report-sdlc`: search via `find_by_name` for `**/error-report-sdlc/REFERENCE.md`,
    follow it, and dispatch with `skill=<failure.skill>`,
    `step=<failure.step>`, `operation=<failure.operation>`,
    `error=<failure.text>`, `exit-or-http-code=<failure.exitCode>`,
@@ -322,7 +326,7 @@ the `.sdlc/learnings/` directory and `log.md` file if they don't exist.
 
 ## DO NOT
 
-- Edit any surface without an `apply` AskUserQuestion answer recorded for
+- Edit any surface without an `apply` `ask_question` answer recorded for
   that specific proposal — the no-silent-write invariant is non-negotiable.
 - Violate the Step 5 per-iteration contract (re-read before acting, write
   before advancing, no cross-proposal state).

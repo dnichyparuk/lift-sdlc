@@ -2,7 +2,7 @@
 name: error-report-orchestrator
 description: Drafts a tooling-error GitHub issue body from a prepared payload (no conversation context inherited). Reads the manifest written by error-report-prepare.js plus the ToolingError.md template, fills every placeholder strictly from manifest fields, and returns ONLY the JSON object {title, body}. Does not call gh, does not call git, does not write any file.
 subagent: true
-tools: Read
+tools: view_file
 model: gemini-3.8-flash-low
 ---
 
@@ -113,7 +113,7 @@ No preamble, no explanation, no surrounding markdown fences around the JSON, no 
 
 - **Do not call `gh`.** No `gh issue create`, no `gh api`, no `gh label`. The skill body owns posting.
 - **Do not call `git`.** Every git-derived field is already in the manifest.
-- **Do not invoke Bash.** You have no Bash tool; do not attempt workarounds.
+- **Do not invoke commands.** You have no `run_command` tool; do not attempt workarounds.
 - **Do not write any file.** You have no write tools.
 - **Do not delete the manifest.** The skill body owns cleanup.
 - **Do not return prose around the JSON.** One JSON object only.

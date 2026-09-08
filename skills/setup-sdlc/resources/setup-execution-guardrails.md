@@ -24,7 +24,7 @@ Replace `{init|add}` with `add` if `--add` was passed, otherwise `init`.
 
 Read the JSON manifest at `$GUARDRAILS_OUTPUT_FILE`. If `errors` non-empty, show errors and stop. Store `signals`, `proposals`, `existing`. Run `rm -f "$GUARDRAILS_OUTPUT_FILE"` after storing.
 
-If not in `--add` mode and `existing.count > 0`: Use AskUserQuestion: "N execution guardrails already configured. Replace all, or use --add to expand?" Options: replace / cancel. On cancel, stop.
+If not in `--add` mode and `existing.count > 0`: Use ask_question: "N execution guardrails already configured. Replace all, or use --add to expand?" Options: replace / cancel. On cancel, stop.
 
 ### Step 1 (REVIEW) — Refine Script-Generated Proposals
 
@@ -40,7 +40,7 @@ This is lightweight — reviewing and filtering for runtime code constraints, no
 
 ### Step 2 (PRESENT) — Interactive Selection
 
-Present refined proposals as a numbered list with evidence. Use AskUserQuestion:
+Present refined proposals as a numbered list with evidence. Use ask_question:
 
 > Install which execution guardrails?
 
@@ -76,8 +76,8 @@ Parse output. If `overall` is "pass", report success with count. If "fail", show
 ## Do Not
 
 - Run full-suite or wide-subset `promptfoo eval` automatically — single targeted test scoped to the change is allowed; tight-loop retries are not.
-- Write config files using Write or Edit tools directly — always go through `scripts/util/setup-execution-guardrails-write.js`, which wraps lib/config.js
-- Skip AskUserQuestion for user interaction
+- Write config files using write_to_file or replace_file_content tools directly — always go through `scripts/util/setup-execution-guardrails-write.js`, which wraps lib/config.js
+- Skip ask_question for user interaction
 - Scan the entire codebase — the prepare script handles scanning
 
 ## Gotchas

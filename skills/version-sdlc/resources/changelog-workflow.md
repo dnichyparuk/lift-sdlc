@@ -65,7 +65,7 @@ Updated changelog entry:
 What changed: [brief summary of additions/removals]
 ```
 
-Use AskUserQuestion to ask:
+Use `ask_question` to ask:
 > Proceed with this changelog update?
 
 Options:
@@ -75,15 +75,15 @@ Options:
 
 If the user chooses **edit**, ask what to change, revise, and present again. Loop until explicit **yes** or **cancel**.
 
-**Auto mode:** When `flags.auto` is true, skip the AskUserQuestion prompt entirely. Still display the existing vs. updated changelog comparison for visibility, then proceed directly to Step 7. Treat the response as an implicit `yes`.
+**Auto mode:** When `flags.auto` is true, skip the `ask_question` prompt entirely. Still display the existing vs. updated changelog comparison for visibility, then proceed directly to Step 7. Treat the response as an implicit `yes`.
 
 ### Step 7 (EXECUTE): Apply the Update
 
 On `yes`:
 
-1. If `changelog.exists === false`: create CHANGELOG.md with a standard header + the new entry.
-2. If the `## [currentVersion]` section exists in the changelog: use the Edit tool to replace it with the updated entry.
-3. If the `## [currentVersion]` section does not exist yet: prepend the entry after the `## [Unreleased]` section (if present) or after the file header.
+1. If `changelog.exists === false`: create CHANGELOG.md via `write_to_file` with a standard header + the new entry.
+2. If the `## [currentVersion]` section exists in the changelog: use `replace_file_content` to replace it with the updated entry.
+3. If the `## [currentVersion]` section does not exist yet: prepend the entry after the `## [Unreleased]` section (if present) or after the file header via `replace_file_content`.
 4. Stage, commit and push the changelog in one scripted step:
 
    ```shell

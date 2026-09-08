@@ -57,7 +57,7 @@ Labels: <labels>
 Assignees: <assignees>
 ```
 
-Then use AskUserQuestion:
+Then use `ask_question`:
 > Execute this GitHub operation?
 > Options: **yes** — execute | **edit** — tell me what to change | **cancel** — abort
 

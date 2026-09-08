@@ -2,7 +2,7 @@
 name: plan-execution-validator
 description: Validates execution plans for vague deliverables, circular dependencies, file conflicts, and wave structure integrity.
 subagent: true
-tools: Read
+tools: view_file
 model: gemini-3.8-flash-high
 ---
 

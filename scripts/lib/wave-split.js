@@ -28,7 +28,7 @@ class MaxSplitDepthExceededError extends Error {
   constructor(depth, maxSplitDepth) {
     super(
       `MaxSplitDepthExceededError: splitDepth ${depth} exceeds maxSplitDepth ${maxSplitDepth}. ` +
-      `Manual escalation required — call AskUserQuestion with the set of unresolved task IDs.`
+      `Manual escalation required — call ask_question with the set of unresolved task IDs.`
     );
     this.name = 'MaxSplitDepthExceededError';
     this.depth = depth;

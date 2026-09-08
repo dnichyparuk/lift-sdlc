@@ -52,7 +52,7 @@ If `--init-config` was passed:
    After the `steps[]` selection, offer the optional `--quick` profile prompt:
    > "Would you like to define a `--quick` profile? Select steps that form your shortened pipeline, or skip to omit."
    If the user selects steps, capture them. If the user skips, omit the `--quick` flag when calling `ship-init.js`.
-2. Call `ship-init.js` via Bash with the collected answers, substituting the user's walkthrough answers for the example values below (append `--quick <csv>` only when the user made a quick-profile selection):
+2. Call `ship-init.js` via `run_command` with the collected answers, substituting the user's walkthrough answers for the example values below (append `--quick <csv>` only when the user made a quick-profile selection):
 ```shell
 INIT_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/ship-init.js" --output-file --steps execute,commit,review,archive-openspec,pr --bump patch --auto --threshold high --workspace prompt)
 EXIT_CODE=$?
@@ -174,7 +174,7 @@ Pending:   <comma-separated step names where status !== "completed" && status !=
 
 Note: the banner check gates on `flags.implicitResume`, NOT `flags.resume`. The prepare script auto-sets `flags.resume = true` when `flags.implicitResume === true` so the rest of the pipeline (e.g. Step 5's execute resume forwarding) sees a unified `flags.resume` regardless of whether the user typed `--resume` or the hook triggered it.
 
-**Missing-state prompt:** If the prepare output's `errors` array contains an entry with `id === "implicitResumeNoState"`, use AskUserQuestion:
+**Missing-state prompt:** If the prepare output's `errors` array contains an entry with `id === "implicitResumeNoState"`, use `ask_question`:
 
 > Active pipeline reminder found but no state file for current branch. Start fresh, or specify a state path?
 
@@ -309,7 +309,7 @@ Display the pipeline table for visibility, then proceed without prompting.
 
 Display the pipeline table, then:
 
-Use AskUserQuestion to ask:
+Use `ask_question` to ask:
 > Run this pipeline?
 
 Options:
@@ -326,8 +326,8 @@ On **edit**: ask what to change, update flags, rebuild the pipeline table, and r
 ### Pre-step validation
 
 Before dispatching each step, read its `status` from the skill/ship.js output:
-1. `"will_run"` → dispatch via Agent tool. Inline-executed steps (`skill === null`, `dispatchMode: null`) are not dispatched via a tool — they are handled directly in main context (either as Bash commands or as conditional logic such as parsing a JSON verdict, as specified per-step). This is non-negotiable.
-2. `"conditional"` → evaluate the runtime condition (e.g., review verdict). If condition met → dispatch via Agent tool. If not → print why with the specific condition that was not met.
+1. `"will_run"` → dispatch via `invoke_subagent`. Inline-executed steps (`skill === null`, `dispatchMode: null`) are not dispatched via a subagent — they are handled directly in main context (either via `run_command` executions or as conditional logic such as parsing a JSON verdict, as specified per-step). This is non-negotiable.
+2. `"conditional"` → evaluate the runtime condition (e.g., review verdict). If condition met → dispatch via `invoke_subagent`. If not → print why with the specific condition that was not met.
 3. `"skipped"` → print "skipped" with the `reason` and `skipSource` from the script output.
 
 A step with `status: "will_run"` MUST be dispatched per its `dispatchMode`. The LLM does not have authority to override `dispatchMode` or skip a `will_run` step. Printing a skip message for a "will_run" step is a pipeline violation.
@@ -348,7 +348,7 @@ For each step that will run, apply the dispatch protocol based on `step.dispatch
 
 ---
 
-#### When `step.dispatchMode === 'agent'` — Agent-tool dispatch (all sub-skills)
+#### When `step.dispatchMode === 'agent'` — invoke_subagent dispatch (all sub-skills)
 
 1. **Print verbose progress header** to user:
    ```
@@ -360,9 +360,16 @@ For each step that will run, apply the dispatch protocol based on `step.dispatch
 
 2. **Record step start** via state/ship.js.
 
-3. **Dispatch Agent** with: skill name, args from `step.invocation`, model from `step.model` (which natively carries the correctly mapped suffix from ship.js), and brief pipeline context (branch, previous step results needed for this step). Pass `model: step.model` to the Agent tool on every dispatch. When `step.isolation` is non-null, additionally pass `isolation: step.isolation`; when `step.isolation` is null, omit the `isolation` parameter entirely (the Agent tool schema does not accept `null` for `isolation`). The LLM must not add, remove, or change the `isolation` parameter from what `ship.js` computed. Agent prompt template:
+3. **Dispatch Subagent** via `invoke_subagent` with:
+   - `TypeName`: `"self"` (or orchestrator agent name if specialized)
+   - `Role`: `"Ship Pipeline - " + step.skill`
+   - `Model`: `step.model` (which natively carries the correctly mapped suffix from ship.js)
+   - `Workspace`: `step.isolation === 'worktree' ? 'branch' : 'inherit'`
+   - `Prompt`: fill prompt template below with step arguments and brief pipeline context (branch, previous step results needed for this step).
+
+   Subagent prompt template:
    ```
-   You are executing the <skill-name> skill. Invoke `/<skill-name> <args>` using the Skill tool — this loads the SKILL.md automatically. Return a structured result:
+   You are executing the <skill-name> skill. Run `/<skill-name> <args>` (load and execute the skill instructions). Return a structured result:
    (1) status — success or failure
    (2) result summary — 2-3 lines
    (3) artifacts — commit hash, tag, PR URL, verdict, etc.
@@ -387,9 +394,9 @@ For each step that will run, apply the dispatch protocol based on `step.dispatch
 
 Ship-sdlc retains full control of: pipeline table display, validation output, step progress headers, result formatting, state persistence messages, verdict-based flow decisions, and the final summary report. Sub-skills only execute their skill and return structured data — they do not print pipeline-level output.
 
-### Main-thread TodoWrite orchestration
+### Pipeline progress and state orchestration
 
-ship-sdlc surfaces live pipeline progress in the Antigravity Code task tray via main-thread `TodoWrite` calls (if the tool is available). All derivation logic lives in `scripts/lib/ship-todos.js`. Skip entirely when `flags.steps.length < 2`.
+ship-sdlc tracks deterministic pipeline progress via `scripts/lib/ship-todos.js`. In Antigravity (where `TodoWrite` is not present), the `marker` emitted to stdout and user-facing status messages provide live progress and audit trail. Skip entirely when `flags.steps.length < 2`.
 
 **For every event below:** run `node "<PLUGIN_ROOT>/scripts/lib/ship-todos.js" --state-file "$STATE_FILE" <event args>`, parse the JSON from stdout, call `TodoWrite` with the `todos[]` array if the tool is available (otherwise ignore), and echo `marker` verbatim to stdout (audit trail).
 
@@ -397,12 +404,12 @@ ship-sdlc surfaces live pipeline progress in the Antigravity Code task tray via 
 |---|---|
 | `--event init` | Once, BEFORE the Step 5 dispatch loop |
 | `--event step --current-step <stepName>` | Start of EACH Step 5 iteration, BEFORE the progress header |
-| `--event step --current-step <stepName> --mark-completed <stepName>` | AFTER the Agent return and result print, AFTER `state/ship.js complete` has persisted status=completed on disk (ship-todos reads the state file, so ordering matters) |
+| `--event step --current-step <stepName> --mark-completed <stepName>` | AFTER the Subagent return and result print, AFTER `state/ship.js complete` has persisted status=completed on disk (ship-todos reads the state file, so ordering matters) |
 | `--event step --current-step <stepName> --fail-step <stepName>` | AFTER `state/ship.js fail` records a failure (no todo lingers `in_progress` — the helper enforces this) |
 | `--event resume --current-step <resume.nextPendingStep>` | Inside the implicit-resume banner block, BEFORE the pipeline table prints, when `flags.resume === true` (the single gate — unifies explicit `--resume` and `flags.implicitResume`) |
-| `--event cleanup --current-step cleanup` | Before invoking the Terminal cleanup Bash command (see below) |
+| `--event cleanup --current-step cleanup` | Before invoking the Terminal cleanup `run_command` (see below) |
 
-**Cross-skill note:** `execute-plan-sdlc`'s internal per-wave `TodoWrite` calls remain (Agent-context bookkeeping). They are NOT parent-visible — see `execute-plan-sdlc/SKILL.md` Progress signal section.
+**Cross-skill note:** `execute-plan-sdlc` maintains its own wave progress via execution state files. Subagent execution progress is kept bounded — see `execute-plan-sdlc/SKILL.md` Progress signal section.
 
 ### Workspace isolation and branch setup
 
@@ -435,8 +442,8 @@ The setup script handles ship state migration (`state/ship.js` migrate) internal
 
 **Execute step resume:** When the pipeline is resuming (gate on `flags.resume === true` from the prepare output — this is `true` whether the user typed `--resume` or the hook triggered implicit resume; do NOT re-parse `$ARGUMENTS`) and the execute step's status in the ship state file is `in_progress`:
 1. Check for `<main-worktree>/.sdlc/execution/execute-<branch>-*.json` (an execute-plan-sdlc state file for the current branch). Resolve `<main-worktree>` from the `mainWorktree` field of `node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" resolve --branch <branch>` (that field is returned whether or not a linked worktree was `found`).
-2. If found, dispatch execute-plan-sdlc via the Agent tool with args from `step.invocation` plus `--resume` (e.g. `"--quality <X> --resume"` if the user passed `--quality` to ship; `"--resume"` otherwise). Wave progress and gates run inside the Agent's sub-context; the structured return value drives the next step. `flags.resume` is the single resume signal regardless of source.
-3. If not found, dispatch via Agent tool normally using `step.invocation` (execute restarts from scratch)
+2. If found, dispatch execute-plan-sdlc via `invoke_subagent` with args from `step.invocation` plus `--resume` (e.g. `"--quality <X> --resume"` if the user passed `--quality` to ship; `"--resume"` otherwise). Wave progress and gates run inside the subagent's context; the structured return value drives the next step. `flags.resume` is the single resume signal regardless of source.
+3. If not found, dispatch via `invoke_subagent` normally using `step.invocation` (execute restarts from scratch)
 
 ship-sdlc does not manage execute-plan-sdlc's state file — execute-plan-sdlc handles its own creation, updates, and cleanup.
 
@@ -591,15 +598,15 @@ Parse the JSON line. Branch on `status`:
 
    **`status === "green"`** — log `verify-pipeline: CI green for PR #N` and proceed to `await-remote-review`.
 
-   **`status === "failed"`** AND `flags.auto === false` — interactive. Use `AskUserQuestion`:
+   **`status === "failed"`** AND `flags.auto === false` — interactive. Use `ask_question`:
    > Wave verify-pipeline failed for PR #N. <X> failed checks: <names>.
    >
    > Options: **analyze** (Recommended) | **skip** | **abort**
-   - **analyze**: dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.8-flash-high) with `--pr <N>` and `--logs <inline-log-excerpt-from-failedChecks>`. On verdict `fix-applied`, dispatch `commit-sdlc` (Agent tool, model gemini-3.8-flash-medium, `--auto`) directly to commit and push. Then re-run verify-pipeline (loop). Iteration cap = `flags.verifyPipelineMaxIterations` (default 3); after cap, log warning and proceed to `await-remote-review`. The pre-existing `commit-fixes` step entry (already visited before `pr`) is NOT involved — this dispatch is direct via the Agent tool.
+   - **analyze**: dispatch `verify-pipeline-sdlc` subagent (via `invoke_subagent`, Model gemini-3.8-flash-high) with `--pr <N>` and `--logs <inline-log-excerpt-from-failedChecks>`. On verdict `fix-applied`, dispatch `commit-sdlc` (via `invoke_subagent`, Model gemini-3.8-flash-medium, `--auto`) directly to commit and push. Then re-run verify-pipeline (loop). Iteration cap = `flags.verifyPipelineMaxIterations` (default 3); after cap, log warning and proceed to `await-remote-review`. The pre-existing `commit-fixes` step entry (already visited before `pr`) is NOT involved — this dispatch is direct via `invoke_subagent`.
    - **skip**: log warning, proceed to `await-remote-review`.
    - **abort**: write `verifyPipelineExhausted: true` to the ship state file, exit pipeline 1.
 
-   **`status === "failed"`** AND `flags.auto === true` — non-interactive. Directly dispatch `verify-pipeline-sdlc` subagent (Agent tool, model gemini-3.8-flash-high) with `--pr <N> --logs <excerpt> --auto`. On `fix-applied`, dispatch `commit-sdlc --auto` directly (Agent tool, model gemini-3.8-flash-medium). Loop with the same iteration cap (`flags.verifyPipelineMaxIterations`). On cap exhaustion, log warning and proceed.
+   **`status === "failed"`** AND `flags.auto === true` — non-interactive. Directly dispatch `verify-pipeline-sdlc` subagent (via `invoke_subagent`, Model gemini-3.8-flash-high) with `--pr <N> --logs <excerpt> --auto`. On `fix-applied`, dispatch `commit-sdlc --auto` directly (via `invoke_subagent`, Model gemini-3.8-flash-medium). Loop with the same iteration cap (`flags.verifyPipelineMaxIterations`). On cap exhaustion, log warning and proceed.
 
    **`status === "timeout"`** — log warning `verify-pipeline: timeout after Ns`. The script has already written `verifyPipelineExhausted: true` to the state file. Proceed to `await-remote-review`.
 
@@ -615,7 +622,7 @@ node "<PLUGIN_ROOT>/scripts/util/await-review.js" $STEP_ARGS --state-file "$SHIP
 
 Parse the JSON line. Branch on `status`:
 
-   **`status === "actionable"`** — directly dispatch `received-review-sdlc` (Agent tool, model gemini-3.8-flash-high) with `--pr <verdict.prNumber>` (and `--auto` when `flags.auto === true`). After the subagent completes, run `git status --porcelain` in the main context; if there are working-tree changes, directly dispatch `commit-sdlc` (Agent tool, model gemini-3.8-flash-medium, `--auto`) to commit and push. The pre-existing `received-review` and `commit-fixes` step entries (already visited before `pr`) are NOT involved — these dispatches are direct via the Agent tool.
+   **`status === "actionable"`** — directly dispatch `received-review-sdlc` (via `invoke_subagent`, Model gemini-3.8-flash-high) with `--pr <verdict.prNumber>` (and `--auto` when `flags.auto === true`). After the subagent completes, run `git status --porcelain` in the main context; if there are working-tree changes, directly dispatch `commit-sdlc` (via `invoke_subagent`, Model gemini-3.8-flash-medium, `--auto`) to commit and push. The pre-existing `received-review` and `commit-fixes` step entries (already visited before `pr`) are NOT involved — these dispatches are direct via `invoke_subagent`.
 
    **`status === "approved-clean"`** — log `await-remote-review: APPROVED by <reviewer>` and proceed. Do NOT dispatch received-review-sdlc.
 
@@ -672,7 +679,7 @@ Rebase: CONFLICTS detected with origin/<defaultBranch>
   Pipeline paused. Resolve conflicts manually, then --resume.
 ```
 
-**Interactive mode:** Use AskUserQuestion:
+**Interactive mode:** Use `ask_question`:
 > Rebase onto `<defaultBranch>` has conflicts in <N> files:
 > - `src/foo.ts`
 > - `src/bar.ts`
@@ -706,7 +713,7 @@ Defer findings: `node "<PLUGIN_ROOT>/scripts/state/ship.js" defer --severity <s>
 
 The prepare-script output (`steps[]` array) ends with a synthetic step named `cleanup` (`status: "will_run"`, `skill: null`, `reserved: true`). It is appended unconditionally by `skill/ship.js::computeSteps` and is NOT user-configurable — listing `cleanup` in `--steps` or `ship.steps[]` produces a validation error in Step 1c.
 
-Dispatch the cleanup step **as a direct Bash call**, not as an Agent. Each `cleanup` step entry has an `invocation` object with two precomputed command variants; substitute the absolute plugin path for `$SCRIPT` (replace `"node \"$SCRIPT\""` with `node "<PLUGIN_ROOT>/scripts/state/ship.js"`):
+Dispatch the cleanup step **as a direct `run_command` call**, not as an Agent. Each `cleanup` step entry has an `invocation` object with two precomputed command variants; substitute the absolute plugin path for `$SCRIPT` (replace `"node \"$SCRIPT\""` with `node "<PLUGIN_ROOT>/scripts/state/ship.js"`):
 
 ```json
 {
@@ -716,7 +723,7 @@ Dispatch the cleanup step **as a direct Bash call**, not as an Agent. Each `clea
 }
 ```
 
-**Cleanup-step todo:** fire the `--event cleanup` TodoWrite call (see the table above) before invoking the cleanup Bash command below. After the cleanup command returns (success or contract violation), fire the `--mark-completed cleanup` completion event.
+**Cleanup-step todo:** fire the `--event cleanup` TodoWrite call (see the table above) before invoking the cleanup command below. After the cleanup command returns (success or contract violation), fire the `--mark-completed cleanup` completion event.
 
 Selection rule: walk `steps[]` and check whether any prior step's recorded status (from the live state file, not the prepare snapshot) is `failed`. If so, dispatch with `step.invocation.forced`; otherwise dispatch with `step.invocation.normal`. `$SCRIPT` is the same `state/ship.js` path resolved in the state-persistence section above.
 
@@ -778,7 +785,7 @@ Worktree kept: <path>
   To remove later: node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" remove --path <path>
 ```
 
-**Interactive mode:** Use AskUserQuestion — keep or remove.
+**Interactive mode:** Use `ask_question` — keep or remove.
 If remove:
 ```bash
 node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" remove --path <path>

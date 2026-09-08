@@ -15,10 +15,10 @@ conditionally after Step 2 classifies the operation type.
 >
 > 1. Gather inputs from the user request
 > 2. Resolve description template (Create + description-touching Edit only)
-> 3. Detect placeholders via the C13 regex; escalate every `low`-confidence marker via `AskUserQuestion`
+> 3. Detect placeholders via the C13 regex; escalate every `low`-confidence marker via `ask_question`
 > 4. Build the proposed payload
 > 5. Critique — emit the `Initial:` / `Critique:` / `Final:` block, then call `lib/artifact-store.js` `writeCritique(hash, ...)`
-> 6. Approval gate — `AskUserQuestion` with `approve` / `change <what>` / `cancel`; on `approve` call `lib/artifact-store.js` `writeApprovalToken(hash)`. No PreToolUse hook exists to verify the artifacts written by steps 5–6 or block dispatch if they're missing — `hooks/pre-tool-jira-write-guard.js` is not implemented and not registered in `hooks.json`. Step 7 dispatch is gated by LLM instruction-following only; verify both artifacts yourself before dispatching
+> 6. Approval gate — `ask_question` with `approve` / `change <what>` / `cancel`; on `approve` call `lib/artifact-store.js` `writeApprovalToken(hash)`. No PreToolUse hook exists to verify the artifacts written by steps 5–6 or block dispatch if they're missing — `hooks/pre-tool-jira-write-guard.js` is not implemented and not registered in `hooks.json`. Step 7 dispatch is gated by LLM instruction-following only; verify both artifacts yourself before dispatching
 > 7. Dispatch the MCP write call
 > 8. Post-op cache update
 >
@@ -39,12 +39,12 @@ conditionally after Step 2 classifies the operation type.
    a. Check .sdlc/jira-templates/<issueTypeName>.md — if exists, read it (override)
    b. Else, find templates/<issueTypeName>.md relative to the resolved $SCRIPT path (shipped)
    c. If found: fill all {placeholder} markers from user context (see step 3)
-   d. If neither exists: AskUserQuestion with the closed list of available templates —
+   d. If neither exists: ask_question with the closed list of available templates —
       free-form descriptions are prohibited
 
 3. Detect placeholders via C13 regex — `\{[a-zA-Z_][a-zA-Z0-9_-]*\}|\[[^\]\n]{3,}\]`
    - Classify each marker `high` (explicit user input or definitive cache value) or `low`
-   - For every `low` marker: AskUserQuestion to resolve before payload finalization
+   - For every `low` marker: ask_question to resolve before payload finalization
    - Inapplicable section removal requires explicit user consent (no silent drops)
    - NEVER leave raw {placeholder} or [bracketed prose] in the final description
 
@@ -65,7 +65,7 @@ conditionally after Step 2 classifies the operation type.
        const hash = payloadHash(payload);
        writeCritique(hash, { initial, findings, final });
 
-6. Approval gate — print full final payload, AskUserQuestion approve/change/cancel
+6. Approval gate — print full final payload, ask_question approve/change/cancel
    - On `approve`: writeApprovalToken(hash)
    - On `change <what>`: revise payload, return to step 5 (new hash, fresh artifacts)
    - On `cancel`: abort — do not dispatch
@@ -86,11 +86,11 @@ conditionally after Step 2 classifies the operation type.
 2. Resolve description template — ONLY when description is being touched
    - Look up the issue's issueTypeName via cache or getJiraIssue
    - Resolve override `.sdlc/jira-templates/<Type>.md` then shipped `templates/<Type>.md`
-   - If editing description without a template match, AskUserQuestion with a closed list
+   - If editing description without a template match, ask_question with a closed list
 
 3. Detect placeholders via C13 regex — applies to every string-valued field, not
    only description; ADF text nodes traversed recursively
-   - Resolve every `low`-confidence marker via AskUserQuestion before payload finalization
+   - Resolve every `low`-confidence marker via ask_question before payload finalization
 
 4. Build fields object (flat — NOT nested under fields.fields)
    - Priority → { name: "..." }
@@ -101,7 +101,7 @@ conditionally after Step 2 classifies the operation type.
 
 5. Critique — emit Initial/Critique/Final block; writeCritique(hash, ...)
 
-6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — ask_question approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__editJiraIssue with responseContentFormat: "markdown"
@@ -150,7 +150,7 @@ conditionally after Step 2 classifies the operation type.
 5. Critique — verify transition target reachable per cached workflow graph;
    emit Initial/Critique/Final; writeCritique(hash, ...)
 
-6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — ask_question approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__transitionJiraIssue
@@ -182,7 +182,7 @@ conditionally after Step 2 classifies the operation type.
 
 5. Critique — emit Initial/Critique/Final block; writeCritique(hash, ...)
 
-6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — ask_question approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__addCommentToJiraIssue
@@ -209,7 +209,7 @@ conditionally after Step 2 classifies the operation type.
 
 5. Critique — emit Initial/Critique/Final block; writeCritique(hash, ...)
 
-6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — ask_question approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__createIssueLink
@@ -253,7 +253,7 @@ conditionally after Step 2 classifies the operation type.
 
 5. Critique — emit Initial/Critique/Final block; writeCritique(hash, ...)
 
-6. Approval gate — AskUserQuestion approve/change/cancel; on `approve`
+6. Approval gate — ask_question approve/change/cancel; on `approve`
    writeApprovalToken(hash)
 
 7. Dispatch — call mcp__atlassian__addWorklogToJiraIssue

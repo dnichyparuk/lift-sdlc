@@ -28,7 +28,7 @@ Suggested config:
 
 ### Step 3 (CONFIRM): Ask User to Confirm
 
-Use AskUserQuestion to present the detected setup and ask:
+Use `ask_question` to present the detected setup and ask:
 > Does this look right?
 
 Options:

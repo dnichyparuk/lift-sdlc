@@ -104,7 +104,7 @@ The JSON contains these top-level keys:
 
 ### Step 1 -- Selective-Section Menu
 
-<!-- Implements R-menu-1, R-menu-4. Step 1 is plain chat output; AskUserQuestion is intentionally NOT used here. -->
+<!-- Implements R-menu-1, R-menu-4. Step 1 is plain chat output; ask_question is intentionally NOT used here. -->
 
 **Render the status block**, using `section.label` and `section.summary` verbatim. Badge per row is driven by `section.state`: `[set]` (configured), `[not set]` (no config), `[legacy]` (needs migration; locked when `section.locked` is true):
 
@@ -132,7 +132,7 @@ Locked legacy rows append ` (locked — required)` after the description. All st
 3. [legacy] Review (locked — required) — Configures review dimensions for review-sdlc.
 ```
 
-**Ask via plain chat (NOT `AskUserQuestion`).** Print the following as a literal chat message, then end the model turn so the user's next message is the answer:
+**Ask via plain chat (NOT `ask_question`).** Print the following as a literal chat message, then end the model turn so the user's next message is the answer:
 
 ```
 Reply with the numbers to configure (e.g. 1,3,5 or 1-3,7), or type:
@@ -163,11 +163,11 @@ Store the resolved section ids as `selectedIds`. Defer migration and field colle
 - `.sdlc/local.json` is v1 schema — has legacy `ship.preset` or `ship.skip` keys, or lacks the top-level `version: 2` stamp (`localIsV1` from prepare output). `readLocalConfig` never migrates on read (it is a pure read, no write) — the fix is re-running the `ship` section through Step 3 below, which fully replaces the section via `writeLocalConfig` and stamps the current schema version.
 - `legacy.jiraTemplates.exists` is true (`.sdlc/jira-templates/` detected)
 
-If legacy files exist or `projectConfig.misplaced` is non-empty, use AskUserQuestion:
+If legacy files exist or `projectConfig.misplaced` is non-empty, use ask_question:
 
 > Legacy config files detected. Migrate to unified config before proceeding?
 
-If `localIsV1` is true but no legacy files and no misplaced sections exist, use AskUserQuestion:
+If `localIsV1` is true but no legacy files and no misplaced sections exist, use ask_question:
 
 > Ship config at `.sdlc/local.json` uses a v1 schema (missing `version: 2`, or has legacy `preset`/`skip` keys). Migrate to v2 format?
 
@@ -193,7 +193,7 @@ Parse the refreshed output from `$PREPARE_OUTPUT_FILE`. Delete the manifest with
 - List each file from `migrated` array
 - List each file from `conflicts` array with explanation: "Conflict: unified config already has this section -- legacy file was NOT merged"
 
-Then use AskUserQuestion:
+Then use ask_question:
 
 > Delete legacy config files?
 
@@ -240,7 +240,7 @@ For each id selected in Step 1 (call this list `selectedIds`), in `prepare.secti
 
    | `delegatedTo` value | Dispatcher |
    |---|---|
-   | `null` | Generic field-loop (3.G below) — dispatch one AskUserQuestion per `section.fields[]` entry, optionally gated by `section.confirmDetected`. The `workspace` section uses this dispatcher but overrides `layout`-field rendering per `@resources/setup-workspace.md` (read and follow it in full for that section). |
+   | `null` | Generic field-loop (3.G below) — dispatch one ask_question per `section.fields[]` entry, optionally gated by `section.confirmDetected`. The `workspace` section uses this dispatcher but overrides `layout`-field rendering per `@resources/setup-workspace.md` (read and follow it in full for that section). |
    | `'inline-commit-builder'` | Commit-pattern builder — read and follow `@resources/setup-patterns.md` ("Commit-pattern builder" section), gated by the verbose header above |
    | `'inline-pr-builder'` | PR-pattern builder — read and follow `@resources/setup-patterns.md` ("PR-pattern builder" section) |
    | `'setup-dimensions'` | Run scan phase (Step 3.S below), then read and follow `@resources/setup-dimensions.md` passing scan results as "Scan Input". Pass through `--add` and `--no-copilot` modifiers if present. |
@@ -256,7 +256,7 @@ After the loop, write any pending project-config and local-config slices via the
 
 For sections with `delegatedTo: null` (`version`, `ship`, `jira`, `review`):
 
-If `section.confirmDetected === true` (currently only `version`), dispatch a meta-prompt FIRST using AskUserQuestion:
+If `section.confirmDetected === true` (currently only `version`), dispatch a meta-prompt FIRST using ask_question:
 
 > Use detected settings, customize each field, or skip this section?
 
@@ -266,7 +266,7 @@ Options: `yes` (write detected values directly), `customize` (iterate `section.f
 - On **customize**: continue to the field iteration below.
 - On **skip**: stop processing this section; do not write anything.
 
-For each entry `field` in `section.fields` (when iterating), dispatch one AskUserQuestion:
+For each entry `field` in `section.fields` (when iterating), dispatch one ask_question:
 
 - **Skip gate (prepare-sourced):** If `field.skip === true` (set by the prepare script when a `when.stepInActiveSteps` gate is unsatisfied — see P7), skip this field entirely. Do NOT ask the user anything; do NOT write any value for this field. Move to the next entry.
 - **Question prompt:** `field.label`
@@ -285,8 +285,8 @@ After all version section fields are collected and BEFORE storing the section ob
 2. Let `compat = prepare.preReleaseCompat[<chosen-fileType>]`.
 3. Branch on `compat.level`:
    - `compatible` → store the section as-is; no prompt.
-   - `partial` or `unknown` → print `compat.message`, then use AskUserQuestion (single-select): "Proceed with `preRelease: <value>` for `<fileType>`?" → options `yes` (store as-is), `no` (omit `preRelease` from the stored section).
-   - `incompatible` → print `compat.message`, then use AskUserQuestion (single-select): "Pre-release labels are not supported for `<fileType>`. Clear `preRelease`, or proceed anyway?" → options `clear` (omit `preRelease` from the stored section), `proceed` (store as-is, accepting risk).
+   - `partial` or `unknown` → print `compat.message`, then use ask_question (single-select): "Proceed with `preRelease: <value>` for `<fileType>`?" → options `yes` (store as-is), `no` (omit `preRelease` from the stored section).
+   - `incompatible` → print `compat.message`, then use ask_question (single-select): "Pre-release labels are not supported for `<fileType>`. Clear `preRelease`, or proceed anyway?" → options `clear` (omit `preRelease` from the stored section), `proceed` (store as-is, accepting risk).
 4. The check runs once per version-section dispatch; it does NOT re-trigger if the same compat verdict was already resolved within a single uninterrupted execution of Step 3 (state-machine idempotency: a single run never asks the same question twice for the same `(fileType, preRelease)` pair).
 
 **Answer mapping when assembling the section object:**
@@ -297,7 +297,7 @@ After all version section fields are collected and BEFORE storing the section ob
 - `number` fields → coerce the answer to a JavaScript integer (use `parseInt`); validate against `field.min` (when present, value must be ≥ min) and `field.max` (when present, value must be ≤ max); re-prompt on invalid input, citing the violated bound in the error message
 - `list` fields → accept comma-separated input; split on `,` and trim each element to produce a string array; write the resulting array
 
-You MUST issue exactly one AskUserQuestion per `section.fields[]` entry that survives the gating above. Do not batch, reorder, or hand-enumerate fields — the manifest owns the list.
+You MUST issue exactly one ask_question per `section.fields[]` entry that survives the gating above. Do not batch, reorder, or hand-enumerate fields — the manifest owns the list.
 
 #### 3.commit / 3.pr. Inline commit- and PR-pattern builders
 
@@ -315,7 +315,7 @@ the "Writing config files" step below.
 
 The `workspace` section uses the generic 3.G field-loop dispatcher but the
 `layout` field needs a numbered menu with live previews and a mismatch
-warning before its AskUserQuestion fires. Read and follow
+warning before its ask_question fires. Read and follow
 `@resources/setup-workspace.md` in full for this section's rendering,
 per-layout follow-up fields, and write target (`.sdlc/local.json`, gitignored,
 per-developer — never `.sdlc/config.json`).
@@ -372,7 +372,7 @@ Render `DIFF_JSON.changed[]` as a markdown table:
 
 When `DIFF_JSON.changed.length === 0`, skip the preview and print `No changes — nothing to write.`; bypass the write step (`util/setup-init.js` invocation) and proceed directly to Step 3b validation (which is now a no-op confirmation).
 
-Otherwise, ask the user to confirm the diff via AskUserQuestion (suppressed when `--auto` is set; auto mode proceeds to write). On rejection, print `Write cancelled — no changes made.` and skip the write step.
+Otherwise, ask the user to confirm the diff via ask_question (suppressed when `--auto` is set; auto mode proceeds to write). On rejection, print `Write cancelled — no changes made.` and skip the write step.
 
 #### Writing config files
 
@@ -441,12 +441,12 @@ This skill is safe to re-run. Already-configured sections are skipped unless `--
 ## DO NOT
 
 - Run full-suite or wide-subset `promptfoo eval` automatically — single targeted test scoped to the change is allowed; tight-loop retries are not.
-- Delete legacy files without explicit user confirmation via AskUserQuestion
+- Delete legacy files without explicit user confirmation via ask_question
 - Invoke removed skills (`/review-init-sdlc`, `/pr-customize-sdlc`, `/guardrails-init-sdlc`) -- they no longer exist as standalone skills; use the sub-flows (`@resources/setup-dimensions.md`, `@resources/setup-pr-template.md`, `@resources/setup-guardrails.md`) instead
 - Modify Jira templates directly -- delegate to `/jira-sdlc` via the Skill tool
-- Write config files using the Write or Edit tools directly -- always go through `lib/config.js` functions (`writeProjectConfig`, `writeLocalConfig`) via inline Node.js in Bash
-- Invoke sub-skills via the Agent tool -- use the Skill tool exclusively
-- Skip AskUserQuestion for any user interaction -- do not print questions and wait for freeform input
+- Write config files using the write_to_file or replace_file_content tools directly -- always go through `lib/config.js` functions (`writeProjectConfig`, `writeLocalConfig`) via inline Node.js in Bash
+- Invoke sub-skills via invoke_subagent or run inline as specified
+- Skip ask_question for any user interaction -- do not print questions and wait for freeform input
 - Assume `mode` for the version section without asking or detecting it -- it is a required field enforced by the JSON schema; default to `mode: "file"` when `detected.versionFile` is present, otherwise `mode: "tag"`, and always include `mode` in the written config
 
 ---

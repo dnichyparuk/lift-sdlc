@@ -9,7 +9,7 @@ current-value) has already been printed before either builder below runs.
 
 ## Commit-pattern builder (`commit` section)
 
-Use AskUserQuestion:
+Use ask_question:
 
 > Do you enforce commit message patterns in this project?
 
@@ -19,7 +19,7 @@ Options:
 - **custom** -- Enter your own regex pattern
 - **skip** -- Don't configure commit patterns
 
-On **conventional**: Use AskUserQuestion for sequential refinement:
+On **conventional**: Use ask_question for sequential refinement:
 
 1. "Require scope?" -- yes / no → Determines `subjectPattern`:
    - yes: `^(feat|fix|refactor|chore|docs|test|ci)(\\(.*\\)): .+$`
@@ -37,7 +37,7 @@ On **conventional**: Use AskUserQuestion for sequential refinement:
 
 Assemble the `commit` section object. Only include optional fields if the user provided values; omit empty arrays.
 
-On **ticket-prefix**: Use AskUserQuestion for sequential refinement:
+On **ticket-prefix**: Use ask_question for sequential refinement:
 
 1. "Ticket pattern?" -- free text regex (default: `[A-Z]{2,10}-\\d+` for `PROJ-123`) → Sets `ticketPattern`
 2. "Combine with conventional type?" -- yes / no:
@@ -45,7 +45,7 @@ On **ticket-prefix**: Use AskUserQuestion for sequential refinement:
    - no: `subjectPattern` becomes `^PROJ-\\d+: .+$`
 3. If combined with types, ask the same type/scope/body/trailer refinement questions as **conventional**.
 
-On **custom**: Use AskUserQuestion:
+On **custom**: Use ask_question:
 
 1. "Enter your regex pattern for commit subject:" → free text → `subjectPattern`
 2. "Enter error message if pattern doesn't match:" → free text → `subjectPatternError`
@@ -58,7 +58,7 @@ Store the assembled `commit` config for use in the "Writing config files" step (
 
 ## PR-pattern builder (`pr` section)
 
-Use AskUserQuestion:
+Use ask_question:
 
 > Do you enforce PR title patterns?
 
@@ -71,7 +71,7 @@ Options:
 
 On **same-as-commit** (if available): Copy the commit config fields to PR config with renamed fields: `subjectPattern` → `titlePattern`, `subjectPatternError` → `titlePatternError`. Keep `allowedTypes`, `allowedScopes`, `requiresBody`, `trailers` as-is.
 
-On **conventional**: Use sequential AskUserQuestion:
+On **conventional**: Use sequential ask_question:
 
 1. "Allowed types?" -- multi-select (feat, fix, refactor, chore, docs, test, ci; all selected by default)
 2. "Require scope?" -- yes / no

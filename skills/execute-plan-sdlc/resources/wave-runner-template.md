@@ -158,7 +158,7 @@ The following are main-context responsibilities. Wave-runner MUST NOT perform th
 
 - **Does NOT write `state/execute.js` updates.** Main context calls `wave-start`, `task-done`, `task-fail`, `wave-done`, `wave-fail` with the information from `WAVE_SUMMARY`.
 - **Does NOT run Step 5a-pre (pre-wave guardrail check).** Main context evaluates error-severity guardrails before dispatching wave-runner.
-- **Does NOT run Step 5a (high-risk gate).** Main context fires `AskUserQuestion` before dispatching wave-runner when the wave contains high-risk tasks.
+- **Does NOT run Step 5a (high-risk gate).** Main context fires `ask_question` before dispatching wave-runner when the wave contains high-risk tasks.
 - **Does NOT run Step 5c filesystem/canary verification.** Main context runs `git diff --stat` and canary grep against `WAVE_SUMMARY.tasks[].filesChanged` and `verifyToken`.
 - **Does NOT run Step 5c-bis (spec compliance reviewer).** Main context dispatches a separate spec compliance reviewer Agent after wave-runner returns.
 - **Does NOT run Step 5c-ter (post-wave guardrail check).** Main context evaluates all guardrails against actual `git diff` output.
@@ -170,10 +170,9 @@ The following are main-context responsibilities. Wave-runner MUST NOT perform th
 
 ## Hard Constraints
 
-- `mode: bypassPermissions` — required on every sub-Agent dispatch.
-- `model: <assignedModel>` — required on every sub-Agent dispatch. Omitting it inherits the parent model and defeats the quality-tier system.
-- **DO NOT pass `isolation: "worktree"` (or any other `isolation` value) on any sub-Agent dispatch.** The SDLC `--workspace worktree` flag controls a separate concept (a sibling git worktree created via `util/worktree-create.js`). Adding `isolation` here creates ephemeral `.sdlc/worktrees/agent-<id>` paths that are not the intended SDLC worktree.
-- **Edit tool only for all file modifications** in sub-Agent contexts. Never use bash `sed`, `awk`, Python scripts, or any indirect patching method. These approaches fail silently.
+- `Model: <assignedModel>` — required on every subagent dispatch. Omitting it inherits the parent model and defeats the quality-tier system.
+- **DO NOT pass `Workspace: "branch"` (or any other `Workspace` isolation) on any subagent dispatch.** The SDLC `--workspace worktree` flag controls a separate concept (a sibling git worktree created via `util/worktree-create.js`). Adding `Workspace: "branch"` here creates ephemeral isolated workspaces that are not the intended SDLC worktree.
+- **`replace_file_content` and `write_to_file` only for all file modifications** in subagent contexts. Never use bash `sed`, `awk`, Python scripts, or any indirect patching method. These approaches fail silently.
 - Do not read the plan file inside sub-Agent contexts — all task information is pasted inline by main context.
 - Do not modify files outside each task's stated file list.
 - Do not add features, refactor, or clean up beyond what each task specifies.

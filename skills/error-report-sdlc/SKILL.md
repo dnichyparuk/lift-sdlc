@@ -44,7 +44,7 @@ not run the prepare script, do not dispatch the orchestrator.
 
 ### Step 2 — Consent Gate 1: Offer (main context)
 
-Follow resources/REFERENCE.md section 3 verbatim. Use `AskUserQuestion`. The prompt MUST run
+Follow resources/REFERENCE.md section 3 verbatim. Use `ask_question`. The prompt MUST run
 in the main context (not inside the orchestrator agent) — the user's consent is
 required before any further work, including running the prepare script.
 
@@ -83,28 +83,29 @@ orchestrator will omit dependent template sections.
 - Exit code 1: required field missing — show the script's stderr message and stop.
 - Exit code 2: prepare script crashed — show the stderr and stop. Do **not** recursively dispatch this skill on its own crash.
 
-### Step 4 — Dispatch the error-report-orchestrator Agent
+### Step 4 — Dispatch the error-report-orchestrator Subagent
 
 To keep the main context clean and bound the orchestrator's input to the
 prepared payload only, dispatch the dedicated `error-report-orchestrator` agent.
 
-Use the `Agent` tool with:
+Use `invoke_subagent` with:
 
-- `subagent_type`: `sdlc:error-report-orchestrator`
-- `model`: `gemini-3.8-flash-low` — the Agent tool's `model:` param takes precedence
-  over agent frontmatter, keeping this bounded task on a lightweight model regardless
-  of the parent context's model
-- `prompt` (exactly three lines, no other content):
+```json
+{
+  "Subagents": [
+    {
+      "TypeName": "error-report-orchestrator",
+      "Role": "Error Report Orchestrator",
+      "Model": "flash_lite",
+      "Prompt": "MANIFEST_FILE: <ERROR_CONTEXT_FILE>\nPROJECT_ROOT: <cwd>\nPLUGIN_ROOT: <PLUGIN_ROOT>"
+    }
+  ]
+}
+```
 
-  ```text
-  MANIFEST_FILE: <ERROR_CONTEXT_FILE>
-  PROJECT_ROOT: <cwd>
-  PLUGIN_ROOT: <PLUGIN_ROOT>
-  ```
-
-  Substitute `<ERROR_CONTEXT_FILE>` with the absolute temp-file path captured in
-  Step 3. Substitute `<cwd>` with the current working directory. Substitute
-  `<PLUGIN_ROOT>` with the same absolute plugin path used in Step 3.
+Substitute `<ERROR_CONTEXT_FILE>` with the absolute temp-file path captured in
+Step 3. Substitute `<cwd>` with the current working directory. Substitute
+`<PLUGIN_ROOT>` with the same absolute plugin path used in Step 3.
 
 The orchestrator reads the manifest, reads
 `skills/error-report-sdlc/templates/ToolingError.md`, fills
@@ -119,7 +120,7 @@ Capture the returned object as `PROPOSAL = { title, body }`. If the parse fails,
 
 Follow resources/REFERENCE.md section 5 verbatim. Display `PROPOSAL.title` and
 `PROPOSAL.body` to the user along with the labels (`tooling-error` plus the
-calling skill's name) and the priority. Use `AskUserQuestion` for the
+calling skill's name) and the priority. Use `ask_question` for the
 `yes / edit / cancel` choice.
 
 **On `edit`:** Apply the requested changes to `PROPOSAL.title` and / or

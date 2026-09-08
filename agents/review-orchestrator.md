@@ -2,7 +2,7 @@
 name: review-orchestrator
 description: Orchestrates multi-dimension code review. Reads manifest from a temp file, resolves REFERENCE.md, dispatches dimension review subagents in parallel, critiques and deduplicates findings, and persists the consolidated comment body to disk for the skill to post.
 subagent: true
-tools: Read, Write, Glob, Grep, Bash, Agent
+tools: view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command, invoke_subagent
 model: gemini-3.8-flash-low
 ---
 
@@ -20,8 +20,8 @@ Your job: run the full review pipeline in isolation so the user's main context s
 
 Read the manifest JSON from `MANIFEST_FILE`.
 
-Resolve REFERENCE.md: Glob with `path: ~/.gemini/config/plugins` and pattern `**/review-sdlc/REFERENCE.md`.
-If not found, retry Glob with `path: PROJECT_ROOT`. Store the resolved absolute path as
+Resolve REFERENCE.md: search via `find_by_name` with `SearchDirectory: ~/.gemini/config/plugins` and `Pattern: **/review-sdlc/REFERENCE.md`.
+If not found, retry `find_by_name` with `SearchDirectory: PROJECT_ROOT`. Store the resolved absolute path as
 `REFERENCE_MD_PATH`. Read REFERENCE.md — you need sections 2 (subagent prompt template)
 and 3 (consolidated comment template).
 
@@ -91,7 +91,7 @@ Use section 2 "Subagent Prompt Template" from REFERENCE.md.
 
 For each dimension with `status: "ACTIVE"` or `status: "TRUNCATED"`:
 
-1. Read the pre-computed diff: `Read(dimension.diff_file)`
+1. Read the pre-computed diff: `view_file(dimension.diff_file)`
 2. Build the subagent prompt using the template from REFERENCE.md section 2, filling:
    - `{dimension.name}`, `{dimension.description}`, `{dimension.severity}`
    - `{dimension body}` → `dimension.body`
@@ -109,14 +109,13 @@ For each dimension with `status: "ACTIVE"` or `status: "TRUNCATED"`:
      {end for}
      ```
 
-3. Dispatch via Agent tool (subagent_type: general-purpose, model: dimension.model || manifest.subagent_model)
+3. Dispatch via `invoke_subagent` with `Subagents` array (each with `TypeName: "research"`, `Role: "<dimension.name> reviewer"`, `Model: dimension.model || manifest.subagent_model`, `Prompt: ...`):
    - Per-dimension precedence: when a dimension declares a `model:` field in its
      manifest entry (sourced from its frontmatter, see R15), that value wins. Otherwise
      fall back to `manifest.subagent_model`. Forward the string verbatim — no
      whitelist, no remap.
 
-**Dispatch ALL active dimensions in a SINGLE message** (multiple Agent tool calls in
-one response). Do not dispatch one at a time.
+**Dispatch ALL active dimensions in a SINGLE `invoke_subagent` call** (passing an array of `Subagents` entries). Do not dispatch one at a time.
 
 Collect all subagent results.
 

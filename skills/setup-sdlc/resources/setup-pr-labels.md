@@ -60,7 +60,7 @@ Current pr.labels:
   rules: N entries (when applicable)
 ```
 
-Use AskUserQuestion:
+Use ask_question:
 
 > `pr.labels` is already configured. What do you want to do?
 
@@ -76,7 +76,7 @@ If `pr.labels` is absent, skip this step and go to Step 3.
 
 ### Step 3 — Mode selection
 
-Use AskUserQuestion:
+Use ask_question:
 
 > How should `/pr-sdlc` choose labels?
 
@@ -101,7 +101,7 @@ seed it with the existing `pr.labels.rules`.
 
 Iterate:
 
-1. **Add rule?** Use AskUserQuestion:
+1. **Add rule?** Use ask_question:
 
    > Add a label rule? (current count: <N>)
 
@@ -114,13 +114,13 @@ Iterate:
    On `review`: print the current `rules` array in human-readable form
    (`label → when.<signal>: [values]`) then re-ask.
 
-2. **Pick the target label.** Use AskUserQuestion with options drawn from
+2. **Pick the target label.** Use ask_question with options drawn from
    `repoLabels` (alphabetized). When `repoLabels.length > 10`, paginate the
    options and add a **search** option that takes a substring filter and
    re-presents the list. Reject any free-text label that is not in
    `repoLabels[].name` — the user must pick from the list.
 
-3. **Pick the signal type.** Use AskUserQuestion:
+3. **Pick the signal type.** Use ask_question:
 
    > Which signal triggers this rule?
 
@@ -132,7 +132,7 @@ Iterate:
      (accepted but not yet evaluated by pr.js — see warning at runtime)
    - **diffSizeUnder** — match if total lines changed is below this threshold
 
-4. **Enter the value(s).** Use AskUserQuestion (free text):
+4. **Enter the value(s).** Use ask_question (free text):
 
    - For `branchPrefix`, `commitType`, `pathGlob`, `jiraType`:
      prompt for a comma-separated list. Trim whitespace, drop empties, dedupe.

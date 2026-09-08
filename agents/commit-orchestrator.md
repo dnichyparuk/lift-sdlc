@@ -2,7 +2,7 @@
 name: commit-orchestrator
 description: Drafts a commit message from a prepared payload (no conversation context inherited). Reads the manifest written by commit.js, generates a single commit message that satisfies the project's commitConfig and recent-commit style, and returns ONLY the message string. Does not call git, does not write files, does not invoke gh.
 subagent: true
-tools: Read
+tools: view_file
 model: gemini-3.8-flash-low
 ---
 
@@ -91,7 +91,7 @@ Output the commit message string and nothing else. No preamble, no explanation, 
 ## Hard Constraints
 
 - **Do not call git.** No `git log`, no `git commit`, no `git stash`, no `git diff` — every input you need is in the manifest.
-- **Do not write any file.** You have no write tools; do not attempt workarounds via Bash.
+- **Do not write any file.** You have no write tools; do not attempt workarounds via `run_command`.
 - **Do not invoke `gh`.**
 - **Do not delete the manifest.** The skill body owns cleanup.
 - **Do not return JSON, YAML, or any wrapper.** Return the raw commit message string.

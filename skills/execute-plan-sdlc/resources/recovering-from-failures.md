@@ -125,7 +125,7 @@ When a batch agent reports mixed results (some tasks SUCCESS, some tasks FAILED)
 3. Re-dispatch each failed task as a standalone agent with:
    - The single-task Agent Prompt Template (not the batch template)
    - Model escalated one step (e.g., `gemini-3.8-flash-low` → `gemini-3.8-flash-high`)
-   - `mode: "bypassPermissions"` passed explicitly to the Agent tool
+   - `invoke_subagent` with the escalated `Model`
    - Failure context from the batch report added at the top of the prompt
 4. Treat each extracted retry independently — it counts toward that task's 2-retry budget
 5. If the extracted retry also fails, escalate to the user per the standard escalation protocol
@@ -139,17 +139,17 @@ When an agent reports successful completion but `git diff --stat` shows no chang
 1. **Do NOT trust the agent's output.** The task is incomplete regardless of what the agent reported.
 
 2. **Diagnose the likely cause:**
-   - Agent used bash `sed`, `awk`, Python, or a compiled program in `/tmp` to patch files instead of the Edit tool → the patch silently failed
+   - Agent used bash `sed`, `awk`, Python, or a compiled program in `/tmp` to patch files instead of `replace_file_content` or `write_to_file` → the patch silently failed
    - Agent wrote to a wrong path (e.g., a copy in `/tmp`) instead of the actual file
    - Agent hallucinated completing the task without invoking any file-editing tool
 
 3. **Re-dispatch with escalated model and explicit constraints:**
    ```
    RETRY: Previous attempt reported success, but git diff shows no changes to the expected files.
-   Your edits did NOT persist. This usually means a method other than the Edit tool was used.
+   Your edits did NOT persist. This usually means a method other than replace_file_content or write_to_file was used.
 
-   MANDATORY: Use the Edit tool for every file modification. Do not use bash sed, awk, Python
-   scripts, Go programs, or any other indirect method. Each change must use Edit directly.
+   MANDATORY: Use replace_file_content or write_to_file for every file modification. Do not use bash sed, awk, Python
+   scripts, Go programs, or any other indirect method. Each change must use replace_file_content or write_to_file directly.
 
    Complete the task from scratch — assume none of your previous work exists.
    ```

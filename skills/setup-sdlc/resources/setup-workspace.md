@@ -6,7 +6,7 @@ The `workspace` section (`.sdlc/local.json` → `workspace.worktree`) uses the
 generic 3.G field-loop dispatcher (`delegatedTo: null`, fields from
 `scripts/lib/workspace-fields.js::WORKSPACE_FIELDS`), but the `layout` field
 requires a numbered menu with live previews and a mismatch warning before the
-AskUserQuestion fires. The augmentations below override the default 3.G
+ask_question fires. The augmentations below override the default 3.G
 rendering for this section only; all other 3.G rules (skip gates, answer
 mapping, etc.) still apply.
 
@@ -30,7 +30,7 @@ mismatches from the SKILL.
 
 ## Layout field rendering — overrides default 3.G behavior
 
-1. **Numbered layout menu, printed as plain chat output (NOT `AskUserQuestion`)
+1. **Numbered layout menu, printed as plain chat output (NOT `ask_question`)
    before the question.** Use the help text returned by
    `workspace-fields.js::layoutField.help({ repoRoot, repoName, home, antigravityIgnored })`
    — it already renders previews 1–3 with their resolved paths and emits the
@@ -47,7 +47,7 @@ mismatches from the SKILL.
      4. template  Custom path with placeholders (advanced)
    ```
 
-2. **Then dispatch the AskUserQuestion for the `layout` field** as in 3.G —
+2. **Then dispatch the ask_question for the `layout` field** as in 3.G —
    `field.label`, helper text from `field.description`, options
    `inside | sibling | central | template`, default `inside`. Validate via
    `field.validate(answer)` and re-prompt on failure.
@@ -70,7 +70,7 @@ mismatches from the SKILL.
 ## Conditional follow-up fields per layout
 
 After the layout answer (and any mismatch warning), iterate `WORKSPACE_FIELDS`
-in array order and dispatch one AskUserQuestion per field that is relevant for
+in array order and dispatch one ask_question per field that is relevant for
 the chosen layout. Fields use the field's `description` from
 `workspace-fields.js` as helper text (verbatim — do not paraphrase). When a
 field defines `validate(value, layout, repoContext)`, re-prompt on failure
