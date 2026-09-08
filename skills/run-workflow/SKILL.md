@@ -148,6 +148,18 @@ If `step.status === "conditional"`:
    - Record step failure via `node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" fail --step <step.name> --error "Post-gate failed"`
    - Halt pipeline execution and proceed to cleanup.
 
+   **Gate-retry loops.** If a gate exits non-zero with a code that is NOT the configured
+   `haltExitCode` AND the step carries a `loop` block, run the retry loop instead of halting:
+   1. Re-dispatch the step's own skill (per `loop.subDispatch`, which must name the same skill)
+      exactly as in 4c.2, appending the gate's failure output (its JSON/stderr) to the prompt as
+      "Previous attempt failed its completion gate: <failure>".
+   2. Re-run the post-gates. On pass, continue the pipeline normally.
+   3. Allow at most `loop.defaultMaxIterations` re-dispatches (overridable by the flag named in
+      `loop.maxIterationsFlag` when the prepare output carries it). When the limit is exhausted
+      and the gate still fails, record failure via `pipeline.js fail` and halt as above.
+   A non-`haltExitCode` non-zero gate exit on a step WITHOUT a `loop` block is treated as the
+   halt case.
+
 4. **Record Completion**:
    Record step completion via the state CLI:
    ```shell
@@ -210,3 +222,27 @@ Print the final execution summary to the user:
 - Artifacts produced (commits, tags, pull requests)
 - Links to audit ledgers (`RUN_AUDIT_<runId>.md` and `ASSUMPTIONS_<runId>.md`)
 - Any deferred findings or warnings
+
+---
+
+## Step field vocabulary (external-plugin contract)
+
+Third-party manifests (a `prepareScript`'s emitted `steps[]`, e.g. a plugin's own `pipelines/*.json`) rely on this engine to execute specific step fields. This section documents which fields Step 4 above actually reads and acts on, versus fields that only pass through for the step's own handler to interpret. Where the engine has no defined behavior for a field, that is called out explicitly rather than assumed — a manifest author should not build on undocumented behavior.
+
+**`dispatchMode`** — `"agent"` or `null` (Step 4c.2). `"agent"` dispatches the step via the Agent tool with `model: step.model` and `isolation: step.isolation` (omitted when null), invoking `/<step.skill> <step.args>`. `null` (or omitted) runs the step inline in the orchestrator's own context (Case B).
+
+**`inlineHandler` + `handlerSpec`** — For a `dispatchMode: null` step, Case B names four built-in handlers with concrete, engine-defined execution:
+- `archive-openspec` — `node "<PLUGIN_ROOT>/scripts/util/openspec-archive.js" '<name>'`
+- `verify-pipeline` — `node "<PLUGIN_ROOT>/scripts/util/verify-pipeline.js"`
+- `await-remote-review` — `node "<PLUGIN_ROOT>/scripts/util/await-review.js"`
+- `learnings-commit` — `node "<PLUGIN_ROOT>/scripts/util/ship-git-ops.js" commit-learnings`
+
+Case B's instruction is "execute the step directly in main orchestrator context per the step's handler specification" before that list — so an `inlineHandler` outside these four, carrying a `handlerSpec` string, is executed by following the `handlerSpec` text verbatim (this is how a plugin defines its own inline steps, e.g. a `user-checkpoint` handler). An `inlineHandler` that is neither one of the four built-ins nor accompanied by a `handlerSpec` has no defined execution path.
+
+**`checkpoint` `{prompt, autoBehavior}`** — Not read by the engine directly; there is no built-in Case B branch for it. It only does anything when a step's own `handlerSpec` text instructs the orchestrator to read `checkpoint.prompt` and act on `checkpoint.autoBehavior`. Treat `checkpoint` as opaque data your `handlerSpec` must reference explicitly — **undefined, do not rely on it, if your handlerSpec doesn't mention it.**
+
+**`loop` `{maxIterationsFlag, defaultMaxIterations, triggerCondition, subDispatch[]}`** — Defined by Step 4c.3's Gate-retry loops (above): when a post-gate exits non-zero with a code other than the configured `haltExitCode`, the engine re-dispatches the step's own skill with the gate failure appended to the prompt, up to `defaultMaxIterations` attempts (flag-overridable via `maxIterationsFlag`), then fails and halts. `subDispatch[].skill` must equal the step's own skill; `triggerCondition` is descriptive text for humans, not an evaluated expression. Pair a `loop` block with a gate `haltExitCode` that the gate's failure exit does NOT use (e.g. gate fails with 1, `haltExitCode: 2`) — otherwise the halt branch wins and the loop never runs.
+
+**`postGates` `{script, args, haltExitCode}`** — Documented in Step 4c.3: each gate script runs with `$STATE_FILE`/`$PLAN_FILE` interpolated into `args`. If a gate exits with its configured `haltExitCode` (default `1`, per `pipeline.js fail`), the step is recorded failed and the pipeline halts. `script` is expected to be an absolute, existing path (the `prepareScript` contract resolves it under its own plugin root before handing it to the engine — see the calling plugin's own contract checks). A non-zero exit that is *not* the configured `haltExitCode` triggers the step's Gate-retry loop when a `loop` block is present (Step 4c.3), and is treated as the halt case otherwise.
+
+**`statePrefix`** — Manifest-level (not a per-step field), extracted in Step 1 with `pipeline` as its fallback, and threaded through as `--pipeline "<statePrefix>"` on every `pipeline.js` call (`init`, `start`, `complete`, `skip`, `fail`, `suspend`, `resume`, `decide`, `cleanup-pipeline`). It is the bucketing/naming key for state files and drives resume detection. Currently informational beyond that: `pipeline.js` does not validate it against the manifest's `pipeline` field, a registry, or any other field — it is only used as it's given.
