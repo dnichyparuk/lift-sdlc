@@ -66,7 +66,7 @@ Read the JSON verdict on stdout: `{"category": "<lint|test-failure|type-error|bu
 
 Route by the `routingBucket` field:
 
-- **`actionable`** (`lint`, `test-failure`, `type-error`) with `--auto` set: use the `Edit` tool to apply the minimal fix — correct the lint violation, fix the failing assertion, add the missing import, or correct the type annotation. Do NOT scaffold abstractions or refactor.
+- **`actionable`** (`lint`, `test-failure`, `type-error`) with `--auto` set: use `replace_file_content` or `write_to_file` to apply the minimal fix — correct the lint violation, fix the failing assertion, add the missing import, or correct the type annotation. Do NOT scaffold abstractions or refactor.
 - **Everything else** — `always-proposal` categories (`build-error`, `dependency`, `infra`), or `actionable` without `--auto`: emit a proposal, no edits.
 - **`unknown`** — falls through to `proposal` verdict **with the raw log excerpt as `summary`**: the classifier could not identify a category, so there is no diagnosis to summarize beyond the excerpt itself.
 

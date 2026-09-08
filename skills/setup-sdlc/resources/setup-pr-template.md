@@ -107,7 +107,7 @@ Based on the critique:
 Present the refined template in a readable format. Show each section heading and its fill
 instruction.
 
-Use AskUserQuestion to present the template and ask:
+Use ask_question to present the template and ask:
 > Accept this PR template?
 
 Options:

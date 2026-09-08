@@ -16,14 +16,14 @@ Write an implementation plan from requirements, a spec, or a user description. P
 
 To prevent context bloat and token exhaustion:
 1. **Targeted File Reads:** Avoid reading entire large codebase files directly into memory. When exploring the codebase, use `node "<PLUGIN_ROOT>/scripts/util/outline-file.js" <file>` to extract file structure (classes, interfaces, functions) instead of using the `view_file` tool on massive files.
-2. **Enforced Parallelism (applies everywhere below):** Any set of independent Glob/Grep/Read/Outline calls, and any multi-target Agent dispatch (orchestrator fan-out, review lanes, lens reviewers, inline exploration), MUST be issued together in a single message as parallel tool calls — never sequentially. Per-step notes below flag *where* this applies; they don't restate the rule.
+2. **Enforced Parallelism (applies everywhere below):** Any set of independent find_by_name/grep_search/view_file/outline calls, and any multi-target `invoke_subagent` dispatch (orchestrator fan-out, review lanes, lens reviewers, inline exploration), MUST be issued together in a single message as parallel tool calls — never sequentially. Per-step notes below flag *where* this applies; they don't restate the rule.
 3. **Strict Thought Protocol:** Do not return an empty chat response just to explain intermediate thoughts. All internal reasoning must remain in the `thought` block. You must execute the next logical step immediately.
 
 ## Step 0: Mode Detection, Routing, and Setup
 
 **Mode detection:** Check whether a system-reminder contains "Plan mode is active". If yes, extract the designated plan file path from "You should create your plan at `<path>`". That path is the only writable file.
 
-**Gather requirements:** If no spec or requirements document is in context, use AskUserQuestion:
+**Gather requirements:** If no spec or requirements document is in context, use `ask_question`:
 > What do you want to implement? (describe in free form, bullet points, or provide a file path)
 
 **Complexity routing:**
@@ -35,7 +35,7 @@ To prevent context bloat and token exhaustion:
 | 4+ files or unclear scope | Full pipeline (Steps 1–7) | Full pipeline |
 | Multiple independent subsystems | Decompose into separate plans | Decompose |
 
-**TodoWrite setup (full pipeline only):** Create TodoWrite items for Steps 1–7. Skip TodoWrite for lightweight plans.
+**Pipeline progress tracking:** Track Steps 1–7 progress through console output and plan artifact status.
 
 **Session recovery (full pipeline only):** When the designated plan file already has content, restart and overwrite — do NOT prompt (single-touchpoint default for Step 0). Clear the file in-place and begin fresh. If the user wants to preserve the prior draft, they can `cp` the file before invoking the skill.
 
@@ -93,7 +93,7 @@ If `openspec.present` is false, skip this entire block — no OpenSpec in this p
 - **Gate check** (only when no valid `--from-openspec`): If neither `--spec` was passed nor the user provided a path into `openspec/changes/`:
   a. **Classify the request:** functional (new features, behavior/API changes, integrations, capability additions) vs non-functional (refactoring, config, docs, CI/CD, dependency updates, formatting, infrastructure).
   b. **Non-functional:** Print "OpenSpec detected — pass `--spec` to include spec context in planning." Skip the rest of this block; `openspecContext` remains empty.
-  c. **Functional:** If `openspec.branchMatch` is set, treat that change as resolved and go to "Read artifacts". Otherwise use AskUserQuestion:
+  c. **Functional:** If `openspec.branchMatch` is set, treat that change as resolved and go to "Read artifacts". Otherwise use `ask_question`:
      > This looks like a functional change. This project uses OpenSpec for spec-driven development.
      >
      > Options:
@@ -105,7 +105,7 @@ If `openspec.present` is false, skip this entire block — no OpenSpec in this p
      - On **1**: Stop plan-sdlc. Tell the user to run `/opsx:propose "<their description>"`. In plan mode, call ExitPlanMode first.
      - On **2**: Skip the rest of the OpenSpec block. `openspecContext` remains empty. Continue with standard planning.
      - On **3**: Resolve the change per the next bullet, then go to "Read artifacts".
-- **Resolve the change** (when not already resolved above): If the user provided a spec file path into `openspec/changes/<name>/`, use `<name>`. Otherwise use `openspec.activeChanges` from the prepare output: if exactly one entry, use it; if multiple, prefer `openspec.branchMatch`; if still ambiguous, use AskUserQuestion listing the change names from `openspec.activeChanges`.
+- **Resolve the change** (when not already resolved above): If the user provided a spec file path into `openspec/changes/<name>/`, use `<name>`. Otherwise use `openspec.activeChanges` from the prepare output: if exactly one entry, use it; if multiple, prefer `openspec.branchMatch`; if still ambiguous, use `ask_question` listing the change names from `openspec.activeChanges`.
 - **Read artifacts:** Once the active change is identified, Read in parallel `openspec/changes/<name>/proposal.md`, `design.md` (optional), all `specs/*.md`, and `tasks.md` (optional). Store as `openspecContext` for use in Steps 1–5. Update the plan file header `**Source:**` to `openspec/changes/<name>/`.
 
 **Normal mode path resolution:** Resolve the output path before writing:
@@ -120,7 +120,7 @@ Naming convention: `YYYY-MM-DD-<feature-name>.md`. Create the directory if neede
 
 **planFile marker (intended to be consumed by a `hooks/stop-plan-integrity.js` Stop hook):** After path resolution, record the resolved plan path in the plan integrity state. Run in both plan-mode and normal-mode branches. Marker writes are best-effort — swallow any error (`2>/dev/null || true`) so a failed marker never blocks plan creation. **`hooks/stop-plan-integrity.js` does not exist in this repo and is not registered in `hooks.json`** — the marker file is currently written but never read back; no Stop hook verifies plan integrity today. See `resources/state-format.md` for the designed (not-yet-built) contract.
 
-Each `--mark` block below spells out the full `<PLUGIN_ROOT>` path — SKILL.md bash blocks run as separate Bash tool invocations, so shell variables do NOT persist between them. Marker failures are silent (`2>/dev/null || true`), so a hoisted variable would drop `guardrailsEvaluated`/`critiqueRan` without any error.
+Each `--mark` block below spells out the full `<PLUGIN_ROOT>` path — SKILL.md run_command blocks run as separate invocations, so shell variables do NOT persist between them. Marker failures are silent (`2>/dev/null || true`), so a hoisted variable would drop `guardrailsEvaluated`/`critiqueRan` without any error.
 
 ```shell
 node "<PLUGIN_ROOT>/scripts/skill/plan.js" --mark plan-file --path "<resolved-plan-path>" 2>/dev/null || true
@@ -135,7 +135,7 @@ Replace `<resolved-plan-path>` with the actual absolute path: in plan mode it is
 
 **`fromOpenspecDirect` enrichment:** When `fromOpenspecDirect` is true (set by `--from-openspec` handling in Step 0):
 - Use `tasks.md` as the PRIMARY decomposition skeleton — OpenSpec tasks were deliberately authored
-- Skip the "Structured discovery" AskUserQuestion below — the proposal and delta specs already provide scope, integration, and success criteria
+- Skip the "Structured discovery" `ask_question` below — the proposal and delta specs already provide scope, integration, and success criteria
 - Delta specs remain the authoritative requirements for Step 3 coverage validation
 
 **Orchestrator dispatch (full pipeline only):**
@@ -153,7 +153,7 @@ fi
 
 - **Full pipeline** (`explorePack.manifestPath` is non-null AND scope is 4+ files / unclear scope):
 
-  1. Spawn `sdlc:plan-explore-orchestrator` Agent exactly once with inputs:
+  1. Spawn `sdlc:plan-explore-orchestrator` via `invoke_subagent` exactly once with inputs:
      ```
      MANIFEST_FILE: <explorePack.manifestPath>
      PROJECT_ROOT: <cwd>
@@ -163,7 +163,7 @@ fi
      `USER_PROMPT` is authoritative — the orchestrator re-derives web-research dimensions
      independently from the manifest's `webResearchSignal` (which is a best-effort hint;
      plan.js may not have stdin when invoked from a TTY).
-  2. Read the orchestrator's returned `Brief file:` absolute path. Use `Read` to load the brief into context. The brief is the source of truth for Step 2 task provenance.
+  2. Read the orchestrator's returned `Brief file:` absolute path. Use `view_file` to load the brief into context. The brief is the source of truth for Step 2 task provenance.
   3. **Brief validation:** After loading the brief, grep its content for the pattern `F-[A-Z0-9_-]+-[0-9]+` (the `F-<DIM>-<n>` finding ID format). If zero matches are found, treat the orchestrator as if it had failed: append one line to `.sdlc/learnings/log.md`: `## <YYYY-MM-DD> — plan-sdlc orchestrator returned brief without F-DIM-N findings; using fallback inline exploration`, then proceed via the **Error fallback** path below. Rationale: a brief with no findings cannot satisfy G15 (Brief citation coverage) and would force every task into "out-of-scope addition" — better to fall back cleanly.
 
   **Brief consumption (when brief is present AND validation passed):**
@@ -176,20 +176,20 @@ fi
   - Append one line to `.sdlc/learnings/log.md`: `## <YYYY-MM-DD> — plan-sdlc orchestrator skipped: <explorePack.error or "brief without F-DIM-N findings">`
   - Use inline exploration below. Plan still produced.
 
-**Structured discovery:** When requirements are vague (a single sentence or ambiguous goal), use AskUserQuestion with 2–3 targeted questions at once:
+**Structured discovery:** When requirements are vague (a single sentence or ambiguous goal), use `ask_question` with 2–3 targeted questions at once:
 1. **Scope** — what's in, what's explicitly out?
 2. **Integration** — what existing code does this touch?
 3. **Success** — how will we know it works?
 
 Wait for answers before continuing.
 
-**Codebase exploration (skip for lightweight):** Use read-only tools (Glob, Grep, Read, LSP):
+**Codebase exploration (skip for lightweight):** Use read-only tools (`find_by_name`, `grep_search`, `view_file`, LSP):
 - Relevant file structure and patterns in affected areas. **CRITICAL:** Use `node "<PLUGIN_ROOT>/scripts/util/outline-file.js" <file>` to extract file outlines instead of natively reading large files.
 - Existing modules, interfaces, and types the feature touches
 - Testing patterns used in the project
 - Build/lint/test commands (from Makefile, package.json, or similar)
 - Naming conventions and code style
-- All Glob/Grep/Read/Outline calls above MUST be issued in a single message (see Context Optimization Constraints).
+- All find_by_name/grep_search/view_file/Outline calls above MUST be issued in a single message (see Context Optimization Constraints).
 
 Identify constraints: language, framework, existing conventions, testing approach.
 
@@ -198,17 +198,17 @@ Identify constraints: language, framework, existing conventions, testing approac
 - Use delta specs (`specs/*.md`) with their ADDED/MODIFIED/REMOVED sections as the authoritative requirements — each delta entry is a requirement
 - Use `design.md` for architecture constraints and technical approach decisions
 - Use `tasks.md` as a coarse reference for decomposition — OpenSpec tasks are higher-level than plan-sdlc tasks, so decompose further rather than copying verbatim
-- When the OpenSpec artifacts provide sufficient scope, integration, and success criteria, skip the "Structured discovery" AskUserQuestion — the proposal and delta specs already answer those questions
+- When the OpenSpec artifacts provide sufficient scope, integration, and success criteria, skip the "Structured discovery" `ask_question` — the proposal and delta specs already answer those questions
 
 ## Step 2 (PLAN): Orchestrate Plan Generation
 
-**Scope check:** If requirements span independent subsystems with no shared state, use AskUserQuestion:
+**Scope check:** If requirements span independent subsystems with no shared state, use `ask_question`:
 > These requirements cover independent subsystems. Recommend splitting into N plans. Proceed as one plan or split?
 
 Wait for answer.
 
 **Orchestrator dispatch:**
-Dispatch the `sdlc:plan-generation-orchestrator` Agent exactly once with inputs:
+Dispatch the `sdlc:plan-generation-orchestrator` via `invoke_subagent` exactly once with inputs:
 ```
 USER_PROMPT: <verbatim user request>
 PLAN_FILE_PATH: <absolute path to plan file>
@@ -226,14 +226,15 @@ The `plan-generation-orchestrator` handles file mapping, task decomposition (wit
 
 **Re-anchor:** Re-read the plan file before dispatching lanes. The file — not your memory of it — is the source of truth.
 
-**Fan-out dispatch:** Dispatch all five Step 3 lanes from `lanes[]` together (single-message parallel dispatch).
+**Fan-out dispatch:** Dispatch all five Step 3 lanes from `lanes[]` together in a single `invoke_subagent` call with multiple `Subagents` entries.
 
-All 17 quality gates (G1–G17) are partitioned across five lanes — each gate belongs to exactly one lane. Lane dispatch parameters (`subagent_type`, `model`, and prompt body read from `promptTemplatePath`) MUST be sourced verbatim from the corresponding `lanes[i]` entry in the prepare output (`agent-dispatch-script-driven` guardrail — do NOT hardcode these values).
+All 17 quality gates (G1–G17) are partitioned across five lanes — each gate belongs to exactly one lane. Lane dispatch parameters (`TypeName`, `Model`, and prompt body read from `promptTemplatePath`) MUST be sourced verbatim from the corresponding `lanes[i]` entry in the prepare output (`agent-dispatch-script-driven` guardrail — do NOT hardcode these values).
 
-For each `lanes[i]` entry (i = 0..4):
+For each `lanes[i]` entry (i = 0..4) in `Subagents`:
 
-- `subagent_type`: `lanes[i].subagentType`
-- `model`: `lanes[i].model`
+- `TypeName`: `lanes[i].subagentType`
+- `Role`: `lanes[i].name + " gate evaluator"`
+- `Model`: `lanes[i].model`
 - prompt body: Read `lanes[i].promptTemplatePath` and fill template variables:
   - All lanes: `{PLAN_FILE_PATH}` (absolute path to plan file), `{PROJECT_ROOT}` (cwd)
   - Lanes 0–3 non-G17: `{REQUIREMENTS_SUMMARY}` (the numbered requirements list from Step 1 CONSUME — same content as `{REQUIREMENTS_CHECKLIST}` in Step 5; retained in memory from Step 1), `{ACTIVE_GUARDRAILS}` (from `guardrails[]` P7), `{OPENSPEC_TASKS}` (from `openspecContext.tasks` P13, null when not OpenSpec-sourced), `{BRIEF_FINDING_IDS}` (from `explorePack.manifestPath` context, null when no brief)
@@ -317,12 +318,14 @@ Step 4 is autonomous (single-touchpoint handoff). After fixes are applied (Guard
 
 Skip for lightweight plans (2–3 file scope from Step 0 routing).
 
-**For plans with ≥5 tasks — Multi-lens fan-out:** Dispatch all lens reviewers from `lensReviewers[]` together (single-message parallel dispatch).
+**For plans with ≥5 tasks — Multi-lens fan-out:** Dispatch all lens reviewers from `lensReviewers[]` together (single `invoke_subagent` call with multiple `Subagents` entries).
 
 For each `lensReviewers[i]` entry (i = 0..2):
-- `subagent_type`: `lensReviewers[i].subagentType`
-- `model`: override with the **opposite-of-plan-author model** at dispatch time (cross-model property — plan written by gemini-3.8-flash-medium → dispatch reviewer as gemini-3.1-pro-low; plan written by gemini-3.1-pro-low → dispatch reviewer as gemini-3.8-flash-medium). This overrides the default `lensReviewers[i].model` value from the prepare output for ≥5-task plans.
-- prompt body: Read `lensReviewers[i].promptTemplatePath` and fill template variables:
+- `TypeName`: `lensReviewers[i].subagentType`
+- `Role`: `"Plan Reviewer - " + lensReviewers[i].lens`
+- `Model`: override with the **opposite-of-plan-author model** at dispatch time (cross-model property — plan written by gemini-3.8-flash-medium → dispatch reviewer as gemini-3.1-pro-low; plan written by gemini-3.1-pro-low → dispatch reviewer as gemini-3.8-flash-medium). This overrides the default `lensReviewers[i].model` value from the prepare output for ≥5-task plans.
+- `Workspace`: `"inherit"`
+- `Prompt`: Read `lensReviewers[i].promptTemplatePath` and fill template variables:
   - `{PLAN_FILE_PATH}` — absolute path to the plan file
   - `{LENS}` — `lensReviewers[i].lens` (one of `architecture`, `requirements`, `risk`)
   - `{LENS_FOCUS}` — `lensReviewers[i].focusCategories` rendered as a bullet list
@@ -334,7 +337,7 @@ For each `lensReviewers[i]` entry (i = 0..2):
 
 When `lensReviewers[i].promptTemplatePath` is null, skip that lens and log to `.sdlc/learnings/log.md`: `## YYYY-MM-DD — plan-sdlc: lens "<name>" skipped — promptTemplatePath null (template not found at prepare time)`. Continue with remaining lenses.
 
-**No `isolation: "worktree"` on any lens reviewer dispatch** (forbidden per issues #370/#372).
+**No `Workspace: "branch"` or workspace isolation on any lens reviewer dispatch** (forbidden per issues #370/#372; use `Workspace: "inherit"`).
 
 **Merge lens reviewer results (per iteration):**
 1. **Status**: `Approved` iff ALL lens reviewers returned `Approved`; otherwise `Issues Found`
@@ -347,7 +350,7 @@ When `lensReviewers[i].promptTemplatePath` is null, skip that lens and log to `.
 **Review loop:**
 - Approved → Step 6 is a no-op, proceed to Step 7
 - Issues found → go to Step 6
-- Max 3 iterations → use AskUserQuestion to surface unresolved issues to user. Offer **harden** (run `/harden-sdlc` to analyze why this failed and propose stronger guardrails / dimensions / instructions that would catch it earlier next time — opt-in, no surface is edited without your approval) alongside the existing escalation options. When the user selects **harden** (interactive mode only — suppressed when `--auto` is set), dispatch `Skill(harden-sdlc)` with `--failure-text "Plan reviewer loop did not converge after 3 iterations. Outstanding issues: <union-of-blocking-issues-across-all-lenses>"`, `--skill plan-sdlc`, `--step "Step 5 — review loop"`, `--operation "reviewer-loop max iterations"`.
+- Max 3 iterations → use `ask_question` to surface unresolved issues to user. Offer **harden** (run `/harden-sdlc` to analyze why this failed and propose stronger guardrails / dimensions / instructions that would catch it earlier next time — opt-in, no surface is edited without your approval) alongside the existing escalation options. When the user selects **harden** (interactive mode only — suppressed when `--auto` is set), dispatch `Skill(harden-sdlc)` with `--failure-text "Plan reviewer loop did not converge after 3 iterations. Outstanding issues: <union-of-blocking-issues-across-all-lenses>"`, `--skill plan-sdlc`, `--step "Step 5 — review loop"`, `--operation "reviewer-loop max iterations"`.
 
 ## Step 6 (IMPROVE): Apply Review Fixes
 
@@ -355,7 +358,7 @@ Fix each blocking issue identified by the reviewer. Rewrite the plan file with f
 
 Re-dispatch the reviewer (back to Step 5 loop).
 
-If this is the 3rd iteration, use AskUserQuestion to surface remaining issues instead of looping.
+If this is the 3rd iteration, use `ask_question` to surface remaining issues instead of looping.
 
 ## Step 6.5 (LINK VERIFICATION): Validate URLs in plan content — HARD GATE
 
@@ -457,7 +460,7 @@ What would you like to do next?
 Select:
 ```
 
-On selection, invoke the chosen skill using the Skill tool. On "done", end without further action.
+On selection, invoke the chosen skill (or recommend the corresponding slash command). On "done", end without further action.
 
 ## See Also
 

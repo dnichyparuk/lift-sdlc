@@ -24,7 +24,7 @@ EXIT_CODE=$?
 
 `review.js` forwards `$ARGUMENTS` verbatim, writes its JSON payload to a temp file, and prints only that path to stdout — there is no `MANIFEST_FILE:` / `STATUS:` preamble to parse, and no `--json` flag to pass (`review.js` does not parse one; the manifest-file protocol is unconditional). `EXIT_CODE` is the script's own exit status.
 
-**On non-zero `EXIT_CODE`:** exit 1 → show the stderr message and stop; exit 2 → show `Script error — see output above`, then invoke error-report-sdlc (Glob `**/error-report-sdlc/REFERENCE.md`, follow with skill=review-sdlc, step=Step 0 — skill/review.js execution, error=stderr) and stop.
+**On non-zero `EXIT_CODE`:** exit 1 → show the stderr message and stop; exit 2 → show `Script error — see output above`, then invoke error-report-sdlc (search via `find_by_name` for `**/error-report-sdlc/REFERENCE.md`, follow with skill=review-sdlc, step=Step 0 — skill/review.js execution, error=stderr) and stop.
 
 **Do NOT read the manifest file contents into the main context.** The orchestrator will read it.
 
@@ -57,13 +57,21 @@ Then clean up and stop:
 node "<PLUGIN_ROOT>/scripts/util/review-cleanup.js" "$MANIFEST_FILE"
 ```
 
-## Step 2 — Spawn Orchestrator Agent
+## Step 2 — Spawn Orchestrator Subagent
 
-Spawn a single Agent (`subagent_type: sdlc:review-orchestrator`) with this prompt:
+Spawn a single Subagent using `invoke_subagent`:
 
-```
-MANIFEST_FILE: {the temp file path from Step 0}
-PROJECT_ROOT: {current working directory}
+```json
+{
+  "Subagents": [
+    {
+      "TypeName": "review-orchestrator",
+      "Role": "Review Orchestrator",
+      "Model": "flash_lite",
+      "Prompt": "MANIFEST_FILE: {the temp file path from Step 0}\nPROJECT_ROOT: {current working directory}"
+    }
+  ]
+}
 ```
 
 The orchestrator reads the manifest, dispatches dimension subagents, and persists the
@@ -85,7 +93,7 @@ severity counts.
 2. Parse from it: `comment_file` (absolute path to `${diff_dir}/review-comment.md`),
    `pr.exists`/`pr.owner`/`pr.repo`/`pr.number`, `verdict` (`CHANGES REQUESTED` /
    `APPROVED WITH NOTES` / `APPROVED`), `scope`, `branch`, `diff_dir`.
-3. Read `comment_file` with the Read tool and emit its full contents byte-for-byte
+3. Read `comment_file` with the `view_file` tool and emit its full contents byte-for-byte
    inside a fenced markdown block — no summarization, no truncation, no collapsed
    severity table, no "see PR comment for details" placeholders. This must be visible
    before Step 4's posting prompt.

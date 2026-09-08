@@ -7,17 +7,19 @@ Use this template in plan-sdlc Step 3 when dispatching the G17 Dimension Coverag
 **Model:** gemini-3.8-flash-medium (from `g17Dispatch.model` in prepare output — do NOT hardcode)
 
 **Dispatch parameters (from prepare output — `agent-dispatch-script-driven` guardrail):**
-- `subagent_type`: `g17Dispatch.subagentType`
-- `model`: `g17Dispatch.model`
+- `TypeName`: `g17Dispatch.subagentType`
+- `Role`: `"Dimension Coverage Analysis"`
+- `Model`: `g17Dispatch.model`
 - prompt body: fill the template variables below from prepare output and plan context
 
-```
-Task tool (general-purpose):
-  description: "G17 Dimension Coverage analysis for <plan title>"
-  model: <g17Dispatch.model from prepare output>
-  mode: bypassPermissions
-  prompt: |
-    You are the Dimension Coverage subagent (G17). Your job is to detect coverage
+```yaml
+invoke_subagent:
+  Subagents:
+    - TypeName: <g17Dispatch.subagentType from prepare output>
+      Role: "Dimension Coverage Analysis"
+      Model: <g17Dispatch.model from prepare output>
+      Prompt: |
+        You are the Dimension Coverage subagent (G17). Your job is to detect coverage
     gaps in the active review-dimension catalog AND in the Copilot mirror at
     `.github/instructions/`, given a finalized plan file. You emit structured
     findings that plan-sdlc Step 4 splices into the plan as a

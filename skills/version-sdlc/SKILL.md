@@ -54,12 +54,12 @@ Read and parse `VERSION_CONTEXT_FILE` as `VERSION_CONTEXT_JSON`. `skill/version.
 - Exit code 1: The JSON still contains an `errors` array. Show each error to the user and stop.
 - Exit code 2: Show `Script error — see output above` and stop.
 
-**On script crash (exit 2):** Invoke error-report-sdlc — Glob `**/error-report-sdlc/REFERENCE.md`, follow with skill=version-sdlc, step=Step 0 — skill/version.js execution, error=stderr.
+**On script crash (exit 2):** Invoke error-report-sdlc — search via `find_by_name` for `**/error-report-sdlc/REFERENCE.md`, follow with skill=version-sdlc, step=Step 0 — skill/version.js execution, error=stderr.
 
 **If `VERSION_CONTEXT_JSON.errors` is non-empty**, show each error message and stop.
 
 **If `VERSION_CONTEXT_JSON.warnings` is non-empty**, show the warnings to the user before continuing.
-For the warning `"You have uncommitted changes"`, use AskUserQuestion to ask:
+For the warning `"You have uncommitted changes"`, use `ask_question` to ask:
 > You have uncommitted changes that will NOT be included in this release.
 
 Options:
@@ -183,9 +183,9 @@ Fix each issue found in Step 3. Continue until all gates pass (max 2 iterations 
 
 ### Step 5 (DO): Present Release Plan for Approval
 
-**Auto mode:** When `flags.auto` is true, skip the AskUserQuestion prompt entirely. Still display the full release plan for visibility, then proceed directly to Step 6 (pre-condition verification). Treat the response as an implicit `yes`. All critique gates (Steps 3–4) still run — only the interactive approval prompt is skipped. Breaking change warnings are still displayed.
+**Auto mode:** When `flags.auto` is true, skip the `ask_question` prompt entirely. Still display the full release plan for visibility, then proceed directly to Step 6 (pre-condition verification). Treat the response as an implicit `yes`. All critique gates (Steps 3–4) still run — only the interactive approval prompt is skipped. Breaking change warnings are still displayed.
 
-Show the full release plan to the user. **Do not execute any git commands before receiving explicit user approval via AskUserQuestion.**
+Show the full release plan to the user. **Do not execute any git commands before receiving explicit user approval via ask_question.**
 
 ```
 Release Plan
@@ -198,7 +198,7 @@ Changelog:  yes             ← render 'yes' when flags.changelog === true, else
 Hotfix:     yes             ← only shown when flags.hotfix === true
 ────────────────────────────────────────────
 
-Use AskUserQuestion to ask:
+Use `ask_question` to ask:
 > Execute this release?
 
 Options:
@@ -241,11 +241,11 @@ SCAFFOLD_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --check-
 ```
 
 Read the JSON output. If any files have `action: "outdated"` or `action: "missing"`:
-   - Show what changed and which files would be updated (use `installedVersion` / `currentVersion` from the output)
-   - Use AskUserQuestion to ask: "Update CI scripts? (yes / no) — this does not block the release."
-   - **Auto mode:** When `flags.auto` is true, skip the AskUserQuestion and treat the response as `yes` — update outdated CI scripts automatically.
-   - On `yes`: run `SCAFFOLD_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --force)` (add `--changelog` if applicable) to overwrite the outdated files — `scaffold-ci.js` prints a manifest path, so capture it rather than calling `node …` bare
-   - On `no`: warn and continue with the release
+    - Show what changed and which files would be updated (use `installedVersion` / `currentVersion` from the output)
+    - Use `ask_question` to ask: "Update CI scripts? (yes / no) — this does not block the release."
+    - **Auto mode:** When `flags.auto` is true, skip the `ask_question` and treat the response as `yes` — update outdated CI scripts automatically.
+    - On `yes`: run `SCAFFOLD_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/scaffold-ci.js" --force)` (add `--changelog` if applicable) to overwrite the outdated files — `scaffold-ci.js` prints a manifest path, so capture it rather than calling `node …` bare
+    - On `no`: warn and continue with the release
 
 The release proceeds regardless of the user's answer. This is informational, not a gate.
 
@@ -254,9 +254,9 @@ The release proceeds regardless of the user's answer. This is informational, not
 **Only execute after explicit `yes` from Step 5, or when `flags.auto` is true (implicit approval).**
 
 1. **Update version file** (only if `config.mode === "file"`):
-   - **For all version-file formats (JSON, TOML, YAML — package.json, plugin.json, Cargo.toml, pyproject.toml, etc.):** use the Edit tool with a single targeted string replacement. The `old_string` must contain the current version string in its on-disk form (e.g. `"version": "<currentVersion>"` for JSON, `version = "<currentVersion>"` for TOML). The `new_string` substitutes the new version only.
-   - **DO NOT use the Write tool. DO NOT rewrite the file. DO NOT touch any other field.** The one-changed-line gate inside the release transaction (sub-step 4) aborts the release if a rewrite lands.
-2. **Update CHANGELOG** (only if `flags.changelog === true` — same gate as Step 2 draft): Use the Edit or Write tool to prepend the new entry after the `## [Unreleased]` section if present, or after the file header if not. Create `CHANGELOG.md` if it does not exist.
+   - **For all version-file formats (JSON, TOML, YAML — package.json, plugin.json, Cargo.toml, pyproject.toml, etc.):** use `replace_file_content` with a single targeted string replacement. `TargetContent` must contain the current version string in its on-disk form (e.g. `"version": "<currentVersion>"` for JSON, `version = "<currentVersion>"` for TOML). `ReplacementContent` substitutes the new version only. Specify exact `StartLine` and `EndLine`.
+   - **DO NOT use `write_to_file`. DO NOT rewrite the file. DO NOT touch any other field.** The one-changed-line gate inside the release transaction (sub-step 4) aborts the release if a rewrite lands.
+2. **Update CHANGELOG** (only if `flags.changelog === true` — same gate as Step 2 draft): Use `replace_file_content` (or `write_to_file` if creating) to prepend the new entry after the `## [Unreleased]` section if present, or after the file header if not. Create `CHANGELOG.md` if it does not exist.
 3. **Link verification — HARD GATE.** Before the release transaction commits anything, validate every URL embedded in the new CHANGELOG entry (and any release-notes body) via the shared link validator. The script reads the body via `--file` and auto-derives `expectedRepo` from `parseRemoteOwner(cwd)` and `jiraSite` from `~/.sdlc-cache/jira/` — the skill MUST NOT construct ctx JSON. Skip this sub-step entirely when changelog is disabled and no release-notes body was generated.
 
    ```shell
@@ -385,7 +385,7 @@ When invoking `error-report-sdlc`, provide:
 
 - **`/version-sdlc --retag` vs `retag-release.yml`:** `--retag` is user-initiated (you deliberately move the tag to HEAD). `retag-release.yml` (scaffolded during init) is CI-automated: it fires on every push to main and fixes squash-merge drift — GitHub's "squash and merge" leaves the feature-branch tag pointing at a pre-merge commit that's unreachable from main, so the workflow moves it to the squash commit. The two are orthogonal; do not conflate them. Without the workflow, orphaned tags won't show in `git describe` / `git log --decorate` on main.
 - `bumpOptions.preRelease` is pre-computed in the JSON only when `--pre` was passed at script time. If the user requests a different pre-label during `edit`, re-run the script — the `preRelease` field reflects the label passed at script invocation, not a label added mid-session.
-- **Version-file edit hard gate:** never use the Write tool or rewrite the version file from memory — LLMs reliably truncate or paraphrase fields like `description`. The Step 8 release transaction enforces this: it aborts the release when more than one line of `<versionFile>` differs, and restores the file.
+- **Version-file edit hard gate:** never use `write_to_file` or rewrite the version file from memory — LLMs reliably truncate or paraphrase fields like `description`. Always use `replace_file_content` targeting only the single version line. The Step 8 release transaction enforces this: it aborts the release when more than one line of `<versionFile>` differs, and restores the file.
 - If the working tree has uncommitted changes at execution time, the release commit will include only the staged version file and changelog changes. Warn the user so they are not surprised by files missing from the commit.
 - `conventionalSummary.suggestedBump` is derived from commit types. If there are no conventional commits since the last tag, the suggested bump may default to `patch` — confirm with the user if this seems wrong.
 

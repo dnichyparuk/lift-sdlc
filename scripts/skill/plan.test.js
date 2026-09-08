@@ -120,7 +120,7 @@ test('runExplorePack: falls back to the default plan-explore.js when SDLC_PLAN_E
 // field buildLanes() emits and confirms it stays stable regardless of position.
 
 const FAKE_G17_DISPATCH = {
-  subagentType: 'general-purpose',
+  subagentType: 'research',
   model: 'gemini-3.8-flash-medium',
   promptTemplatePath: '/fake/g17-dimension-coverage-prompt.md',
 };

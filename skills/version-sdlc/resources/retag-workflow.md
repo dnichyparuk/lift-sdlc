@@ -30,7 +30,7 @@ To:      <head[:7]> (HEAD)
 ────────────────────────────────
 ```
 
-**Interactive mode** (when `flags.auto` is false): Use AskUserQuestion:
+**Interactive mode** (when `flags.auto` is false): Use `ask_question`:
 > About to retag `<currentTag>` from `<oldSha[:7]>` to `<head[:7]>` (HEAD). Continue?
 
 Options: **yes** — proceed | **no** — cancel

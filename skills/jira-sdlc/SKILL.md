@@ -50,14 +50,14 @@ caches at `.sdlc/jira-cache/<KEY>.json` migrate to this layout automatically on 
 1. `--project <KEY>` argument. When `jira.projects` is set (≥2 entries), the prepare script rejects values not in the list (exit 1).
 2. Parse current git branch for `[A-Z]{2,10}-\d+` pattern (e.g., `feat/PROJ-123-fix` → `PROJ`). When `jira.projects` is set, accept only keys in the list; otherwise fall through.
 3. Read `.sdlc/config.json` → `jira.defaultProject`.
-4. When `jira.projects` has ≥2 entries, use AskUserQuestion with a closed list matching `jira.projects` ("Which Jira project key should I use?").
-5. Use AskUserQuestion to ask: "Which Jira project key should I use? (e.g., PROJ, TEAM)".
+4. When `jira.projects` has ≥2 entries, use `ask_question` with a closed list matching `jira.projects` ("Which Jira project key should I use?").
+5. Use `ask_question` to ask: "Which Jira project key should I use? (e.g., PROJ, TEAM)".
 
 Backward compatible: repos without `jira.projects` retain the previous 4-step behavior (1/2/3/5).
 
 **Multi-candidate cache disambiguation:**
 
-When `--check` is run without `--site` and the home-cache contains entries for the project key under two or more site subdirectories, the script returns `exists: false` and `candidateSites: [<host>, …]`. Present the `candidateSites` list to the user via AskUserQuestion and re-run with `--site <host>`, or use `--force-refresh` to rebuild against a specific site.
+When `--check` is run without `--site` and the home-cache contains entries for the project key under two or more site subdirectories, the script returns `exists: false` and `candidateSites: [<host>, …]`. Present the `candidateSites` list to the user via `ask_question` and re-run with `--site <host>`, or use `--force-refresh` to rebuild against a specific site.
 
 ### Script Resolution Block
 
@@ -118,7 +118,7 @@ If `--init-templates` flag is present:
        - `hierarchyLevel === 0` and `subtask === false` → suggest "Task"
        - `subtask === true` → suggest "Skip (subtask)"
        - No `hierarchyLevel` available → no suggestion, present all options equally
-     - Use AskUserQuestion:
+     - Use `ask_question`:
        > Issue type "[typeName]" (hierarchy level: [N]) has no matching template.
        > Which default template should I use?
 
@@ -288,7 +288,7 @@ Parse user intent into one of these operations:
 | `view` | show, get, display, details of | 1 |
 | `bulk` | create N issues, multiple operations | N |
 
-For ambiguous requests, use AskUserQuestion to ask one clarifying question before classifying.
+For ambiguous requests, use `ask_question` to ask one clarifying question before classifying.
 
 ---
 
@@ -302,7 +302,7 @@ Skip this step for read operations (`search`, `view`). For every write operation
      For each entry in `noneTypes`, print a one-line warning and stop the operation:
      `No template for <type>. Run /jira-sdlc --init-templates or create .sdlc/jira-templates/<type>.md`
      Sub-bug, Sub-task, and Subtask types resolve via the FALLBACK_MAP in the prepare script (Sub-bug → Bug, Sub-task → Task, Subtask → Task) — the skill never re-derives this mapping.
-   - **Placeholder resolution:** Every `{name}` or `[bracketed prose]` marker classified `low`-confidence is escalated via `AskUserQuestion` and resolved from the user's explicit answer — never filled from inference, and never dispatched raw.
+   - **Placeholder resolution:** Every `{name}` or `[bracketed prose]` marker classified `low`-confidence is escalated via `ask_question` and resolved from the user's explicit answer — never filled from inference, and never dispatched raw.
 2. Run the critique checklist:
    - **Template completeness** (create / description-touching edit) — every `## ` heading in the payload description belongs to the resolved template; no invented sections.
    - **Field correctness** — issue type / project key / parent / components / labels match cached `allowedValues`.
@@ -323,7 +323,7 @@ Skip this step for read operations (`search`, `view`). For every write operation
 Skip for read operations. No write MCP call is ever dispatched without an `approve` answer to this prompt in the current turn.
 
 1. Print the full final payload (not a summary — the bytes the MCP call will dispatch).
-2. Call `AskUserQuestion` with three options:
+2. Call `ask_question` with three options:
    - **approve** — proceed to Step 3 dispatch
    - **change <what>** — describe the desired change; loop back to Step 2.5 with the revised draft (new `payload_hash`, fresh artifacts; the previous artifacts are stale and will be auto-purged)
    - **cancel** — abort the operation, do not dispatch
@@ -499,7 +499,7 @@ node "<PLUGIN_ROOT>/scripts/lib/mcp-failure.js" --telemetry --class "$FAILURE_CL
 | Hash-bound approval | No write MCP call dispatched without `approval-<hash>.token` present on disk for this exact `payload_hash` — LLM-verified per Step 3; no hook backstop exists |
 | Critique artifact age | No write MCP call dispatched without `critique-<hash>.json` present for this `payload_hash` and less than 10 minutes old — LLM-verified per Step 3; no hook backstop exists |
 | Link verification passed | No write MCP call dispatched before Step 2.7's `scripts/skill/jira.js --validate-body` has returned exit 0 for the final payload in this turn |
-| No write without approve | No write MCP call dispatched without an explicit `approve` from the Step 2.6 `AskUserQuestion` prompt in this exact turn — LLM-verified per Step 3; no hook backstop exists |
+| No write without approve | No write MCP call dispatched without an explicit `approve` from the Step 2.6 `ask_question` prompt in this exact turn — LLM-verified per Step 3; no hook backstop exists |
 | Release notes single-sentence | No `createJiraIssue` / `editJiraIssue` dispatch where the `## Release Notes` section contains two or more sentences — a single sentence is the only allowed carve-out (R25.5); two or more sentences fail this check |
 
 ---

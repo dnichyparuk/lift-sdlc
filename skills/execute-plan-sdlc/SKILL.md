@@ -34,7 +34,7 @@ To prevent context bloat and token exhaustion:
 
 ## Step 1 (LOAD): Load and Validate Plan
 
-**Explicit plan-file override:** If `EXPLICIT_PLAN_FILE` is set (from the `--plan-file <path>` flag parsed in the preamble), skip the Smart loading heuristic entirely. Read the plan from `EXPLICIT_PLAN_FILE` directly using the Read tool and proceed to plan validation below. This branch is authoritative — conversation context is NEVER consulted when `EXPLICIT_PLAN_FILE` is set. This is the compaction-stable path forwarded by ship-sdlc via `context.planFile`, and it is the only way to guarantee the same plan file is read across compaction boundaries.
+**Explicit plan-file override:** If `EXPLICIT_PLAN_FILE` is set (from the `--plan-file <path>` flag parsed in the preamble), skip the Smart loading heuristic entirely. Read the plan from `EXPLICIT_PLAN_FILE` directly using the `view_file` tool and proceed to plan validation below. This branch is authoritative — conversation context is NEVER consulted when `EXPLICIT_PLAN_FILE` is set. This is the compaction-stable path forwarded by ship-sdlc via `context.planFile`, and it is the only way to guarantee the same plan file is read across compaction boundaries.
 
 **Smart loading:** When `EXPLICIT_PLAN_FILE` is NOT set, if the plan content is already in the conversation context (the user discussed, wrote, or pasted it in this session), use it directly — do NOT re-read from file. Only read from file when the plan is not already available in context.
 
@@ -99,8 +99,8 @@ It ALWAYS exits 0 — `found: false` is a valid answer, not an error. Parse the 
 - If `--resume` was passed:
   1. If `found` is false, warn: "No state file found for branch `<branch>`. Starting fresh." and proceed to plan loading below.
   2. Read `./resources/state-format.md` for the schema reference.
-  3. Read the state file using `node "$STATE_SCRIPT" read` (locate `state/execute.js` as described in the State persistence section). Load `planPath` and read the plan file. If `planPath` is null (plan was from conversation context), use AskUserQuestion to request the plan file path.
-  4. Compute the SHA-256 hash of the plan content using the dedicated script: `node "<PLUGIN_ROOT>/scripts/util/plan-hash.js" <plan-path>`, and compare against `planHash`. If mismatch, use AskUserQuestion:
+  3. Read the state file using `node "$STATE_SCRIPT" read` (locate `state/execute.js` as described in the State persistence section). Load `planPath` and read the plan file. If `planPath` is null (plan was from conversation context), use `ask_question` to request the plan file path.
+  4. Compute the SHA-256 hash of the plan content using the dedicated script: `node "<PLUGIN_ROOT>/scripts/util/plan-hash.js" <plan-path>`, and compare against `planHash`. If mismatch, use `ask_question`:
      > Plan content has changed since execution started. Resume with the existing wave structure, or restart from scratch?
      Options: **resume** | **restart**
      If "restart", delete the state file and proceed to plan loading below.
@@ -118,7 +118,7 @@ It ALWAYS exits 0 — `found: false` is a valid answer, not an error. Parse the 
 
 - If `--resume` was NOT passed but `detect-resume` reported `found: true` for the current branch:
   - If `--auto` is set: **skip the stale state file and start a fresh run** (do not prompt, do not auto-resume). Print: "Existing state file found for branch `<branch>` but --resume not passed. Starting fresh."
-  - Otherwise, use AskUserQuestion:
+  - Otherwise, use `ask_question`:
     > Found execution state from <startedAt> with <N> of <total> waves completed. Resume from Wave <next>?
     Options: **yes** — resume | **restart** — discard state file and start fresh
     If "yes", follow the resume flow above (steps 2-7). If "restart", delete the state file and proceed normally.
@@ -130,7 +130,7 @@ In addition to the explicit `--resume` flag, Step 0 MUST scan the SessionStart `
 1. **`Active execution (post-compact):` present AND `Active pipeline: ship-sdlc` ABSENT** in the same system-reminder block:
    - Set `implicitResume = true`. This is functionally equivalent to `--resume` being passed on the CLI — the rest of Step 0 takes the resume codepath above (resume detection step 1: the `detect-resume` probe's `found` check for the current branch, then steps 2–8 including the `committedSha` idempotency check).
    - When `--auto` is also active: proceed without any user prompt; jump straight to resume execution. The implicit-resume action is silent.
-   - When `--auto` is NOT active: emit ONE `AskUserQuestion`:
+   - When `--auto` is NOT active: emit ONE `ask_question`:
      > Resuming execution from wave N — continue? (yes / no)
      Where `N` is the wave number reported in the `Active execution (post-compact):` line. On `yes`: proceed to resume codepath. On `no`: stop without modifying state (user can re-invoke explicitly later with `--resume` or restart fresh).
 
@@ -168,10 +168,10 @@ When ship-sdlc invokes execute-plan-sdlc inside the ship pipeline, `--branch` is
 1. Detect the current branch: `git branch --show-current`
 2. Determine the default branch: `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||'`. Fallback to `main` if the symbolic ref is not set.
 
-   **Do NOT use the `gitStatus` snapshot from conversation context.** The `gitStatus` block in system-reminder tags is captured once at conversation start and is not updated during the session. If the user switched branches after the conversation began, `gitStatus` will report the old branch. Always run the `git branch --show-current` command above via Bash at execution time.
+   **Do NOT use the `gitStatus` snapshot from conversation context.** The `gitStatus` block in system-reminder tags is captured once at conversation start and is not updated during the session. If the user switched branches after the conversation began, `gitStatus` will report the old branch. Always run the `git branch --show-current` command above via `run_command` at execution time.
 3. If the current branch matches the default branch:
    - Resolve workspace mode (branch/worktree/prompt/continue) from config or CLI flags.
-   - If workspace mode is `prompt` or absent, use AskUserQuestion:
+   - If workspace mode is `prompt` or absent, use `ask_question`:
      > You're on the default branch (`<branch>`). Working directly on it is not recommended.
      >
      > Suggested branch name: `<derived-branch-name>` (derived from plan title, e.g. `<logical-type>/<derived-slug>`)
@@ -205,7 +205,7 @@ The script owns the whole sequence: it fetches the base from `origin` (the remot
 - `{"status":"conflicts","files":["path/a.js", ...]}` — the rebase did not apply and has already been aborted for you. Warn (listing `files`) and continue execution on the current base — the plan may still succeed.
 - `{"status":"fetch_failed","remote":"origin","base":"<defaultBranch>","error":"<stderr>"}` — the fetch itself failed (network, auth, unknown remote). Print "Could not fetch `<remote>/<base>`: `<error>` — skipping rebase; branch may be behind base" and continue (non-fatal, same posture as `conflicts`).
 
-If `--rebase prompt`: Use AskUserQuestion — rebase onto default branch or skip. On "rebase", run the same command and branch on `status` identically.
+If `--rebase prompt`: Use `ask_question` — rebase onto default branch or skip. On "rebase", run the same command and branch on `status` identically.
 
 If `--rebase skip` or absent: skip entirely.
 
@@ -300,7 +300,7 @@ Quality Tiers (Model Presets):
   balanced) Balanced:  N × gemini-3.8-flash-low, N × gemini-3.8-flash-medium, N × gemini-3.8-flash-high* — default (hybrid: Flash workers, Pro escalation & review) ✓
   full) Quality:       N × gemini-3.8-flash-medium, N × gemini-3.1-pro-low, N × gemini-3.1-pro-high         — max correctness
 
-Use AskUserQuestion to select a quality tier:
+Use `ask_question` to select a quality tier:
 > Select execution quality tier
 
 Options: **minimal** (Speed) | **balanced** (Balanced, default) | **full** (Quality) | **custom** | **cancel**
@@ -311,17 +311,17 @@ Always present all 3 tiers. Default is Balanced. When the user selects a tier (f
 
 ## Step 5 (DO): Execute
 
-**Pre-wave:** If there is 1 pre-wave trivial task, execute it inline in the main context. If there are 2+ pre-wave trivials, dispatch them as a single batch agent (using the assigned model for Trivial tasks, e.g., gemini-3.8-flash-medium) using the Batched Trivial Tasks Prompt Template in `./resources/classifying-and-waving-tasks.md`. Mark each complete in TodoWrite after inline execution or after the batch agent returns.
+**Pre-wave:** If there is 1 pre-wave trivial task, execute it inline in the main context. If there are 2+ pre-wave trivials, dispatch them as a single batch agent (using the assigned model for Trivial tasks, e.g., gemini-3.8-flash-medium) using the Batched Trivial Tasks Prompt Template in `./resources/classifying-and-waving-tasks.md`. Mark each complete in the state file after inline execution or after the batch agent returns.
 
 This dispatch is NOT a wave-runner Agent — it is a direct batch dispatch from main context for tasks that have no in-wave dependencies.
 
 **For each wave:**
 
-**Progress signal — wave start (mandatory, always first).** Before any gate or dispatch, update TodoWrite:
-- Mark tasks from the previous wave as `completed` (skip on wave 1).
-- Add one todo per task in this wave with `status: "in_progress"` and `activeForm: "Wave N — <task name>"`.
+**Progress signal — wave start (mandatory, always first).** Before any gate or dispatch, emit wave start progress (stdout marker e.g. `[wave-start] wave=N` and chat status) and record in state:
+- Note tasks from the previous wave as `completed` (skip on wave 1).
+- Note each task in this wave with `status: "in_progress"` and label `"Wave N — <task name>"`.
 
-This runs unconditionally — even if the wave is skipped or blocked. This TodoWrite is for the Agent's OWN context bookkeeping. It is NOT visible to the parent when execute-plan-sdlc runs inside ship-sdlc's Agent dispatch — sub-agent TodoWrite calls do not propagate up. The parent's task tray is populated by ship-sdlc's main-thread TodoWrite orchestration (see ship-sdlc/SKILL.md).
+This runs unconditionally — even if the wave is skipped or blocked. In Antigravity, progress tracking is maintained through the execution state file and chat status updates (TodoWrite is not present in Antigravity). When execute-plan-sdlc runs inside ship-sdlc's subagent dispatch, ship-sdlc manages overall pipeline progress.
 
 **5a-pre. Pre-wave guardrail check (error-severity only)** — Skip if `activeGuardrails` is empty.
 
@@ -333,7 +333,7 @@ Before dispatching any agents in this wave, evaluate each error-severity guardra
 
 **Verdicts:**
 - All guardrails PASS → proceed to 5a (high-risk gate)
-- Any guardrail FAIL → use AskUserQuestion:
+- Any guardrail FAIL → use `ask_question`:
   > Wave N would violate guardrail `<id>`: <description>
   > Rationale: <one-line explanation>
   >
@@ -349,7 +349,7 @@ Warning-severity guardrails are not evaluated pre-wave — they are checked post
 
 If `--auto` is set, skip the prompt. Print: "Auto-approving high-risk wave N." Proceed as if the user selected "yes".
 
-Otherwise, use AskUserQuestion to ask:
+Otherwise, use `ask_question` to ask:
 > Wave N contains high-risk task(s):
 > - Task N: "..." [HIGH RISK: database change]
 >
@@ -402,7 +402,7 @@ Dispatch with:
 - `model: gemini-3.8-flash-low` — The wave-runner orchestrator is permanently locked to flash-low because it performs strict string parsing and routing. It never escalates.
 - `mode: bypassPermissions`
 - **`model:` is REQUIRED — no exceptions.** Omitting it causes the wave-runner to inherit the parent context model, defeating the quality-tier system.
-- **DO NOT pass `isolation: "worktree"` (or any other `isolation` value) to the Agent tool.** The SDLC `--workspace worktree` flag controls a separate concept (a sibling git worktree created via `util/worktree-create.js`). Adding `isolation` here creates ephemeral `.sdlc/worktrees/agent-<id>` paths that are not the intended SDLC worktree. (Mirrors the analogous constraint in ship-sdlc/SKILL.md.)
+- **DO NOT pass `Workspace: "branch"` (or any other `Workspace` isolation) to `invoke_subagent`.** The SDLC `--workspace worktree` flag controls a separate concept (a sibling git worktree created via `util/worktree-create.js`). Adding `Workspace: "branch"` here creates ephemeral isolated workspaces that are not the intended SDLC worktree. (Mirrors the analogous constraint in ship-sdlc/SKILL.md.)
 
 The wave-runner Agent handles in-wave per-task fan-out internally — it dispatches one per-task Agent per Standard/Complex task and one batch Agent (running on the tier's Trivial model, e.g. gemini-3.8-flash-medium in Balanced) for any 2+ Trivials, all within its own context. A single Trivial in a wave is dispatched by the wave-runner as an inline single-agent, not a batch. Per-task retries are the wave-runner's responsibility: max 2 retries per task, escalating one step per retry along the fixed ladder `gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high` — see `./resources/wave-runner-template.md` Algorithm §4 for the exact per-starting-model retry chain.
 
@@ -433,7 +433,7 @@ node "<PLUGIN_ROOT>/scripts/util/parse-wave.js" --dispatched-ids '<json-array-of
        --split-depth <currentSplitDepth> \
        --max-split-depth 3
      ```
-     Read `halves[0].tasks` and `halves[1].tasks` from the output. Re-dispatch each half as an independent wave-runner with a fresh byte budget (recompute via `lib/dispatch-budget.js`). Each half gets its own fact sheets (already written — reuse existing paths). Depth increments on each recursive split; `MaxSplitDepthExceededError` (exit 2) means the task set cannot be further split — escalate to user with `AskUserQuestion` listing the unresolved task IDs.
+     Read `halves[0].tasks` and `halves[1].tasks` from the output. Re-dispatch each half as an independent wave-runner with a fresh byte budget (recompute via `lib/dispatch-budget.js`). Each half gets its own fact sheets (already written — reuse existing paths). Depth increments on each recursive split; `MaxSplitDepthExceededError` (exit 2) means the task set cannot be further split — escalate to user with `ask_question` listing the unresolved task IDs.
 
      **Critical:** do NOT use `git diff` as a substitute for missing per-task returns. Even if git diff shows file changes, absent IDs mean the wave-runner did not confirm those tasks — treat them as unaccounted and split.
 
@@ -497,7 +497,7 @@ For each guardrail in `activeGuardrails`:
 
 **Verdicts per guardrail:**
 - PASS → no action
-- FAIL (error severity) → use AskUserQuestion:
+- FAIL (error severity) → use `ask_question`:
   > Wave N output violates guardrail `<id>`: <description>
   > Rationale: <one-line explanation of what specifically violated it>
   >
@@ -593,10 +593,10 @@ Algorithm:
 
 Wave abort on `markTaskDone` failure is FORBIDDEN.
 
-**Progress signal — wave complete (mandatory, always last).** After state persistence, update TodoWrite:
-- Mark this wave's tasks as `completed`.
+**Progress signal — wave complete (mandatory, always last).** After state persistence, emit wave complete progress (stdout marker e.g. `[wave-complete] wave=N` and chat status):
+- Mark this wave's tasks as `completed` in the execution state file.
 
-On the final wave, also mark any remaining `in_progress` todos as `completed`. This closes the parent-visible progress trail and ensures TodoWrite reflects terminal state when the skill returns its Step 9 result.
+On the final wave, also mark any remaining `in_progress` tasks as `completed`. This ensures state accurately reflects terminal status when the skill returns its Step 9 result.
 On failure: preserve the state file for `--resume`.
 
 **5e. Inter-wave critique** — Before next wave:
@@ -825,7 +825,7 @@ On failure or interruption (not all tasks completed), preserve the state file. P
 
 **Model escalation is not a retry substitute.** Escalating from gemini-3.8-flash-medium to gemini-3.8-flash-high (or gemini-3.8-flash-high to gemini-3.1-pro-low) gives the agent more capability, but if the failure was caused by a bad prompt or insufficient context, a stronger model won't help. Always add failure context to the retry prompt regardless of model change. Escalation consumes one of the 2 allowed retries.
 
-**Agents may bypass the Edit tool.** Agents sometimes use bash `sed`, `awk`, Python scripts, or compiled programs in `/tmp` to modify files instead of the Edit tool. These approaches are fragile (wrong line numbers, regex mismatches, wrong working directory) and silently fail — the agent reports success, but the file is unchanged or corrupted. The Hard Constraints in the agent prompt forbid this, but the filesystem verification in Step 5c catches cases where the constraint was ignored.
+**Agents may bypass native editing tools.** Agents sometimes use bash `sed`, `awk`, Python scripts, or compiled programs in `/tmp` to modify files instead of `replace_file_content` or `write_to_file`. These approaches are fragile (wrong line numbers, regex mismatches, wrong working directory) and silently fail — the agent reports success, but the file is unchanged or corrupted. The Hard Constraints in the agent prompt forbid this, but the filesystem verification in Step 5c catches cases where the constraint was ignored.
 
 **Worktree lifecycle is script-driven, not harness tools.** `util/worktree-create.js` handles creation (including branch collision) — no EnterWorktree/ExitWorktree. See What's Next for the cleanup script sequence.
 

@@ -332,7 +332,7 @@ summary. "disagree" / "needs discussion" / "won't fix" items are displayed but N
 auto-actioned. Still show the full analysis table and action plan above, then proceed
 directly to Step 11.
 
-**Manual mode (default):** When `flags.auto` is false or absent, use AskUserQuestion to ask:
+**Manual mode (default):** When `flags.auto` is false or absent, use ask_question to ask:
 > No changes have been made yet. How to proceed?
 
 Options:
@@ -422,14 +422,14 @@ Branch on `mode`:
   >
   > Dispatch `harden-sdlc` for this cluster?
 
-  `AskUserQuestion: dispatch | skip`. Emit per cluster: `present-harden-clusters` —
+  `ask_question: dispatch | skip`. Emit per cluster: `present-harden-clusters` —
   `consent-granted | consent-skipped`. Dispatch only `consent-granted` clusters (below).
 - **`interactive-always`**: skip the consent gate, emit `consent-skipped` for every cluster,
   dispatch all of them (below).
-- **`auto-defer`**: NEVER call `AskUserQuestion`. Skip dispatch entirely. Append
+- **`auto-defer`**: NEVER call `ask_question`. Skip dispatch entirely. Append
   `deferredLogEntry` (already formatted by the script) verbatim to `.sdlc/learnings/log.md`.
   Emit: `dispatch-harden` — `skipped`.
-- **`auto-always`**: NEVER call `AskUserQuestion`. Dispatch every cluster (below), propagating
+- **`auto-always`**: NEVER call `ask_question`. Dispatch every cluster (below), propagating
   `--auto` to every `Skill(harden-sdlc)` invocation.
 
 **Dispatch** (each approved cluster in the three non-`auto-defer` modes):
@@ -495,7 +495,7 @@ Apply the **bypass rule** from Configuration → `alwaysFixSeverities`: bypass-e
 findings have their replies posted and threads resolved with no prompt, logged as
 `fixed: <description>`.
 
-**Auto mode** (`flags.auto` true): skip AskUserQuestion, still display the summary block
+**Auto mode** (`flags.auto` true): skip ask_question, still display the summary block
 above, then proceed directly to step 3 below as if `yes` were selected — post in-thread
 replies for every action-plan item. Thread resolution: when `alwaysFixSeverities` is empty
 (default), resolve ALL "agree, will fix" threads; when non-empty, resolve only bypass-eligible
@@ -503,7 +503,7 @@ ones and append the rest to the follow-up summary (per Configuration). Pushback 
 threads are always replied-to but left open. Pipeline context never overrides this — only the
 explicit `flags.auto` signal skips the gate.
 
-**Manual mode (default):** When `flags.auto` is false or absent, use AskUserQuestion:
+**Manual mode (default):** When `flags.auto` is false or absent, use ask_question:
 
 > Should I reply to all addressed review comments on the PR and resolve the threads?
 
@@ -562,7 +562,7 @@ Replied to N threads:
 - Batch implement without testing each change individually
 - Display output from internal critique steps (Steps 5, 8) to the user
 - Skip the Step 10 consent gate without an explicit `--auto` flag — see Step 10 (pipeline context never overrides this gate)
-- Use `AskUserQuestion` in Step 11.6 when `flags.auto` is true — the auto-mode matrix governs all Step 11.6 decision sites; cite `flags.auto` and `flags.alwaysHardenFromReview` (resolved manifest fields) exclusively, never raw `$ARGUMENTS`
+- Use `ask_question` in Step 11.6 when `flags.auto` is true — the auto-mode matrix governs all Step 11.6 decision sites; cite `flags.auto` and `flags.alwaysHardenFromReview` (resolved manifest fields) exclusively, never raw `$ARGUMENTS`
 
 ---
 

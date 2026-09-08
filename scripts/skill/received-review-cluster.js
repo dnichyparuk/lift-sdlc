@@ -20,7 +20,7 @@
  *     auto+defer cell, pre-format the deferred-action log entry
  *
  * The LLM is left only with what a script cannot do: presenting the
- * per-cluster consent gate (AskUserQuestion) and dispatching Skill(harden-sdlc).
+ * per-cluster consent gate (ask_question) and dispatching Skill(harden-sdlc).
  *
  * Usage:
  *   node received-review-cluster.js < input.json

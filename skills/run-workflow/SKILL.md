@@ -8,7 +8,7 @@ model: gemini-3.8-flash-medium
 
 # Generic Workflow Engine
 
-Executes structured SDLC pipelines defined by declarative manifests and prepare scripts. Manages state machine transitions, Agent tool dispatches, inline execution steps, and verification gates.
+Executes structured SDLC pipelines defined by declarative manifests and prepare scripts. Manages state machine transitions, `invoke_subagent` dispatches, inline execution steps, and verification gates.
 
 ## Step 0 — Plan Mode Check
 
@@ -62,7 +62,7 @@ Format and display the pipeline table:
 1. **If `--dry-run` was passed**: Stop here. Do not initialize state or execute steps.
 2. **If `flags.auto === true`**: Announce "Auto mode active — executing pipeline without interactive prompts" and proceed immediately to Step 3.
 3. **If interactive mode**:
-   Use `AskUserQuestion` to ask:
+   Use `ask_question` to ask:
    > Run this pipeline?
    - **yes** — execute as shown
    - **cancel** — stop here
@@ -117,13 +117,16 @@ If `step.status === "conditional"`:
 
 2. **Dispatch Step**:
 
-   **Case A: `step.dispatchMode === "agent"` (Agent tool dispatch)**:
-   Dispatch via the **Agent tool** with:
-   - `model: step.model`
-   - `isolation: step.isolation` (omit if null)
-   - Prompt:
+   **Case A: `step.dispatchMode === "agent"` (Subagent dispatch)**:
+   Dispatch via `invoke_subagent` with:
+   - `TypeName: "self"`
+   - `Role: step.name + " executor"`
+   - `Model: step.model`
+   - `Workspace: step.isolation === "worktree" || step.isolation === "branch" ? "branch" : "inherit"`
+   - `Prompt`:
      ```text
-     You are executing the <step.skill> skill. Invoke `/<step.skill> <step.args>` using the Skill tool — this loads the SKILL.md automatically. Return a structured result:
+     You are executing the <step.skill> skill with args: <step.args>.
+     Return a structured result:
      (1) status — success or failure
      (2) result summary — 2-3 lines
      (3) artifacts — commit hash, tag, PR URL, verdict, etc.
@@ -229,7 +232,7 @@ Print the final execution summary to the user:
 
 Third-party manifests (a `prepareScript`'s emitted `steps[]`, e.g. a plugin's own `pipelines/*.json`) rely on this engine to execute specific step fields. This section documents which fields Step 4 above actually reads and acts on, versus fields that only pass through for the step's own handler to interpret. Where the engine has no defined behavior for a field, that is called out explicitly rather than assumed — a manifest author should not build on undocumented behavior.
 
-**`dispatchMode`** — `"agent"` or `null` (Step 4c.2). `"agent"` dispatches the step via the Agent tool with `model: step.model` and `isolation: step.isolation` (omitted when null), invoking `/<step.skill> <step.args>`. `null` (or omitted) runs the step inline in the orchestrator's own context (Case B).
+**`dispatchMode`** — `"agent"` or `null` (Step 4c.2). `"agent"` dispatches the step via `invoke_subagent` with `model: step.model` and `workspace: step.isolation` (omitted when null), running `<step.skill> <step.args>`. `null` (or omitted) runs the step inline in the orchestrator's own context (Case B).
 
 **`inlineHandler` + `handlerSpec`** — For a `dispatchMode: null` step, Case B names four built-in handlers with concrete, engine-defined execution:
 - `archive-openspec` — `ARCHIVED_PATH=$(node "<PLUGIN_ROOT>/scripts/util/openspec-archive.js" '<name>')`

@@ -2,7 +2,7 @@
 name: plan-explore-orchestrator
 description: Dispatches parallel dynamic-dimension discovery for plan-sdlc; derives 3–7 task-specific dimensions, fans out code/web/hybrid subagents, critiques findings, and produces discovery-brief.md
 subagent: true
-tools: Read, Write, Glob, Grep, Bash, Agent, WebSearch, WebFetch
+tools: view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command, invoke_subagent, search_web, read_url_content
 model: gemini-3.8-flash-low
 ---
 
@@ -92,15 +92,16 @@ END_DIMENSION_CONTRACT
 
 ## Step 2 — FAN-OUT
 
-Dispatch ALL dimensions in a SINGLE message as parallel `Agent` tool calls.
+Dispatch ALL dimensions in a SINGLE `invoke_subagent` tool call with multiple `Subagents` array entries.
 
-**IMPORTANT:** All dimension agents MUST be dispatched simultaneously (multiple tool calls in one message). Do not dispatch them sequentially.
+**IMPORTANT:** All dimension agents MUST be dispatched simultaneously in a single `invoke_subagent` call. Do not dispatch them sequentially.
 
-For each dimension, dispatch one `Agent`:
-- `subagent_type: general-purpose`
-- `model: <dimension.model>`
-- `mode: bypassPermissions`
-- **DO NOT pass `isolation: "worktree"` or any `isolation` value**
+For each dimension entry in `Subagents`:
+- `TypeName: "research"`
+- `Role: "<dimension.name> explorer"`
+- `Model: "<dimension.model>"`
+- `Workspace: "inherit"`
+- `Prompt`: (templated prompt below)
 
 ### Per-mode prompt suffix and tool restrictions
 
@@ -112,8 +113,8 @@ You are exploring the codebase for the dimension: <dimension.name>
 Focus on files: <dimension.files or "any relevant files">
 Project root: <PROJECT_ROOT>
 
-Tools available: Read, Glob, Grep, Bash (read-only git commands only)
-**Do NOT use WebSearch or WebFetch.**
+Tools available: view_file, find_by_name, grep_search, run_command (read-only git commands only)
+**Do NOT use search_web or read_url_content.**
 
 For each finding, cite the specific file:line location.
 Report findings under your assigned ID prefix: F-<dimension.name>-<n>
@@ -132,12 +133,12 @@ You are researching best practices for the dimension: <dimension.name>
 <dimension.description>
 
 Context: this research is for planning a software change: <USER_PROMPT>
-Budget: ≤5 WebSearch calls + ≤8 WebFetch calls. Stay within budget.
+Budget: ≤5 search_web calls + ≤8 read_url_content calls. Stay within budget.
 
 Source quality steer: prefer OWASP, RFC, MDN, official vendor docs. Down-weight sources older than 3 years.
 
-Tools available: WebSearch, WebFetch
-**Do NOT use Read, Glob, Grep, or Bash.**
+Tools available: search_web, read_url_content
+**Do NOT use view_file, find_by_name, grep_search, or run_command.**
 
 Report findings under your assigned ID prefix: F-<dimension.name>-<n>
 Format: F-<dimension.name>-n: <url> — <observation> (recency: YYYY, source-type: RFC|OWASP|MDN|vendor|blog)
@@ -152,9 +153,9 @@ You are exploring both the codebase and external references for the dimension: <
 
 Focus on files: <dimension.files or "any relevant files">
 Project root: <PROJECT_ROOT>
-Budget: ≤3 WebSearch calls + ≤5 WebFetch calls. Stay within budget.
+Budget: ≤3 search_web calls + ≤5 read_url_content calls. Stay within budget.
 
-Tools available: Read, Glob, Grep, Bash (read-only git commands only), WebSearch, WebFetch
+Tools available: view_file, find_by_name, grep_search, run_command (read-only git commands only), search_web, read_url_content
 
 Tag each finding:
 - [web-only] — found only in external research, not verified in codebase

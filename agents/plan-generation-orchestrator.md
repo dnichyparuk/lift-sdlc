@@ -2,7 +2,7 @@
 name: plan-generation-orchestrator
 description: Receives exploration brief, requirements, and codebase context to write the implementation plan file containing tasks with dependencies, complexity, and verification metadata.
 subagent: true
-tools: Read, Write, Glob, Grep, Bash
+tools: view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command
 model: gemini-3.1-pro-high
 ---
 
@@ -24,9 +24,9 @@ You are the plan generation orchestrator. You receive inputs from `plan-sdlc` de
 ## Step 1 — Context Loading
 
 1. **Read requirements and exploration context**:
-   - If `BRIEF_FILE` is not "none", `Read` the brief. It contains `F-<DIM>-<n>` findings.
-   - If `OPENSPEC_CONTEXT` is not "none", `Read` the provided spec files (`proposal.md`, `specs/*.md`, `design.md`, `tasks.md`).
-2. **Codebase verification**: Use `Glob`, `Grep`, and `Read` to map the specific file paths that need creation or modification based on the requirements.
+   - If `BRIEF_FILE` is not "none", read the brief via `view_file`. It contains `F-<DIM>-<n>` findings.
+   - If `OPENSPEC_CONTEXT` is not "none", read the provided spec files (`proposal.md`, `specs/*.md`, `design.md`, `tasks.md`) via `view_file`.
+2. **Codebase verification**: Use `find_by_name`, `grep_search`, and `view_file` to map the specific file paths that need creation or modification based on the requirements.
 3. **OpenSpec enrichment**:
    - If `OPENSPEC_CONTEXT` is present, use `proposal.md` for scope, delta specs (`specs/*.md`) for authoritative requirements, and `design.md` for architecture.
 

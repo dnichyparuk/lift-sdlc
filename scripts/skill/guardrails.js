@@ -722,7 +722,7 @@ function buildProposals(signals, target) {
 
     proposals.push({
       id: 'ambiguity-stops-and-asks',
-      description: 'When two or more codebase patterns are viable for the same requirement with materially different downstream implications, the plan must EITHER record the choice in Key Decisions with rationale, OR the skill must AskUserQuestion before committing. Silent selection between viable patterns is a critique failure.',
+      description: 'When two or more codebase patterns are viable for the same requirement with materially different downstream implications, the plan must EITHER record the choice in Key Decisions with rationale, OR the skill must ask_question before committing. Silent selection between viable patterns is a critique failure.',
       severity: 'error',
       category: 'planning-discipline',
       evidence: 'Universal guardrail — always applicable to non-trivial plans.',

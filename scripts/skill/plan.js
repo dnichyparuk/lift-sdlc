@@ -157,7 +157,7 @@ function buildGithubHosting(projectRoot) {
  */
 function buildG17Dispatch() {
   const templateName = 'g17-dimension-coverage-prompt.md';
-  const subagentType = 'general-purpose';
+  const subagentType = 'research';
   const model = 'gemini-3.8-flash-medium';
 
   // 1. Try installed plugin path via find
@@ -274,7 +274,7 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
   const lanes = laneDefs.map(def => ({
     id: def.name,
     name: def.name,
-    subagentType: 'general-purpose',
+    subagentType: 'research',
     model: def.model,
     promptTemplatePath: resolveSkillTemplate(def.templateName),
     gateIds: def.gateIds,
@@ -325,7 +325,7 @@ function buildLensReviewers() {
 
   return lensDefs.map(def => ({
     lens: def.lens,
-    subagentType: 'general-purpose',
+    subagentType: 'research',
     model: 'gemini-3.8-flash-medium',
     promptTemplatePath: resolveSkillTemplate(def.templateName),
     focusCategories: def.focusCategories,

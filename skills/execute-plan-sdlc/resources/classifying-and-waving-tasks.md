@@ -70,7 +70,7 @@ Always present 3 presets in Step 4, regardless of plan size. The actual subagent
 
 ### Model Dispatch Enforcement
 
-The `model:` parameter is REQUIRED on every Agent tool dispatch — no exception. Omitting it causes the agent to inherit the parent context model, defeating the preset system's cost optimization.
+The `Model:` parameter is REQUIRED on every `invoke_subagent` dispatch — no exception. Omitting it causes the agent to inherit the parent context model, defeating the preset system's cost optimization.
 When dispatching a wave-runner Agent, permanently lock the orchestrator to `gemini-3.8-flash-low` regardless of the preset. The presets above apply strictly to the *per-task worker subagents* that the wave-runner spawns.
 
 ## Wave-Building Algorithm
@@ -209,7 +209,7 @@ The orchestrator can provide more context, escalate to a more capable model, bre
 ## Hard Constraints
 - Do NOT read the plan file — all task information is provided above
 - Do NOT modify files outside the "Files You May Touch" list
-- **Use the Edit tool exclusively for all file modifications.** Never use bash sed, awk, perl, Python scripts, Go programs, or any other indirect method to patch files. If a file needs changing, use Edit. No exceptions.
+- **Use `replace_file_content` and `write_to_file` exclusively for all file modifications.** Never use bash sed, awk, perl, Python scripts, Go programs, or any other indirect method to patch files. If a file needs changing, use `replace_file_content` (or `write_to_file` for new files). No exceptions.
 - **Always run verification commands (tests, builds, linters) and package manager commands (e.g., npm, pnpm, pnpm build, yarn) via the truncated wrapper script** to prevent context bloat: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`
 - If you encounter a genuine blocker, report it clearly rather than guessing or hallucinating an implementation
 - Do not add features, refactor, or clean up code beyond what the task requires
@@ -225,7 +225,7 @@ Review your work before reporting. Check:
 **Discipline:**
 - Did you only modify files in the "Files You May Touch" list?
 - Did you avoid adding features, refactoring, or cleanup beyond the task scope?
-- Did you use the Edit tool for every file modification (not bash/sed/awk)?
+- Did you use `replace_file_content` / `write_to_file` for every file modification (not bash/sed/awk)?
 
 **Verification:**
 - Did you run the verification steps specified in the task?
@@ -301,7 +301,7 @@ Files you may touch for this task:
 ## Before Reporting: Self-Review (Quick)
 For each task:
 - Did you implement everything specified?
-- Did you use the Edit tool exclusively (no bash/sed/awk)?
+- Did you use `replace_file_content` / `write_to_file` exclusively (no bash/sed/awk)?
 - Did you stay within the allowed file list?
 
 ## Expected Output
@@ -315,7 +315,7 @@ For each task, report:
 ## Hard Constraints
 - Complete tasks in the listed order
 - Do NOT modify files outside each task's "Files you may touch" list
-- **Use the Edit tool exclusively for all file modifications.** Never use bash sed, awk, perl, Python scripts, Go programs, or any other indirect method to patch files. If a file needs changing, use Edit. No exceptions.
+- **Use `replace_file_content` and `write_to_file` exclusively for all file modifications.** Never use bash sed, awk, perl, Python scripts, Go programs, or any other indirect method to patch files. If a file needs changing, use `replace_file_content` (or `write_to_file` for new files). No exceptions.
 - **Always run verification commands (tests, builds, linters) and package manager commands (e.g., npm, pnpm, pnpm build, yarn) via the truncated wrapper script** to prevent context bloat: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`
 - If one task fails, continue to the next — do not stop the batch
 - Report per-task status even if some tasks fail

@@ -127,7 +127,7 @@ Proposed review dimensions for this project:
    Why: Found `jsonwebtoken` and `passport` in package.json; src/auth/ with 8 files
 ```
 
-Use AskUserQuestion to ask: "Install which dimensions?" Options: **all** / **select** (comma-separated numbers) / **cancel**.
+Use ask_question to ask: "Install which dimensions?" Options: **all** / **select** (comma-separated numbers) / **cancel**.
 
 For each selected dimension:
 
@@ -145,7 +145,7 @@ Run the validation script (the same script as Step 2, now in markdown-report mod
 node "<PLUGIN_ROOT>/scripts/ci/validate-dimensions.js" --project-root . --markdown
 ```
 
-- Exit code **1**: Show validation errors. Use AskUserQuestion: "Fix these validation errors automatically? (yes / no)"
+- Exit code **1**: Show validation errors. Use ask_question: "Fix these validation errors automatically? (yes / no)"
 - Exit code **2**: Show `Script error — see output above` and stop. Invoke error-report-sdlc — Glob `**/error-report-sdlc/REFERENCE.md`, follow with skill=review-init-sdlc, step=Step 7 — Validate Installation, error=stderr.
 
 Present the markdown output table. If any file has errors, show the error detail and offer to fix them automatically.
@@ -158,7 +158,7 @@ Present the markdown output table. If any file has errors, show the error detail
 
 **Check existing state:** Glob `.github/instructions/*.instructions.md`. If files exist with the same names as selected dimensions, confirm overwrite. In `--add` mode: only generate for newly added dimensions.
 
-**PLAN — map dimensions to files:** Show the proposed `.github/instructions/<name>.instructions.md` list with `applyTo` and estimated char count. Use AskUserQuestion: "Generate these Copilot instruction files?" Options: **yes** / **no** / **select** (numbers).
+**PLAN — map dimensions to files:** Show the proposed `.github/instructions/<name>.instructions.md` list with `applyTo` and estimated char count. Use ask_question: "Generate these Copilot instruction files?" Options: **yes** / **no** / **select** (numbers).
 
 **CRITIQUE — before writing:**
 
