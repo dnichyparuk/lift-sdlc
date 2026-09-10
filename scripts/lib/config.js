@@ -161,7 +161,7 @@ function readLocalConfig(projectRoot) {
 // ---------------------------------------------------------------------------
 
 /** Sections that live in the project config vs local config. */
-const PROJECT_SECTIONS = new Set(['version', 'jira', 'commit', 'pr', 'plan', 'execute']);
+const PROJECT_SECTIONS = new Set(['version', 'jira', 'commit', 'pr', 'plan', 'execute', 'rejected_guardrails', 'learn']);
 
 /**
  * Read a single config section by name.
@@ -403,14 +403,17 @@ function normalizeBlankLines(lines) {
 // ---------------------------------------------------------------------------
 
 // Deny-all + allowlist. Everything inside `.sdlc/` is ignored except:
-// `.gitignore` (the file itself), `config.json`, and `review-dimensions/`.
-// All other files and directories are ignored by default.
+// `.gitignore` (the file itself), `config.json`, `review-dimensions/`, and
+// `learnings/pending/`. All other files and directories are ignored by default.
 const SDLC_GITIGNORE_PATTERNS = [
   '*',
   '!.gitignore',
   '!config.json',
   '!review-dimensions/',
   '!review-dimensions/**',
+  '!learnings/',
+  '!learnings/pending/',
+  '!learnings/pending/**',
 ];
 const SDLC_GITIGNORE_BEGIN = '# >>> lift-sdlc managed (do not edit) — selective ignores';
 const SDLC_GITIGNORE_END   = '# <<< lift-sdlc managed';

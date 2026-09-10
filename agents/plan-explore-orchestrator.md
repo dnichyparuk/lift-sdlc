@@ -187,7 +187,7 @@ After all subagents return:
 
 ## Step 4 — CONSOLIDATE
 
-Write `discovery-brief.md` to `${outDir}/discovery-brief.md` using the `Write` tool.
+Write `discovery-brief.md` to `${outDir}/discovery-brief.md` using the `write_to_file` tool.
 
 **Brief structure:**
 

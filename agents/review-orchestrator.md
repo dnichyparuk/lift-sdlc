@@ -160,7 +160,7 @@ Format the comment using the template from REFERENCE.md section 3.
 
 **Display the formatted comment in the terminal** so the user sees the content in your output.
 
-**Persist the comment body to disk** using the `Write` tool:
+**Persist the comment body to disk** using the `write_to_file` tool:
 
 - Path: `{manifest.diff_dir}/review-comment.md`
 - Content: the consolidated comment body verbatim (no surrounding fences, no shell escaping)

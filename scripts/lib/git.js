@@ -9,8 +9,8 @@
  *   parseRemoteOwner, getGhAccounts, ensureGhAccount
  *
  * Exports (PR-specific — used by pr-prepare.js only):
- *   getRemoteState, pushToRemote, getCommitsStructured,
- *   getDiffStat, getDiffContent
+ *   getRemoteState, pushToRemote, createBranch, checkoutBranch,
+ *   getCommitsStructured, getDiffStat, getDiffContent
  */
 
 'use strict';
@@ -954,6 +954,59 @@ function pushToRemote(projectRoot, hasUpstream) {
 }
 
 /**
+ * Create a new branch from an explicit start point and check it out.
+ * Refuses to run if a branch with that name already exists (never moves it),
+ * and never passes --force.
+ * Passes --no-track so the new branch gets NO upstream — without this,
+ * `git checkout -b <branch> origin/<startPoint>` silently sets the new
+ * branch's upstream to origin/<startPoint> instead of origin/<branch>,
+ * which then breaks pushToRemote (either a bare `git push` fails outright
+ * under push.default=simple, or under push.default=upstream it silently
+ * pushes straight onto the start-point branch, bypassing the PR merge gate).
+ * --no-track makes pushToRemote(root, false)'s `git push -u origin <branch>`
+ * the only viable push path, which correctly targets origin/<branch>.
+ * @param {string} projectRoot
+ * @param {string} branchName
+ * @param {string} startPoint  e.g. 'origin/main'
+ * @returns {'created' | 'error'}
+ */
+function createBranch(projectRoot, branchName, startPoint) {
+  const exists = spawnSync(
+    'git',
+    ['rev-parse', '--verify', '--quiet', `refs/heads/${branchName}`],
+    { cwd: projectRoot, encoding: 'utf8' }
+  );
+  if (exists.status === 0) return 'error';
+
+  const result = spawnSync(
+    'git',
+    ['checkout', '-b', branchName, '--no-track', startPoint],
+    { cwd: projectRoot, encoding: 'utf8' }
+  );
+  return result.status === 0 ? 'created' : 'error';
+}
+
+/**
+ * Check out an existing branch by name (plain `git checkout <branchName>`, no -b).
+ * Refuses to run if the working tree has uncommitted changes to tracked files
+ * (returns 'dirty' instead of forcing past them) — untracked files do not count.
+ * @param {string} projectRoot
+ * @param {string} branchName
+ * @returns {'checked-out' | 'dirty' | 'error'}
+ */
+function checkoutBranch(projectRoot, branchName) {
+  const status = spawnSync(
+    'git',
+    ['status', '--porcelain', '--untracked-files=no'],
+    { cwd: projectRoot, encoding: 'utf8' }
+  );
+  if (status.status === 0 && status.stdout && status.stdout.trim()) return 'dirty';
+
+  const result = spawnSync('git', ['checkout', branchName], { cwd: projectRoot, encoding: 'utf8' });
+  return result.status === 0 ? 'checked-out' : 'error';
+}
+
+/**
  * Return structured commit objects between base and HEAD.
  * Parses Co-authored-by trailers.
  * @param {string} base
@@ -1317,6 +1370,8 @@ module.exports = {
   // PR-specific
   getRemoteState,
   pushToRemote,
+  createBranch,
+  checkoutBranch,
   getCommitsStructured,
   getDiffStat,
   getDiffContent,

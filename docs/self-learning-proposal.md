@@ -1,5 +1,10 @@
 # Self-Learning Loop — Architecture Proposal v15 (Ultimate Agentic Workflow)
 
+> **Status: Superseded.** Retained for historical record only. The current, implementation-ready
+> design is [`self-learning-adr.md`](./self-learning-adr.md), which incorporates this proposal's
+> mechanics plus fixes from an external-harness review (see
+> [`self-learning-proposal-review.md`](./self-learning-proposal-review.md)).
+
 This document is the absolute final blueprint for the `learn-sdlc` capability, perfected over 15 adversarial cycles. It resolves critical Node.js execution bugs, catastrophic local data loss vectors, GitHub API branch deadlocks, and explicitly decouples synchronous Node scripts from asynchronous LLM orchestrators.
 
 **Status:** Proposal v15 (Production Ready)
