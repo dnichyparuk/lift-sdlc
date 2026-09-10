@@ -108,10 +108,13 @@ that case (`branchName` is `null`), so there is nothing to roll back.
 
 > ### Recovery window — Steps 2 through 7
 >
-> **Any** non-success outcome in Steps 3, 4, 5, 6 or 7 — a failed or unparseable
-> synthesis dispatch, a failed write of `.sdlc/config.json`, `--validate`'s own
-> non-zero exit, a failed review-only dispatch, or a failed write of the assessment
-> file — is recovered by running:
+> **Any** non-success outcome in Steps 3, 4, 6 or 7 — a failed or unparseable
+> synthesis dispatch, a failed write of `.sdlc/config.json`, a failed review-only
+> dispatch, or a failed write of the assessment file — is recovered by running:
+>
+> **Step 5 is excluded from this box** — `--validate`'s own non-zero exit has its
+> own exit-code-specific recovery rules (see Step 5 below); do not apply the
+> general `--abort` instruction below to a Step 5 failure.
 >
 > ```shell
 > ABORT_OUTPUT=$(node "<PLUGIN_ROOT>/scripts/skill/learn-apply.js" \
@@ -477,7 +480,7 @@ native-tool-name mapping is in `docs/plugin-api-specs.md` §2 (item 2):
 | Step 4's config mutation, Step 7's assessment write | `write_to_file` / `replace_file_content` | `Write` / `Edit` |
 | Reading `MANIFEST_FILE`, `REGRESSION_FILE`, `.sdlc/config.json` | `view_file` | `Read` |
 | Every `node …` / `git` / `rm -f` command above | `run_command` | `Bash` |
-| Steps 3 and 6 | `invoke_subagent` | `Task` / the equivalent subagent dispatch |
+| Steps 3 and 6 | `invoke_subagent` | `Agent` / `subagent_type` |
 
 Both subagents declare `tools: view_file` and are granted no write-capable tool and no
 `run_command`/`Bash` under **either** host — the no-silent-write guarantee is a

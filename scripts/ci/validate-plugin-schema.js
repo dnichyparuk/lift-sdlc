@@ -164,8 +164,20 @@ function checkToolBoundary(pluginDir) {
  */
 function runAgyValidate(spawnFn, pluginDir) {
   const result = spawnFn('agy', ['plugin', 'validate', pluginDir], { encoding: 'utf8' });
-  if (result.error && result.error.code === 'ENOENT') {
-    return { installed: false };
+  if (result.error) {
+    if (result.error.code === 'ENOENT') {
+      return { installed: false };
+    }
+    // Some other spawn failure (EACCES, a killed process, ...) — the process
+    // never produced its own stdout/stderr, so fold the real reason in rather
+    // than reporting a bare "schema error (exit null)" with no explanation.
+    const spawnErrorLine = `agy plugin validate spawn error: ${result.error.message}`;
+    return {
+      installed: true,
+      status: result.status,
+      stdout: result.stdout || '',
+      stderr: (result.stderr ? result.stderr + '\n' : '') + spawnErrorLine,
+    };
   }
   return {
     installed: true,

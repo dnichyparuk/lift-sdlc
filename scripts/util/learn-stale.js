@@ -198,7 +198,7 @@ function findStaleGuardrails({ spawnFn = spawnSync, cwd = process.cwd(), staleAf
 
 function main(argv) {
   parseArgs(argv);
-  const root = resolveSdlcRoot() || process.cwd();
+  const root = resolveSdlcRoot();
   const learn = readSection(root, 'learn');
   const staleAfterCycles = learn ? learn.staleAfterCycles : null;
   const result = findStaleGuardrails({ cwd: root, staleAfterCycles });

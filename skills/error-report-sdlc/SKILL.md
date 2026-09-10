@@ -136,7 +136,7 @@ create anything — `$ERROR_CONTEXT_FILE` is cleaned up automatically (see the
 ### Step 6 — Create the GitHub Issue (main context)
 
 Follow resources/REFERENCE.md section 6 verbatim. The `gh issue create` call MUST run in the
-main context — the orchestrator agent has no `run_command` tool and is forbidden from
+main context — the orchestrator agent has no `run_command`/`Bash` tool and is forbidden from
 invoking `gh`.
 
 ```bash
@@ -169,7 +169,7 @@ error output or stop behavior.
 - Pin `model:` in this skill's frontmatter. The orchestrator agent (Step 4) is the
   correct place to pin `model: gemini-3.8-flash-low`.
 - Run consent gates or `gh issue create` inside the orchestrator agent — it has no
-  `run_command` tool.
+  `run_command`/`Bash` tool.
 - Create a GitHub issue without both consent gates passing.
 - Block or replace the calling skill's normal error handling.
 - Create issues in a repository other than `dnichyparuk/lift-sdlc`.

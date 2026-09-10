@@ -1,6 +1,6 @@
 # Scan Patterns — Structural Signals
 
-Glob patterns for detecting project structure signals. Run these in parallel using the `find_by_name` tool. Do NOT read file contents — directory/filename presence is the signal.
+Glob patterns for detecting project structure signals. Run these in parallel using the Glob tool (`find_by_name` under Antigravity). Do NOT read file contents — directory/filename presence is the signal.
 
 ```text
 **/middleware/**      → auth / request pipeline

@@ -968,7 +968,7 @@ function pushToRemote(projectRoot, hasUpstream) {
  * @param {string} projectRoot
  * @param {string} branchName
  * @param {string} startPoint  e.g. 'origin/main'
- * @returns {'created' | 'error'}
+ * @returns {{status: 'created' | 'error', stderr: string}}
  */
 function createBranch(projectRoot, branchName, startPoint) {
   const exists = spawnSync(
@@ -976,14 +976,19 @@ function createBranch(projectRoot, branchName, startPoint) {
     ['rev-parse', '--verify', '--quiet', `refs/heads/${branchName}`],
     { cwd: projectRoot, encoding: 'utf8' }
   );
-  if (exists.status === 0) return 'error';
+  if (exists.status === 0) {
+    return { status: 'error', stderr: `refs/heads/${branchName} already exists` };
+  }
 
   const result = spawnSync(
     'git',
     ['checkout', '-b', branchName, '--no-track', startPoint],
     { cwd: projectRoot, encoding: 'utf8' }
   );
-  return result.status === 0 ? 'created' : 'error';
+  return {
+    status: result.status === 0 ? 'created' : 'error',
+    stderr: (result.stderr || (result.error && result.error.message) || '').trim(),
+  };
 }
 
 /**
@@ -992,7 +997,7 @@ function createBranch(projectRoot, branchName, startPoint) {
  * (returns 'dirty' instead of forcing past them) — untracked files do not count.
  * @param {string} projectRoot
  * @param {string} branchName
- * @returns {'checked-out' | 'dirty' | 'error'}
+ * @returns {{status: 'checked-out' | 'dirty' | 'error', stderr: string}}
  */
 function checkoutBranch(projectRoot, branchName) {
   const status = spawnSync(
@@ -1000,10 +1005,15 @@ function checkoutBranch(projectRoot, branchName) {
     ['status', '--porcelain', '--untracked-files=no'],
     { cwd: projectRoot, encoding: 'utf8' }
   );
-  if (status.status === 0 && status.stdout && status.stdout.trim()) return 'dirty';
+  if (status.status === 0 && status.stdout && status.stdout.trim()) {
+    return { status: 'dirty', stderr: '' };
+  }
 
   const result = spawnSync('git', ['checkout', branchName], { cwd: projectRoot, encoding: 'utf8' });
-  return result.status === 0 ? 'checked-out' : 'error';
+  return {
+    status: result.status === 0 ? 'checked-out' : 'error',
+    stderr: (result.stderr || (result.error && result.error.message) || '').trim(),
+  };
 }
 
 /**

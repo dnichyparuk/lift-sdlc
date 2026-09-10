@@ -282,6 +282,14 @@ function restoreConfig({ projectRoot, preImageStatus, deps }) {
     return { ok: true, action: 'unlinked' };
   }
 
+  // Unstage first. `git checkout --` restores the working tree from the INDEX,
+  // so if staging already succeeded and only the commit failed, checking out
+  // alone would re-write the staged (new) content back and leave the file
+  // dirty — pushing a genuinely restorable state into MANUAL RECOVERY. An
+  // unstage is a no-op when nothing is staged, so this is safe on every path.
+  // Mirrors learn-reject.js's restoreConfig.
+  git(deps, projectRoot, ['reset', '--quiet', '--', CONFIG_PATH]);
+
   const result = git(deps, projectRoot, ['checkout', '--', CONFIG_PATH]);
   if (result.status !== 0) {
     return { ok: false, action: 'checkout', reason: `git checkout -- ${CONFIG_PATH} failed: ${gitFailure(result)}` };
@@ -328,10 +336,11 @@ function performRollback({ projectRoot, manifest, deps, skipRestore = false }) {
   let checkout = null;
   if (manifest.initialBranch) {
     checkout = deps.checkoutBranchFn(projectRoot, manifest.initialBranch);
-    if (checkout === 'dirty') {
+    if (checkout.status === 'dirty') {
       problems.push(`checkoutBranch(${manifest.initialBranch}) returned 'dirty' — refusing to force past uncommitted tracked changes`);
-    } else if (checkout !== 'checked-out') {
-      problems.push(`checkoutBranch(${manifest.initialBranch}) returned '${checkout}'`);
+    } else if (checkout.status !== 'checked-out') {
+      const detail = checkout.stderr ? `: ${checkout.stderr}` : '';
+      problems.push(`checkoutBranch(${manifest.initialBranch}) returned '${checkout.status}'${detail}`);
     }
   } else {
     problems.push('manifest.initialBranch is missing — cannot restore the original branch');
@@ -773,8 +782,8 @@ function main(argv) {
     projectRoot,
     manifest,
     manifestPath: cli.manifest,
-    assessmentFile: cli['assessment-file'] || cli.assessmentFile || '',
-    regressionFile: cli['regression-file'] || cli.regressionFile || '',
+    assessmentFile: cli['assessment-file'] || '',
+    regressionFile: cli['regression-file'] || '',
     deps,
   });
   if (result.stdout) process.stdout.write(result.stdout);

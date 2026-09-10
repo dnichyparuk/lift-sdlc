@@ -28,6 +28,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const { writeJsonLine } = require('../lib/output');
 
 const GUARDRAIL_SECTION_KEYS = ['plan', 'execute'];
 
@@ -328,7 +329,7 @@ function main() {
     const result = validateGuardrailRegression(preConfig, postConfig, { preImageStatus });
 
     if (flags.json) {
-      process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+      writeJsonLine(result, { indent: 2, exit: false });
     } else if (result.ok) {
       if (result.added.length > 0) {
         process.stdout.write(`Guardrail regression check passed. Added: ${result.added.join(', ')}\n`);

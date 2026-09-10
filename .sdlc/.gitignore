@@ -1,9 +1,12 @@
-# >>> sdlc-utilities managed (do not edit) — selective ignores
-# <<< sdlc-utilities managed
 # >>> lift-sdlc managed (do not edit) — selective ignores
+!learnings/
+!learnings/pending/
+!learnings/pending/**
+# <<< lift-sdlc managed
+# >>> sdlc-utilities managed (do not edit) — selective ignores
 *
 !.gitignore
 !config.json
 !review-dimensions/
 !review-dimensions/**
-# <<< lift-sdlc managed
+# <<< sdlc-utilities managed

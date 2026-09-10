@@ -140,6 +140,25 @@ test('R7: no pending directory — exit 0, empty manifest, no branch', () => {
   });
 });
 
+test('non-ENOENT failure reading the pending directory is fatal — exit 1 with the error surfaced (test-coverage-review)', () => {
+  withRepo({}, ({ work }) => {
+    // Force a non-ENOENT fs.readdirSync error that is filesystem/permission-
+    // agnostic (unlike chmod, which some filesystems/CI users don't enforce):
+    // put a plain FILE where PENDING_DIR expects a directory, so readdirSync
+    // throws ENOTDIR rather than ENOENT.
+    const learningsDir = path.join(work, '.sdlc', 'learnings');
+    fs.mkdirSync(learningsDir, { recursive: true });
+    fs.writeFileSync(path.join(learningsDir, 'pending'), 'not a directory');
+
+    const r = run(work, ['--default-branch', 'main']);
+    assert.strictEqual(r.status, 1);
+    assert.match(r.stderr, /cannot read \.sdlc\/learnings\/pending/);
+    assert.ok(r.manifest, 'exit-1 fatal path still writes a manifest via writeOutput');
+    assert.strictEqual(r.manifest.errors.length, 1);
+    assert.match(r.manifest.errors[0], /cannot read \.sdlc\/learnings\/pending/);
+  });
+});
+
 test('R7 short-circuit: zero parseable changesets skips the fetch entirely', () => {
   withRepo({}, ({ work }) => {
     // No remote at all — a run that fetched would fail; the short-circuit means
@@ -247,6 +266,25 @@ test('R6: recurrenceThreshold from the learn section is threaded into selectElig
     assert.strictEqual(r.manifest.eligible[0].signature, 'two-is-enough');
   });
 });
+
+for (const invalidThreshold of [0, -1, 'not-a-number']) {
+  test(`resolveThreshold: an invalid recurrenceThreshold (${JSON.stringify(invalidThreshold)}) falls back to the default of 3 (test-coverage-review)`, () => {
+    const originConfig = { learn: { recurrenceThreshold: invalidThreshold, staleAfterCycles: null } };
+    // Exactly 2 changesets: if the invalid value were used as-is (e.g. 0 or -1,
+    // which any count satisfies), this signature would wrongly become eligible
+    // immediately. With the correct fallback to DEFAULT_THRESHOLD (3), 2 is not
+    // enough — it must land in `waiting`, not `eligible`.
+    const pending = { 'a.md': changeset('needs-default-threshold'), 'b.md': changeset('needs-default-threshold') };
+    withRepo({ originConfig, pending }, ({ work }) => {
+      const r = run(work, ['--default-branch', 'main']);
+      assert.strictEqual(r.status, 0);
+      assert.deepStrictEqual(r.manifest.eligible, []);
+      assert.strictEqual(r.manifest.waiting.length, 1);
+      assert.strictEqual(r.manifest.waiting[0].signature, 'needs-default-threshold');
+      assert.strictEqual(r.manifest.waiting[0].count, 2);
+    });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // R5 — rejected signatures come from the pre-image, not the local tree

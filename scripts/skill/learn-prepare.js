@@ -69,6 +69,8 @@ const {
   groupBySignature,
   selectEligible,
 } = require(path.join(LIB, 'learnings'));
+const { checkCleanTree: sharedCheckCleanTree, hasUntrackedConfig: sharedHasUntrackedConfig } =
+  require(path.join(LIB, 'clean-tree'));
 
 // KD8 — local constants. Git always reports POSIX-separated paths, so the
 // pending-directory prefix is a literal string, never path.join output.
@@ -183,51 +185,16 @@ function readPendingChangesets(projectRoot) {
 // R8 step 2 — clean-tree precondition (exactly two checks)
 // ---------------------------------------------------------------------------
 
-/** Strip git's C-style quoting from a porcelain path when present. */
-function dequote(p) {
-  if (p.length >= 2 && p.startsWith('"') && p.endsWith('"')) {
-    try {
-      return JSON.parse(p);
-    } catch (_) {
-      return p.slice(1, -1);
-    }
-  }
-  return p;
-}
+// dequote/checkCleanTree/hasUntrackedConfig live in lib/clean-tree.js — shared
+// verbatim with learn-reject.js (code-quality-review finding: these three
+// were previously copy-pasted across both scripts and had already drifted).
 
 function checkCleanTree(projectRoot) {
-  const problems = [];
-
-  // (a) tracked-file modifications
-  const tracked = git(projectRoot, ['status', '--porcelain', '--untracked-files=no']);
-  if (tracked.status !== 0) {
-    problems.push(`clean-tree check failed: git status --untracked-files=no: ${stderrOf(tracked)}`);
-    return problems;
-  }
-  const trackedPaths = (tracked.stdout || '')
-    .split('\n')
-    .filter(Boolean)
-    .map(line => dequote(line.slice(3).trim()));
-  if (trackedPaths.length > 0) {
-    problems.push(`working tree is dirty — tracked files with uncommitted changes: ${trackedPaths.join(', ')}. Commit or stash them before assimilating learnings.`);
-  }
-
-  // (b) untracked entries other than .sdlc/learnings/pending/**
-  const all = git(projectRoot, ['status', '--porcelain', '--untracked-files=all']);
-  if (all.status !== 0) {
-    problems.push(`clean-tree check failed: git status --untracked-files=all: ${stderrOf(all)}`);
-    return problems;
-  }
-  const strayUntracked = (all.stdout || '')
-    .split('\n')
-    .filter(line => line.startsWith('??'))
-    .map(line => dequote(line.slice(3).trim()))
-    .filter(p => p && !p.startsWith(PENDING_PREFIX));
-  if (strayUntracked.length > 0) {
-    problems.push(`working tree is dirty — untracked entries outside ${PENDING_DIR}/: ${strayUntracked.join(', ')}. Remove or commit them before assimilating learnings.`);
-  }
-
-  return problems;
+  return sharedCheckCleanTree(projectRoot, {
+    pendingDir: PENDING_DIR,
+    pendingPrefix: PENDING_PREFIX,
+    actionVerb: 'assimilating',
+  });
 }
 
 /**
@@ -238,9 +205,7 @@ function checkCleanTree(projectRoot) {
  * staging), so it is refused outright.
  */
 function hasUntrackedConfig(projectRoot) {
-  if (!fs.existsSync(path.join(projectRoot, '.sdlc', 'config.json'))) return false;
-  const tracked = git(projectRoot, ['ls-files', '--error-unmatch', '--', CONFIG_PATH]);
-  return tracked.status !== 0;
+  return sharedHasUntrackedConfig(projectRoot, CONFIG_PATH);
 }
 
 // ---------------------------------------------------------------------------
@@ -429,8 +394,9 @@ function main() {
   // R8 step 4 — branch off the freshly fetched origin/<defaultBranch>.
   const branchName = `${BRANCH_PREFIX}${Date.now()}`;
   const created = createBranch(projectRoot, branchName, `origin/${defaultBranch}`);
-  if (created !== 'created') {
-    const msg = `createBranch failed for ${branchName} from origin/${defaultBranch}`;
+  if (created.status !== 'created') {
+    const msg = `createBranch failed for ${branchName} from origin/${defaultBranch}` +
+      (created.stderr ? `: ${created.stderr}` : '');
     errors.push(msg);
     process.stderr.write(`learn-prepare: ${msg}\n`);
     writeOutput(manifest, 'sdlc-learn', 1);

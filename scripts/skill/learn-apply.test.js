@@ -217,8 +217,12 @@ test('prTitle / commitMessage name the signatures', () => {
 
 test('learn-apply.js never runs `git reset --hard` on any path', () => {
   const source = fs.readFileSync(SCRIPT, 'utf8');
-  assert.ok(!/['"]reset['"]/.test(source), 'no git reset invocation may exist');
-  assert.ok(!/--force/.test(source.replace(/^\s*\*.*$/gm, '')), 'no --force may be passed');
+  // restoreConfig legitimately runs a scoped, non-destructive `git reset --quiet --
+  // <path>` (unstage-only, mirrors learn-reject.js's restoreConfig) — the invariant
+  // this guards is specifically no `--hard`, never a blanket ban on `reset`.
+  const codeOnly = source.replace(/^\s*\*.*$/gm, '');
+  assert.ok(!/--hard/.test(codeOnly), 'no git reset --hard invocation may exist');
+  assert.ok(!/--force/.test(codeOnly), 'no --force may be passed');
 });
 
 // ===========================================================================
@@ -575,6 +579,31 @@ test('CLI: exactly one mode is required', () => {
 });
 
 // ===========================================================================
+// readManifest failure path (test-coverage-review) — missing/unreadable/invalid
+// --manifest file. Every other test passes a manifest that exists and parses.
+// ===========================================================================
+
+test('CLI: --manifest pointing at a nonexistent file exits 1 with "cannot read --manifest"', () => {
+  withRepo({}, ({ work }) => {
+    const missingPath = path.join(work, 'does-not-exist.json');
+    const r = run(work, ['--validate', '--manifest', missingPath]);
+    assert.strictEqual(r.status, 1);
+    assert.match(r.stderr, /learn-apply: cannot read --manifest/);
+    assert.match(r.stderr, new RegExp(missingPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  });
+});
+
+test('CLI: --manifest pointing at invalid JSON exits 1 with "cannot read --manifest"', () => {
+  withRepo({}, ({ work }) => {
+    const badPath = path.join(work, 'bad-manifest.json');
+    fs.writeFileSync(badPath, '{ not valid json');
+    const r = run(work, ['--validate', '--manifest', badPath]);
+    assert.strictEqual(r.status, 1);
+    assert.match(r.stderr, /learn-apply: cannot read --manifest/);
+  });
+});
+
+// ===========================================================================
 // End-to-end acceptance test — SUCCESS path (pins origin/<branch>, not origin/main)
 // ===========================================================================
 
@@ -733,7 +762,7 @@ function shipFixture({ gitOverrides = {}, deps = {}, eligible = [{ signature: 's
       fsImpl,
       pushToRemoteFn: () => 'pushed-new',
       runCreatePrFn: () => ({ exitCode: 0, stdout: null, stderr: null }),
-      checkoutBranchFn: () => 'checked-out',
+      checkoutBranchFn: () => ({ status: 'checked-out', stderr: '' }),
       validateGuardrailsConfigFn: () => ({ errors: [], warnings: [], guardrailCount: 0 }),
       validateGuardrailRegressionFn: () => ({ ok: true, added: [] }),
       ...deps,

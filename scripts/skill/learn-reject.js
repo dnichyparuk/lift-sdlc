@@ -94,6 +94,8 @@ const LIB = path.join(__dirname, '..', 'lib');
 const { resolveSdlcRoot } = require(path.join(LIB, 'config'));
 const { createBranch, checkoutBranch, detectBaseBranchSafe } = require(path.join(LIB, 'git'));
 const { parsePendingFile, SIGNATURE_PATTERN } = require(path.join(LIB, 'learnings'));
+const { checkCleanTree: sharedCheckCleanTree, hasUntrackedConfig: sharedHasUntrackedConfig } =
+  require(path.join(LIB, 'clean-tree'));
 
 // KD8 — local constants. Git always reports POSIX-separated paths, so the
 // pending-directory prefix is a literal string, never path.join output.
@@ -212,55 +214,21 @@ function mergeRejected(existing, additions) {
 // Clean-tree precondition — identical two-part check to learn-prepare.js
 // ---------------------------------------------------------------------------
 
-function dequote(p) {
-  if (p.length >= 2 && p.startsWith('"') && p.endsWith('"')) {
-    try {
-      return JSON.parse(p);
-    } catch (_) {
-      return p.slice(1, -1);
-    }
-  }
-  return p;
-}
+// dequote/checkCleanTree/hasUntrackedConfig live in lib/clean-tree.js — shared
+// verbatim with learn-prepare.js (code-quality-review finding: these three
+// were previously copy-pasted across both scripts and had already drifted).
 
 function checkCleanTree(projectRoot) {
-  const problems = [];
-
-  const tracked = git(projectRoot, ['status', '--porcelain', '--untracked-files=no']);
-  if (tracked.status !== 0) {
-    problems.push(`clean-tree check failed: git status --untracked-files=no: ${stderrOf(tracked)}`);
-    return problems;
-  }
-  const trackedPaths = (tracked.stdout || '')
-    .split('\n')
-    .filter(Boolean)
-    .map(line => dequote(line.slice(3).trim()));
-  if (trackedPaths.length > 0) {
-    problems.push(`working tree is dirty — tracked files with uncommitted changes: ${trackedPaths.join(', ')}. Commit or stash them before rejecting learnings.`);
-  }
-
-  const all = git(projectRoot, ['status', '--porcelain', '--untracked-files=all']);
-  if (all.status !== 0) {
-    problems.push(`clean-tree check failed: git status --untracked-files=all: ${stderrOf(all)}`);
-    return problems;
-  }
-  const strayUntracked = (all.stdout || '')
-    .split('\n')
-    .filter(line => line.startsWith('??'))
-    .map(line => dequote(line.slice(3).trim()))
-    .filter(p => p && !p.startsWith(PENDING_PREFIX));
-  if (strayUntracked.length > 0) {
-    problems.push(`working tree is dirty — untracked entries outside ${PENDING_DIR}/: ${strayUntracked.join(', ')}. Remove or commit them before rejecting learnings.`);
-  }
-
-  return problems;
+  return sharedCheckCleanTree(projectRoot, {
+    pendingDir: PENDING_DIR,
+    pendingPrefix: PENDING_PREFIX,
+    actionVerb: 'rejecting',
+  });
 }
 
 /** `.sdlc/config.json` must only ever originate from tracked history — mirrors learn-prepare.js. */
 function hasUntrackedConfig(projectRoot) {
-  if (!fs.existsSync(path.join(projectRoot, '.sdlc', 'config.json'))) return false;
-  const tracked = git(projectRoot, ['ls-files', '--error-unmatch', '--', CONFIG_PATH]);
-  return tracked.status !== 0;
+  return sharedHasUntrackedConfig(projectRoot, CONFIG_PATH);
 }
 
 // ---------------------------------------------------------------------------
@@ -444,8 +412,9 @@ function cleanupAndExit({ projectRoot, initialBranch, branchName, preImageStatus
   }
 
   const checkout = checkoutBranch(projectRoot, initialBranch);
-  if (checkout !== 'checked-out') {
-    process.stderr.write(`learn-reject: ${MANUAL_RECOVERY} — checkoutBranch(${initialBranch}) returned '${checkout}'\n`);
+  if (checkout.status !== 'checked-out') {
+    const detail = checkout.stderr ? `: ${checkout.stderr}` : '';
+    process.stderr.write(`learn-reject: ${MANUAL_RECOVERY} — checkoutBranch(${initialBranch}) returned '${checkout.status}'${detail}\n`);
     bestEffortDeleteBranch(projectRoot, branchName);
     process.exit(2);
     return;
@@ -528,8 +497,9 @@ function runReject({ projectRoot, prNumber, initialBranch, state }) {
 
   const branchName = `${BRANCH_PREFIX}${Date.now()}`;
   const created = createBranch(projectRoot, branchName, `origin/${defaultBranch}`);
-  if (created !== 'created') {
-    process.stderr.write(`learn-reject: createBranch failed for ${branchName} from origin/${defaultBranch}\n`);
+  if (created.status !== 'created') {
+    const detail = created.stderr ? `: ${created.stderr}` : '';
+    process.stderr.write(`learn-reject: createBranch failed for ${branchName} from origin/${defaultBranch}${detail}\n`);
     process.exit(1);
     return;
   }
@@ -650,6 +620,7 @@ module.exports = {
   deleteMatchingPendingFiles,
   bestEffortDeleteBranch,
   cleanupAndExit,
+  crashCleanup,
   runReject,
   main,
   CONFIG_PATH,

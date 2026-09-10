@@ -15,6 +15,8 @@ const {
   parseArgs,
   extractSignatures,
   mergeRejected,
+  crashCleanup,
+  BRANCH_PREFIX,
 } = require(SCRIPT);
 
 // ---------------------------------------------------------------------------
@@ -473,5 +475,49 @@ test('E2E acceptance: rejecting from a feature branch, then switching branches, 
     const skippedForSig = p.manifest.skipped.find(s => s.filePath === '.sdlc/learnings/pending/1-recurring.md');
     assert.ok(skippedForSig, 'the new pending file must be skipped');
     assert.match(skippedForSig.reason, /rejected_guardrails/);
+  });
+});
+
+// ===========================================================================
+// crashCleanup — main()'s outer-catch last line of defense (test-coverage-review)
+// ===========================================================================
+
+test('crashCleanup restores .sdlc/config.json, returns to initialBranch, and deletes the throwaway branch after a mid-flow crash', () => {
+  const originConfig = { rejected_guardrails: ['already-rejected'] };
+  withRepo({ originConfig }, ({ work }) => {
+    // Simulate runReject having gotten partway through when an exception hit:
+    // a throwaway branch was created off origin/main and .sdlc/config.json
+    // was mutated there, uncommitted.
+    const branchName = `${BRANCH_PREFIX}crash-test`;
+    git(work, ['checkout', '-q', '-b', branchName, 'origin/main']);
+    writeConfig(work, { rejected_guardrails: ['already-rejected', 'mid-crash-sig'] });
+
+    const state = {
+      projectRoot: work,
+      initialBranch: 'main',
+      branchName,
+      preImageStatus: 'resolved',
+      committed: false,
+    };
+
+    crashCleanup(state);
+
+    const configText = fs.readFileSync(path.join(work, '.sdlc', 'config.json'), 'utf8');
+    assert.deepStrictEqual(JSON.parse(configText), originConfig);
+    assert.strictEqual(gitAllowFail(work, ['status', '--porcelain', '--', '.sdlc/config.json']).stdout.trim(), '');
+
+    assert.strictEqual(git(work, ['branch', '--show-current']), 'main');
+    assert.deepStrictEqual(rejectBranches(work), []);
+  });
+});
+
+test('crashCleanup is a no-op when no throwaway branch was ever created (state.branchName is null)', () => {
+  withRepo({}, ({ work }) => {
+    const startingBranch = git(work, ['branch', '--show-current']);
+    const state = { projectRoot: work, initialBranch: startingBranch, branchName: null, preImageStatus: null, committed: false };
+
+    // Must not throw and must not touch the working tree or current branch.
+    assert.doesNotThrow(() => crashCleanup(state));
+    assert.strictEqual(git(work, ['branch', '--show-current']), startingBranch);
   });
 });

@@ -84,7 +84,7 @@ test('createBranch creates a branch from an explicit start point and checks it o
   const dir = makeRepo();
   try {
     const result = createBranch(dir, 'feature-x', 'main');
-    assert.strictEqual(result, 'created');
+    assert.strictEqual(result.status, 'created');
     assert.strictEqual(git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), 'feature-x');
     assert.strictEqual(git(dir, ['rev-parse', 'feature-x']).trim(), git(dir, ['rev-parse', 'main']).trim());
   } finally {
@@ -96,7 +96,7 @@ test('createBranch passes --no-track so the new branch gets NO upstream (R8 fix)
   const { dir, remoteDir } = makeRepoWithRemote();
   try {
     const result = createBranch(dir, 'feature-y', 'origin/main');
-    assert.strictEqual(result, 'created');
+    assert.strictEqual(result.status, 'created');
     assert.strictEqual(git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), 'feature-y');
     // branch.<name>.merge/.remote are only set when a branch tracks an upstream;
     // `git config` exits non-zero (throws with execFileSync) when the key is unset.
@@ -120,7 +120,7 @@ test('createBranch refuses a branch name that already exists, never moves it, re
     git(dir, ['commit', '-a', '-q', '-m', 'advance main']);
 
     const result = createBranch(dir, 'dup', 'main');
-    assert.strictEqual(result, 'error');
+    assert.strictEqual(result.status, 'error');
     // 'dup' was not moved to the new start point.
     assert.strictEqual(git(dir, ['rev-parse', 'dup']).trim(), dupCommitBefore);
     // The current branch was not switched.
@@ -134,7 +134,8 @@ test('createBranch returns error (never throws) when the start point does not ex
   const dir = makeRepo();
   try {
     const result = createBranch(dir, 'feature-z', 'does-not-exist-start-point');
-    assert.strictEqual(result, 'error');
+    assert.strictEqual(result.status, 'error');
+    assert.ok(result.stderr.length > 0, 'expected stderr to carry the git failure detail');
     assert.throws(() => git(dir, ['rev-parse', '--verify', 'refs/heads/feature-z']));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -150,7 +151,7 @@ test('checkoutBranch checks out an existing branch by name, returns checked-out'
   try {
     git(dir, ['branch', 'other']);
     const result = checkoutBranch(dir, 'other');
-    assert.strictEqual(result, 'checked-out');
+    assert.strictEqual(result.status, 'checked-out');
     assert.strictEqual(git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), 'other');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -161,7 +162,8 @@ test('checkoutBranch returns error (never throws) for a branch that does not exi
   const dir = makeRepo();
   try {
     const result = checkoutBranch(dir, 'does-not-exist');
-    assert.strictEqual(result, 'error');
+    assert.strictEqual(result.status, 'error');
+    assert.ok(result.stderr.length > 0, 'expected stderr to carry the git failure detail');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -175,7 +177,7 @@ test('checkoutBranch returns dirty and does not switch when a tracked file has u
     fs.writeFileSync(path.join(dir, 'a.txt'), 'dirty change'); // tracked file, uncommitted
 
     const result = checkoutBranch(dir, 'other');
-    assert.strictEqual(result, 'dirty');
+    assert.strictEqual(result.status, 'dirty');
     assert.strictEqual(git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), startingBranch);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -189,7 +191,7 @@ test('checkoutBranch ignores untracked files (not dirty) and checks out normally
     fs.writeFileSync(path.join(dir, 'untracked.txt'), 'not tracked');
 
     const result = checkoutBranch(dir, 'other');
-    assert.strictEqual(result, 'checked-out');
+    assert.strictEqual(result.status, 'checked-out');
     assert.strictEqual(git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), 'other');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
