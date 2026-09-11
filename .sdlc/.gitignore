@@ -6,4 +6,7 @@
 !config.json
 !review-dimensions/
 !review-dimensions/**
+!learnings/
+!learnings/pending/
+!learnings/pending/**
 # <<< lift-sdlc managed

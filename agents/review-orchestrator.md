@@ -20,7 +20,7 @@ Your job: run the full review pipeline in isolation so the user's main context s
 
 Read the manifest JSON from `MANIFEST_FILE`.
 
-Resolve REFERENCE.md: search via `find_by_name` with `SearchDirectory: ~/.gemini/config/plugins` and `Pattern: **/review-sdlc/REFERENCE.md`.
+Resolve REFERENCE.md: search via `find_by_name` with `SearchDirectory: ~/.gemini/config/plugins` and `Pattern: **/review-sdlc/resources/REFERENCE.md`.
 If not found, retry `find_by_name` with `SearchDirectory: PROJECT_ROOT`. Store the resolved absolute path as
 `REFERENCE_MD_PATH`. Read REFERENCE.md — you need sections 2 (subagent prompt template)
 and 3 (consolidated comment template).
@@ -160,7 +160,7 @@ Format the comment using the template from REFERENCE.md section 3.
 
 **Display the formatted comment in the terminal** so the user sees the content in your output.
 
-**Persist the comment body to disk** using the `Write` tool:
+**Persist the comment body to disk** using the `write_to_file` tool:
 
 - Path: `{manifest.diff_dir}/review-comment.md`
 - Content: the consolidated comment body verbatim (no surrounding fences, no shell escaping)
