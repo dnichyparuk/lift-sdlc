@@ -20,7 +20,7 @@ Your job: run the full review pipeline in isolation so the user's main context s
 
 Read the manifest JSON from `MANIFEST_FILE`.
 
-Resolve REFERENCE.md: search via `find_by_name` with `SearchDirectory: ~/.gemini/config/plugins` and `Pattern: **/review-sdlc/REFERENCE.md`.
+Resolve REFERENCE.md: search via `find_by_name` with `SearchDirectory: ~/.gemini/config/plugins` and `Pattern: **/review-sdlc/resources/REFERENCE.md`.
 If not found, retry `find_by_name` with `SearchDirectory: PROJECT_ROOT`. Store the resolved absolute path as
 `REFERENCE_MD_PATH`. Read REFERENCE.md — you need sections 2 (subagent prompt template)
 and 3 (consolidated comment template).

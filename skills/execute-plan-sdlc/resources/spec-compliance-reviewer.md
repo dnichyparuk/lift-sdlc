@@ -21,7 +21,7 @@ invoke_subagent:
   Subagents:
     - TypeName: research
       Role: "Spec compliance review for Wave {WAVE_NUMBER}"
-      Model: gemini-3.8-flash-medium
+      Model: {complianceReviewerModel}
       Workspace: inherit
       Prompt: |
         You are reviewing whether implementations match their specifications. Read the actual
