@@ -17,7 +17,7 @@
  * No I/O. Zero npm dependencies.
  */
 
-const { extractFinalLineToken } = require('./wave-summary');
+const { extractFinalLineToken } = require('./token-line');
 
 // Bounded per-finding verificationStatus enum
 const VALID_VERIFICATION_STATUSES = new Set([
@@ -48,6 +48,11 @@ const MAX_REASONING_CHARS = 240;
  */
 function validateFindingEntry(finding) {
   const violations = [];
+
+  if (typeof finding !== 'object' || finding === null) {
+    violations.push('finding is not an object');
+    return violations;
+  }
 
   if (typeof finding.id !== 'string' || finding.id.length === 0) {
     violations.push('finding missing required string field: id');
@@ -165,7 +170,7 @@ function parseVerifySummary(text, dispatched = []) {
 
   // Extract returned IDs
   result.returned = parsed.findings
-    .filter(f => typeof f.id === 'string' && f.id.length > 0)
+    .filter(f => typeof f === 'object' && f !== null && typeof f.id === 'string' && f.id.length > 0)
     .map(f => f.id);
 
   // Compute missing and extra IDs relative to dispatched set.

@@ -142,7 +142,7 @@ flowchart TD
 | [review-orchestrator](../agents/review-orchestrator.md) | Dimension Reviewers | Parallel `Agent` tool calls | Evaluates specific categories (e.g., `security-review`, `performance`). |
 | [/harden-sdlc](../skills/harden-sdlc/SKILL.md) | [harden-orchestrator](../agents/harden-orchestrator.md) | JSON Manifest file path + `Agent` tool | Generates proposals to strengthen guardrails and dimensions following a workflow failure. |
 | [/error-report-sdlc](../skills/error-report-sdlc/SKILL.md) | [error-report-orchestrator](../agents/error-report-orchestrator.md) | JSON Manifest file path + `Agent` tool | Forms issue descriptions using templates for upstream plugin crash reports. |
-| [/received-review-sdlc](../skills/received-review-sdlc/SKILL.md) | [received-review-orchestrator](../agents/received-review-orchestrator.md) | JSON Manifest file path + `invoke_subagent` | Reads the received-review manifest, fans out per-file verifier sub-agents, persists the verification report, and returns a bounded VERIFY_SUMMARY token. |
+| [/received-review-sdlc](../skills/received-review-sdlc/SKILL.md) | [received-review-orchestrator](../agents/received-review-orchestrator.md) | JSON Manifest file path + `Agent` tool | Reads the received-review manifest, fans out per-file verifier sub-agents, persists the verification report, and returns a bounded VERIFY_SUMMARY token. |
 
 ---
 

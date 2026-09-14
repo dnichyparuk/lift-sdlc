@@ -5,9 +5,8 @@
  * mirroring `scripts/util/parse-wave.js`'s structure for the VERIFY_SUMMARY
  * token produced by a received-review verifier subagent.
  *
- * Reuses `readStdin` exported by `scripts/util/parse-wave.js` and
- * `writeJsonLine` from `scripts/lib/output.js` rather than duplicating the
- * stream helper.
+ * Reuses `readStdin` from `scripts/lib/stdin.js` and `writeJsonLine` from
+ * `scripts/lib/output.js` rather than duplicating the stream helper.
  *
  * Usage:
  *   <producer of verifier output> | node parse-verify.js --dispatched-ids '["a","b"]'
@@ -34,7 +33,7 @@ const LIB  = path.join(__dirname, '..', 'lib');
 
 const { parseVerifySummary } = require(path.join(LIB, 'verify-summary'));
 const { writeJsonLine }      = require(path.join(LIB, 'output'));
-const { readStdin }          = require('./parse-wave');
+const { readStdin }          = require(path.join(LIB, 'stdin'));
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing

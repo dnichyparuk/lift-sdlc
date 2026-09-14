@@ -137,6 +137,30 @@ test('parseVerifySummary: verificationStatus outside the bounded enum produces o
   assert.ok(result.violations.some(v => /finding\.verificationStatus "looks-fine" not in bounded enum/.test(v)));
 });
 
+test('parseVerifySummary: finding missing id produces one named violation', () => {
+  const payload = {
+    status: 'completed',
+    reportFile: '/tmp/report.md',
+    findings: [findingJson({ id: undefined })],
+  };
+  const result = parseVerifySummary(`VERIFY_SUMMARY: ${JSON.stringify(payload)}`, []);
+
+  assert.equal(result.schemaOk, false);
+  assert.ok(result.violations.includes('finding missing required string field: id'));
+});
+
+test('parseVerifySummary: a non-object findings entry reports a violation instead of throwing', () => {
+  const payload = {
+    status: 'completed',
+    reportFile: '/tmp/report.md',
+    findings: [null],
+  };
+  const result = parseVerifySummary(`VERIFY_SUMMARY: ${JSON.stringify(payload)}`, []);
+
+  assert.equal(result.schemaOk, false);
+  assert.ok(result.violations.includes('finding is not an object'));
+});
+
 test('parseVerifySummary: evidence not an array produces one named violation', () => {
   const payload = {
     status: 'completed',

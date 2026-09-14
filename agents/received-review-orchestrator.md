@@ -17,6 +17,8 @@ gates stay with the skill in the main context.
 
 - **MANIFEST_FILE**: Path to the JSON manifest of PR review threads
 - **PROJECT_ROOT**: The project's working directory
+- **PLUGIN_ROOT**: Absolute path to this plugin, used to resolve the plugin-bundled
+  `outline-file.js` script (Verifier Prompt Template step 1)
 - **ONLY_IDS**: Optional comma-separated list of thread IDs to restrict verification to, or `none` for all outstanding threads
 
 ## Step 0 — Load Manifest and Select Threads
@@ -35,7 +37,8 @@ Group the selected threads by `path`. If a group would have more than 4 threads,
 groups of at most 4 (same `path`, sequential chunks) so no single verifier is assigned more than 4 threads.
 
 For each group, build a verifier prompt from the "Verifier Prompt Template" below, filling in
-`PROJECT_ROOT` and the group's threads (each with `id`, `path`, `line`, `firstComment.body`, `severity`).
+`PROJECT_ROOT`, `PLUGIN_ROOT`, and the group's threads (each with `id`, `path`, `line`,
+`firstComment.body`, `severity`).
 
 Determine `Model` for the group's `invoke_subagent` entry:
 - Any thread in the group has `severity: "critical"` -> `pro`
@@ -119,18 +122,19 @@ The JSON object MUST match this bounded schema exactly:
 
 ## Verifier Prompt Template
 
-Use this template to build each verifier subagent's `Prompt`, filling in `PROJECT_ROOT` and the group's
-threads:
+Use this template to build each verifier subagent's `Prompt`, filling in `PROJECT_ROOT`,
+`PLUGIN_ROOT`, and the group's threads:
 
 ```text
 You are verifying reviewer comments against the actual code. You do NOT decide whether the reviewer's
 request should be actioned — you only check whether their factual claim about the code is correct.
 
 PROJECT_ROOT: {PROJECT_ROOT}
+PLUGIN_ROOT: {PLUGIN_ROOT}
 
 For each thread below:
 1. Read the referenced file at `path`/`line` with `view_file`. If the file is longer than 200 lines,
-   first run `node "{PROJECT_ROOT}/scripts/util/outline-file.js" <path>` to get its structural outline,
+   first run `node "{PLUGIN_ROOT}/scripts/util/outline-file.js" <path>` to get its structural outline,
    then `view_file` the specific region.
 2. Trace callers/usages of the relevant symbol with `grep_search`.
 3. Check related tests or interfaces that would confirm or contradict the reviewer's claim.

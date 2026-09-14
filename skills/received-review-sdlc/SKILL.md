@@ -206,34 +206,46 @@ Dispatch a single Subagent using `invoke_subagent`:
       "TypeName": "received-review-orchestrator",
       "Role": "Received-Review Verification Orchestrator",
       "Model": "flash_lite",
-      "Prompt": "MANIFEST_FILE: {MANIFEST_FILE from Step 1a}\nPROJECT_ROOT: {current working directory}\nONLY_IDS: none"
+      "Prompt": "MANIFEST_FILE: {MANIFEST_FILE from Step 1a}\nPROJECT_ROOT: {current working directory}\nPLUGIN_ROOT: {PLUGIN_ROOT}\nONLY_IDS: none"
     }
   ]
 }
 ```
 
-**Parse the response:** Write the orchestrator's full response to a temp file, then run the
-parser CLI against `OUTSTANDING_IDS` — the JSON array of `id` values for every
-`status: "outstanding"` thread dispatched in the Prompt above:
+**Parse the response:** Derive `OUTSTANDING_IDS` — the JSON array of `id` values for every
+`status: "outstanding"` thread — from the same Step 1a manifest read earlier, not from the
+dispatch Prompt above (the Prompt carries only `MANIFEST_FILE`, `PROJECT_ROOT`, `PLUGIN_ROOT`,
+and `ONLY_IDS`; it embeds no thread IDs). Write the orchestrator's full response to a temp file
+(`$TMPFILE`), then run the parser CLI with `$OUTSTANDING_IDS` as the `--dispatched-ids` value and
+`$ORCHESTRATOR_OUTPUT` (the orchestrator's full response text) piped through the temp file —
+mirroring `execute-plan-sdlc`'s `parse-wave.js` convention of routing large agent output through
+a temp file and stdin redirect rather than a here-string, which can silently truncate on large
+outputs:
 
 ```shell
 printf '%s' "$ORCHESTRATOR_OUTPUT" > "$TMPFILE"
-node "<PLUGIN_ROOT>/scripts/util/parse-verify.js" --dispatched-ids "$OUTSTANDING_IDS" < "$TMPFILE"
+node "<PLUGIN_ROOT>/scripts/util/parse-verify.js" --dispatched-ids '<json-array-of-outstanding-thread-ids>' < "$TMPFILE"
 ```
 
-Read `schemaOk`, `missingIds`, `parsed` from the result and branch:
+Read `schemaOk`, `missingIds`, `parsed` from the result and branch. Check `missingIds` first,
+regardless of `schemaOk`: a non-empty `missingIds` always takes the missing-IDs branch below,
+even when `schemaOk` is also false for an unrelated reason (e.g. a returned finding has a bad
+`verificationStatus` for one thread while another thread's ID is entirely absent) — the
+schema-violation branch applies only once `missingIds` is confirmed empty.
 
 | Condition | Behaviour |
 |---|---|
 | `schemaOk` true, `missingIds` empty | Map statuses; proceed to Step 4 |
-| `missingIds` non-empty (first time) | Re-dispatch orchestrator once with `ONLY_IDS: <missingIds joined by ,>`; merge results |
+| `missingIds` non-empty (first time), regardless of `schemaOk` | Re-dispatch orchestrator once with `ONLY_IDS: <missingIds joined by ,>`; merge results |
 | `missingIds` non-empty after re-dispatch | Mark those threads `cannot-verify` with reasoning `verification agent did not report`; existing cannot-verify rule applies |
 | `missingIds` empty, `schemaOk` false | Re-dispatch once with a format reminder appended to the Prompt; if still invalid, fall back to Step 3b for all threads |
 | Agent error / no response | Retry once with identical inputs; second failure -> Step 3b |
 | `parse-verify.js` exit 2 | Invoke error-report-sdlc (skill=received-review-sdlc, step=Step 3a, operation=parse-verify.js) and stop |
 
-**Map `parsed.findings[].verificationStatus` to the existing prose labels** — Step 4 and Step 10
-continue to display the same five labels, unchanged:
+**Map `parsed.findings[].verificationStatus` to the existing prose labels.** This five-label
+vocabulary is consumed internally by Step 4's evaluation — Step 4 and Step 10's analysis table
+display the resulting verdict vocabulary (`agree, will fix` / `agree, won't fix` / `disagree` /
+`needs discussion`), not these five labels verbatim:
 
 | `verificationStatus` | Prose label |
 |---|---|
@@ -639,7 +651,7 @@ Replied to N threads:
 - Display output from internal critique steps (Steps 5, 8) to the user
 - Skip the Step 10 consent gate without an explicit `--auto` flag — see Step 10 (pipeline context never overrides this gate)
 - Use `ask_question` in Step 11.6 when `flags.auto` is true — the auto-mode matrix governs all Step 11.6 decision sites; cite `flags.auto` and `flags.alwaysHardenFromReview` (resolved manifest fields) exclusively, never raw `$ARGUMENTS`
-- Verify findings inline in the main context when a Step 1a manifest exists — dispatch `received-review-orchestrator`
+- Skip Step 3a's `received-review-orchestrator` dispatch and verify inline when a Step 1a manifest exists — use Step 3b only as the documented fallback
 
 ---
 

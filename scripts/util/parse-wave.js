@@ -38,6 +38,7 @@ const LIB  = path.join(__dirname, '..', 'lib');
 
 const { parseWaveSummary } = require(path.join(LIB, 'wave-summary'));
 const { writeJsonLine }    = require(path.join(LIB, 'output'));
+const { readStdin }        = require(path.join(LIB, 'stdin'));
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -58,37 +59,6 @@ function parseArgs(argv) {
   }
 
   return { dispatchedIdsRaw };
-}
-
-// ---------------------------------------------------------------------------
-// stdin helper
-// ---------------------------------------------------------------------------
-
-/**
- * Read all of stdin as a UTF-8 string.
- * @returns {Promise<string>}
- */
-function readStdin(stream = process.stdin) {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    stream.setEncoding('utf8');
-
-    const onData = (chunk) => { data += chunk; };
-    const onEnd = () => settle(() => resolve(data));
-    const onError = (err) => settle(() => reject(err));
-
-    function settle(action) {
-      stream.removeListener('data', onData);
-      stream.removeListener('end', onEnd);
-      stream.removeListener('error', onError);
-      action();
-    }
-
-    stream.on('data', onData);
-    stream.on('end', onEnd);
-    stream.on('error', onError);
-    stream.resume();
-  });
 }
 
 // ---------------------------------------------------------------------------

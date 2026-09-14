@@ -10,6 +10,8 @@
  * No I/O. Zero npm dependencies.
  */
 
+const { extractFinalLineToken } = require('./token-line');
+
 /**
  * Normalize a task ID to its canonical numeric form (R-IDNORM).
  * Strips a single leading 'T' or 't' and trims whitespace.
@@ -58,6 +60,11 @@ const VALID_WAVE_STATUSES = new Set([
 function validateTaskEntry(task) {
   const violations = [];
 
+  if (typeof task !== 'object' || task === null) {
+    violations.push('task is not an object');
+    return violations;
+  }
+
   if (typeof task.id !== 'string' || task.id.length === 0) {
     violations.push('task missing required string field: id');
   }
@@ -91,38 +98,6 @@ function validateTaskEntry(task) {
   }
 
   return violations;
-}
-
-/**
- * Scan text for a token on its final non-blank line.
- *
- * The final non-empty line (after trimming trailing whitespace per-line)
- * is the only line inspected — a matching prefix earlier in the text does
- * not count if a non-blank line follows it.
- *
- * @param {unknown} text   - candidate text; non-strings never match
- * @param {string} prefix  - required prefix on the final non-blank line
- * @returns {{ found: boolean, payload: string|null }}
- */
-function extractFinalLineToken(text, prefix) {
-  if (typeof text !== 'string') return { found: false, payload: null };
-
-  const lines = text.split('\n').map(l => l.trimEnd());
-  let tokenLine = null;
-
-  // Scan from end, skip blank lines, find first non-blank line
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (line.length === 0) continue;
-    if (line.startsWith(prefix)) {
-      tokenLine = line;
-    }
-    break; // only check the final non-blank line
-  }
-
-  if (!tokenLine) return { found: false, payload: null };
-
-  return { found: true, payload: tokenLine.slice(prefix.length).trim() };
 }
 
 /**
@@ -214,7 +189,7 @@ function parseWaveSummary(text, dispatched = []) {
 
   // Extract returned IDs
   result.returned = parsed.tasks
-    .filter(t => typeof t.id === 'string' && t.id.length > 0)
+    .filter(t => typeof t === 'object' && t !== null && typeof t.id === 'string' && t.id.length > 0)
     .map(t => t.id);
 
   // Compute missing and extra IDs relative to dispatched set.
