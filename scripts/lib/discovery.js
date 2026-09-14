@@ -255,8 +255,12 @@ function checkPD5(projectRoot) {
     const siblingRefs = extractSiblingFileRefs(content);
     for (const ref of siblingRefs) {
       if (ref === 'SKILL.md') continue;
-      const siblingPath = path.join(skillsDir, d, ref);
-      if (!isFile(siblingPath)) {
+      // Resolution order (pinned): try the skill dir directly first, then
+      // fall back to the skill's resources/ subdirectory — refs written as
+      // `` `resources/FOO.md` `` in SKILL.md legitimately live there.
+      const directPath = path.join(skillsDir, d, ref);
+      const resourcesPath = path.join(skillsDir, d, 'resources', ref);
+      if (!isFile(directPath) && !isFile(resourcesPath)) {
         details.push(
           `skills/${d}/SKILL.md: references \`${ref}\` ` +
           `but the file does not exist in the skill directory`

@@ -193,7 +193,7 @@ node "<PLUGIN_ROOT>/scripts/util/review-cleanup.js" "$MANIFEST_FILE"
 ## DO NOT
 
 - Do NOT read resources/REFERENCE.md in main context (the orchestrator resolves it)
-- Do NOT read the orchestrator agent definition into main context — pass the file path or use the sdlc:review-orchestrator subagent_type
+- Do NOT read the orchestrator agent definition into main context — pass the file path or use the `review-orchestrator` agent via `invoke_subagent`
 - Do NOT invoke error-report-sdlc for user errors — only for script crashes (exit 2)
 
 ## See Also

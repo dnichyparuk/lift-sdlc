@@ -109,11 +109,14 @@ For each dimension with `status: "ACTIVE"` or `status: "TRUNCATED"`:
      {end for}
      ```
 
-3. Dispatch via `invoke_subagent` with `Subagents` array (each with `TypeName: "research"`, `Role: "<dimension.name> reviewer"`, `Model: dimension.model || manifest.subagent_model`, `Prompt: ...`):
-   - Per-dimension precedence: when a dimension declares a `model:` field in its
-     manifest entry (sourced from its frontmatter, see R15), that value wins. Otherwise
-     fall back to `manifest.subagent_model`. Forward the string verbatim — no
-     whitelist, no remap.
+3. Dispatch via `invoke_subagent` with `Subagents` array (each with `TypeName: "research"`, `Role: "<dimension.name> reviewer"`, `Model: ...`, `Prompt: ...`):
+   - Model enum mapping: `invoke_subagent` accepts ONLY `inherit`, `flash_lite`, `flash`, or `pro`.
+     Map `dimension.model || manifest.subagent_model` accordingly:
+     - Contains "pro" -> "pro"
+     - Contains "flash-low" or "flash_lite" -> "flash_lite"
+     - Contains "flash" -> "flash"
+     - Otherwise -> "inherit"
+   - Large diff optimization: When diffs are large, pass the file path `dimension.diff_file` in the prompt and instruct the subagent to read it using `view_file` rather than inlining hundreds of kilobytes directly into the prompt payload.
 
 **Dispatch ALL active dimensions in a SINGLE `invoke_subagent` call** (passing an array of `Subagents` entries). Do not dispatch one at a time.
 
@@ -160,7 +163,7 @@ Format the comment using the template from REFERENCE.md section 3.
 
 **Display the formatted comment in the terminal** so the user sees the content in your output.
 
-**Persist the comment body to disk** using the `Write` tool:
+**Persist the comment body to disk** using the `write_to_file` tool:
 
 - Path: `{manifest.diff_dir}/review-comment.md`
 - Content: the consolidated comment body verbatim (no surrounding fences, no shell escaping)

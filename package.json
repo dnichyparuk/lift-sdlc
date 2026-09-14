@@ -8,7 +8,9 @@
   "scripts": {
     "test": "node --test 'scripts/**/*.test.js' 'skills/**/*.test.js' 'hooks/**/*.test.js'",
     "lint": "eslint scripts skills",
-    "check:refs": "node scripts/ci/validate-skill-script-refs.js"
+    "check:refs": "node scripts/ci/validate-skill-script-refs.js",
+    "check:plugin": "node scripts/ci/validate-plugin-schema.js",
+    "check:discovery": "node scripts/ci/validate-discovery.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

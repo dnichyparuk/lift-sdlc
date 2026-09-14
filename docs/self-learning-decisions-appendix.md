@@ -1,5 +1,10 @@
 # Appendix: Self-Learning Architecture Decision Records (ADR)
 
+> **Status: Superseded.** Retained for historical record only. These decisions were carried
+> forward, revised, or replaced in [`self-learning-adr.md`](./self-learning-adr.md) — see that
+> document's decision log (D1–D13) for the current, implementation-ready record. In particular,
+> §5's ID-containment regression check is superseded by D7's content-level check.
+
 This document catalogs the critical architectural decisions, rejected paradigms, and security pivots established during the 15-cycle adversarial design phase of the `learn-sdlc` subsystem. 
 
 Future maintainers **MUST NOT** revert these decisions without reading the corresponding failure impacts.
