@@ -189,6 +189,82 @@ Only proceed to Step 3 after all items are understood.
 
 ## Step 3 — VERIFY: Check Against Full Codebase Context
 
+### Step 3a — Dispatch received-review-orchestrator (manifest available)
+
+Runs only when `MANIFEST_FILE` from Step 1a exists. The orchestrator is defined at
+`agents/received-review-orchestrator.md`. It groups outstanding threads by file path,
+dispatches verifier subagents in parallel to check each reviewer claim against the actual code
+in isolated contexts, persists a full verification report to disk, and returns a bounded
+`VERIFY_SUMMARY` token — keeping the main context clean.
+
+Dispatch a single Subagent using `invoke_subagent`:
+
+```json
+{
+  "Subagents": [
+    {
+      "TypeName": "received-review-orchestrator",
+      "Role": "Received-Review Verification Orchestrator",
+      "Model": "flash_lite",
+      "Prompt": "MANIFEST_FILE: {MANIFEST_FILE from Step 1a}\nPROJECT_ROOT: {current working directory}\nONLY_IDS: none"
+    }
+  ]
+}
+```
+
+**Parse the response:** Write the orchestrator's full response to a temp file, then run the
+parser CLI against `OUTSTANDING_IDS` — the JSON array of `id` values for every
+`status: "outstanding"` thread dispatched in the Prompt above:
+
+```shell
+printf '%s' "$ORCHESTRATOR_OUTPUT" > "$TMPFILE"
+node "<PLUGIN_ROOT>/scripts/util/parse-verify.js" --dispatched-ids "$OUTSTANDING_IDS" < "$TMPFILE"
+```
+
+Read `schemaOk`, `missingIds`, `parsed` from the result and branch:
+
+| Condition | Behaviour |
+|---|---|
+| `schemaOk` true, `missingIds` empty | Map statuses; proceed to Step 4 |
+| `missingIds` non-empty (first time) | Re-dispatch orchestrator once with `ONLY_IDS: <missingIds joined by ,>`; merge results |
+| `missingIds` non-empty after re-dispatch | Mark those threads `cannot-verify` with reasoning `verification agent did not report`; existing cannot-verify rule applies |
+| `missingIds` empty, `schemaOk` false | Re-dispatch once with a format reminder appended to the Prompt; if still invalid, fall back to Step 3b for all threads |
+| Agent error / no response | Retry once with identical inputs; second failure -> Step 3b |
+| `parse-verify.js` exit 2 | Invoke error-report-sdlc (skill=received-review-sdlc, step=Step 3a, operation=parse-verify.js) and stop |
+
+**Map `parsed.findings[].verificationStatus` to the existing prose labels** — Step 4 and Step 10
+continue to display the same five labels, unchanged:
+
+| `verificationStatus` | Prose label |
+|---|---|
+| `confirmed` | confirmed |
+| `confirmed-incomplete` | confirmed, but suggestion is incomplete |
+| `incorrect` | incorrect |
+| `partially-correct` | partially correct |
+| `cannot-verify` | cannot verify |
+
+For "cannot verify" items: state the limitation explicitly, ask the user for direction.
+
+Step 4 reads `verificationStatus`, `reasoning`, and `evidence` for each finding from the parsed
+token, and opens `reportFile` (the full verification report the orchestrator wrote to disk) only
+for findings it will push back on or mark `needs discussion` — not for every finding. A finding
+with at least one `evidence` entry (or an explicit `cannot-verify` status) satisfies Step 5's
+"Verification completeness" gate.
+
+**What Step 3a changes relative to the previous inline-only flow:**
+
+| Now | After |
+|---|---|
+| Main context reads files, greps callers, judges status | One orchestrator dispatched with the manifest path; verifiers read in isolated contexts |
+| Status is a prose label in conversation memory | Status arrives as a parsed `VERIFY_SUMMARY` token plus a report file |
+| Skipped findings undetected | `missingIds` triggers one scoped re-dispatch, then `cannot-verify` |
+| No fallback distinction | Step 3b keeps the inline path when no manifest exists or after two agent failures |
+
+### Step 3b — Inline verification (fallback)
+
+Runs when no `MANIFEST_FILE` exists (the Step 1b fallback path) or after two orchestrator
+dispatch failures in Step 3a.
+
 For each feedback item, gather context beyond the immediate change diff:
 
 1. **Read the referenced code** — understand what the code actually does. **CRITICAL:** Use `node "<PLUGIN_ROOT>/scripts/util/outline-file.js" <file>` or dispatch a subagent instead of natively reading large files.
@@ -563,6 +639,7 @@ Replied to N threads:
 - Display output from internal critique steps (Steps 5, 8) to the user
 - Skip the Step 10 consent gate without an explicit `--auto` flag — see Step 10 (pipeline context never overrides this gate)
 - Use `ask_question` in Step 11.6 when `flags.auto` is true — the auto-mode matrix governs all Step 11.6 decision sites; cite `flags.auto` and `flags.alwaysHardenFromReview` (resolved manifest fields) exclusively, never raw `$ARGUMENTS`
+- Verify findings inline in the main context when a Step 1a manifest exists — dispatch `received-review-orchestrator`
 
 ---
 
@@ -577,6 +654,7 @@ Replied to N threads:
 | Cannot verify reviewer's claim (no runtime data/external context) | State limitation explicitly; ask user for direction | No — expected limitation |
 | `gh api` 5xx or unexpected server error when posting reply | Retry once; if still failing, show the drafted response for manual posting | Yes if second attempt also fails |
 | `skill/received-review.js` node -e 'process.exit(2)' (script crash) | Show stderr output, invoke error-report-sdlc | Yes |
+| `received-review-orchestrator` dispatch error or no response (Step 3a) | Retry once with identical inputs; second failure — fall back to Step 3b | No — unless `parse-verify.js` itself exits 2, then yes |
 | GraphQL resolve mutation fails | Retry once; if still failing, list which threads were not resolved | Yes if second attempt fails |
 | Thread ID not found during resolve | Skip that thread, warn user | No — expected with race conditions |
 

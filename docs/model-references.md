@@ -46,6 +46,7 @@ The following table summarizes the explicit model mappings across Lift-SDLC skil
 | Agent | `commit-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
 | Agent | `plan-explore-orchestrator`| `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
 | Agent | `review-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
+| Agent | `received-review-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
 | Agent | `plan-execution-validator` | `gemini-3.8-flash-high` | Fast deterministic graph circularity & collision check |
 | Agent | `plan-generation-orchestrator` | `gemini-3.1-pro-high` | Deep multi-wave architectural plan drafting |
 | Prompt | `lane-static-structural` | `gemini-3.8-flash-low` | Simple file structure check |
@@ -74,6 +75,7 @@ The following tables map exactly where specific models are hardcoded or referenc
 | `plan-execution-validator` | [agents/plan-execution-validator.md](../agents/plan-execution-validator.md) | `gemini-3.8-flash-high` |
 | `plan-explore-orchestrator` | [agents/plan-explore-orchestrator.md](../agents/plan-explore-orchestrator.md) | `gemini-3.8-flash-low` |
 | `plan-generation-orchestrator` | [agents/plan-generation-orchestrator.md](../agents/plan-generation-orchestrator.md) | `gemini-3.1-pro-high` |
+| `received-review-orchestrator` | [agents/received-review-orchestrator.md](../agents/received-review-orchestrator.md) | `gemini-3.8-flash-low` |
 | `review-orchestrator` | [agents/review-orchestrator.md](../agents/review-orchestrator.md) | `gemini-3.8-flash-low` |
 
 ### Skills

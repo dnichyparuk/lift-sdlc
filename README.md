@@ -151,6 +151,7 @@ These agents are defined in `agents/*.md` and dispatched via `sdlc:<name>`. They
 | **Review orchestrator** | `/review-sdlc` | flash-low | Reads the review manifest, dispatches dimension sub-agents in parallel, deduplicates and critiques findings, and persists `review-comment.md`. |
 | **Harden orchestrator** | `/harden-sdlc` | flash-low | Classifies a pipeline failure as `user-code`, `plugin-defect`, or `ambiguous`, then emits strengthen-only hardening proposals as JSON. |
 | **Error report orchestrator** | `/error-report-sdlc` | flash-low | Fills the `ToolingError.md` issue template from a prepared manifest and returns `{title, body}` JSON for posting to the plugin tracker. |
+| **Received-review orchestrator** | `/received-review-sdlc` | flash-low | Reads the received-review manifest, fans out per-file verifier sub-agents, persists the verification report, and returns a bounded VERIFY_SUMMARY token. |
 
 ### Ad-hoc Agents (prompt-template driven)
 

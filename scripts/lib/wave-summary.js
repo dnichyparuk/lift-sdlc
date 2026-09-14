@@ -94,6 +94,38 @@ function validateTaskEntry(task) {
 }
 
 /**
+ * Scan text for a token on its final non-blank line.
+ *
+ * The final non-empty line (after trimming trailing whitespace per-line)
+ * is the only line inspected — a matching prefix earlier in the text does
+ * not count if a non-blank line follows it.
+ *
+ * @param {unknown} text   - candidate text; non-strings never match
+ * @param {string} prefix  - required prefix on the final non-blank line
+ * @returns {{ found: boolean, payload: string|null }}
+ */
+function extractFinalLineToken(text, prefix) {
+  if (typeof text !== 'string') return { found: false, payload: null };
+
+  const lines = text.split('\n').map(l => l.trimEnd());
+  let tokenLine = null;
+
+  // Scan from end, skip blank lines, find first non-blank line
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (line.length === 0) continue;
+    if (line.startsWith(prefix)) {
+      tokenLine = line;
+    }
+    break; // only check the final non-blank line
+  }
+
+  if (!tokenLine) return { found: false, payload: null };
+
+  return { found: true, payload: tokenLine.slice(prefix.length).trim() };
+}
+
+/**
  * Extract and parse the WAVE_SUMMARY token from wave-runner output.
  *
  * The token MUST appear as the final line of the output in the form:
@@ -132,20 +164,8 @@ function parseWaveSummary(text, dispatched = []) {
   }
 
   // Find WAVE_SUMMARY token — must be on the final non-empty line
-  const lines = text.split('\n').map(l => l.trimEnd());
-  let tokenLine = null;
-
-  // Scan from end, skip blank lines, find first non-blank line
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (line.length === 0) continue;
-    if (line.startsWith('WAVE_SUMMARY:')) {
-      tokenLine = line;
-    }
-    break; // only check the final non-blank line
-  }
-
-  if (!tokenLine) {
+  const token = extractFinalLineToken(text, 'WAVE_SUMMARY:');
+  if (!token.found) {
     result.violations.push('WAVE_SUMMARY token not found as final non-blank line of output');
     result.missingIds = [...dispatched];
     return result;
@@ -154,7 +174,7 @@ function parseWaveSummary(text, dispatched = []) {
   result.tokenFound = true;
 
   // Extract JSON payload
-  const jsonStr = tokenLine.slice('WAVE_SUMMARY:'.length).trim();
+  const jsonStr = token.payload;
 
   let parsed;
   try {
@@ -225,4 +245,4 @@ function parseWaveSummary(text, dispatched = []) {
   return result;
 }
 
-module.exports = { parseWaveSummary, normalizeTaskId, VALID_ERROR_CODES, VALID_STATUSES, VALID_WAVE_STATUSES };
+module.exports = { parseWaveSummary, normalizeTaskId, extractFinalLineToken, VALID_ERROR_CODES, VALID_STATUSES, VALID_WAVE_STATUSES };
