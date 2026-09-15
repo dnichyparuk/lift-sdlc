@@ -1,30 +1,25 @@
 #!/usr/bin/env node
 /**
- * parse-wave.js
- * Node port of the former `skills/execute-plan-sdlc/scripts/parse_wave.sh`.
- * Parses a wave-runner Agent's `WAVE_SUMMARY` token via `parseWaveSummary()`
- * (scripts/lib/wave-summary.js).
+ * parse-verify.js
+ * CLI wrapper around `parseVerifySummary()` (scripts/lib/verify-summary.js),
+ * mirroring `scripts/util/parse-wave.js`'s structure for the VERIFY_SUMMARY
+ * token produced by a received-review verifier subagent.
  *
- * Cross-platform fixes over the shell version:
- *   - Reads the wave-runner output from `process.stdin` instead of the
- *     POSIX-only `/dev/stdin` heredoc (parse_wave.sh:9-15).
- *   - Takes the dispatched task IDs as an explicit `--dispatched-ids
- *     <json-array>` CLI flag instead of the ambient `DISPATCHED_IDS`
- *     environment variable.
+ * Reuses `readStdin` from `scripts/lib/stdin.js` and `writeJsonLine` from
+ * `scripts/lib/output.js` rather than duplicating the stream helper.
  *
  * Usage:
- *   <producer of wave-runner text> | node parse-wave.js --dispatched-ids '["1","2"]'
+ *   <producer of verifier output> | node parse-verify.js --dispatched-ids '["a","b"]'
  *
  * Output (stdout, single JSON line):
- *   Success: parseWaveSummary()'s raw return shape —
+ *   Success: parseVerifySummary()'s raw return shape —
  *            {"schemaOk":bool,"dispatched":[...],"returned":[...],
  *             "missingIds":[...],"extraIds":[...],"parsed":object|null,
  *             "violations":[...],"tokenFound":bool}
  *   Usage error: {"schemaOk":false,"error":"<message>"}
  *
  * Exit codes:
- *   0 = parse ran (schema violations are reported in the JSON, not via exit code —
- *       matches the shell original, which always exited 0 on a successful parse)
+ *   0 = parse ran (schema violations are reported in the JSON, not via exit code)
  *   1 = user-facing validation error (--dispatched-ids present but not valid JSON array)
  *   2 = unexpected script crash
  *
@@ -36,9 +31,9 @@
 const path = require('node:path');
 const LIB  = path.join(__dirname, '..', 'lib');
 
-const { parseWaveSummary } = require(path.join(LIB, 'wave-summary'));
-const { writeJsonLine }    = require(path.join(LIB, 'output'));
-const { readStdin }        = require(path.join(LIB, 'stdin'));
+const { parseVerifySummary } = require(path.join(LIB, 'verify-summary'));
+const { writeJsonLine }      = require(path.join(LIB, 'output'));
+const { readStdin }          = require(path.join(LIB, 'stdin'));
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -66,15 +61,15 @@ function parseArgs(argv) {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse `--dispatched-ids` JSON (if given) and run `parseWaveSummary()`
- * against the wave-runner text read from stdin.
+ * Parse `--dispatched-ids` JSON (if given) and run `parseVerifySummary()`
+ * against the verifier subagent text read from stdin.
  *
- * @param {string} text                    Wave-runner Agent response text (from stdin)
+ * @param {string} text                    Verifier subagent response text (from stdin)
  * @param {string|null} dispatchedIdsRaw   Raw `--dispatched-ids` flag value, or null when absent
- * @param {{ parseWaveSummaryFn?: Function }} [deps]  Injectable for tests
+ * @param {{ parseVerifySummaryFn?: Function }} [deps]  Injectable for tests
  * @returns {{ json: object, exitCode: number }}
  */
-function runParseWave(text, dispatchedIdsRaw, { parseWaveSummaryFn = parseWaveSummary } = {}) {
+function runParseVerify(text, dispatchedIdsRaw, { parseVerifySummaryFn = parseVerifySummary } = {}) {
   let dispatched = [];
 
   if (dispatchedIdsRaw !== null && dispatchedIdsRaw !== undefined) {
@@ -90,7 +85,7 @@ function runParseWave(text, dispatchedIdsRaw, { parseWaveSummaryFn = parseWaveSu
     dispatched = parsed;
   }
 
-  const result = parseWaveSummaryFn(text, dispatched);
+  const result = parseVerifySummaryFn(text, dispatched);
   return { json: result, exitCode: 0 };
 }
 
@@ -101,15 +96,15 @@ function runParseWave(text, dispatchedIdsRaw, { parseWaveSummaryFn = parseWaveSu
 async function main(argv) {
   const { dispatchedIdsRaw } = parseArgs(argv);
   const text = await readStdin();
-  const { json, exitCode } = runParseWave(text, dispatchedIdsRaw);
+  const { json, exitCode } = runParseVerify(text, dispatchedIdsRaw);
   writeJsonLine(json, { exitCode });
 }
 
 if (require.main === module) {
   main(process.argv).catch((err) => {
-    process.stderr.write(`parse-wave.js error: ${err.message}\n${err.stack}\n`);
+    process.stderr.write(`parse-verify.js error: ${err.message}\n${err.stack}\n`);
     process.exit(2);
   });
 }
 
-module.exports = { parseArgs, runParseWave, readStdin, main };
+module.exports = { parseArgs, runParseVerify, main };
