@@ -330,16 +330,40 @@ function buildResult(input, logPath) {
 // CLI entry
 // ---------------------------------------------------------------------------
 
+// Usage text — kept in sync with the flags `parseArgs` accepts below and the
+// exit codes documented in the file header.
+const USAGE = [
+  'Usage:',
+  '  node received-review-cluster.js < input.json',
+  '  node received-review-cluster.js --input-file <path>',
+  '',
+  'Options:',
+  '  --input-file <path>   read input JSON from a file instead of stdin',
+  '  --help, -h            show this help and exit',
+  '',
+  'Exit codes:',
+  '  0 = success, JSON on stdout',
+  '  1 = no input provided',
+  '  2 = script error (malformed input)',
+].join('\n') + '\n';
+
 function parseArgs(argv) {
   let inputFile = null;
+  let showHelp = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--input-file' && argv[i + 1]) inputFile = argv[++i];
+    else if (argv[i] === '--help' || argv[i] === '-h') showHelp = true;
   }
-  return { inputFile };
+  return { inputFile, showHelp };
 }
 
 function main() {
-  const { inputFile } = parseArgs(process.argv.slice(2));
+  const { inputFile, showHelp } = parseArgs(process.argv.slice(2));
+
+  if (showHelp) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+  }
 
   let raw;
   if (inputFile) {

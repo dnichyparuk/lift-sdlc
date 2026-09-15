@@ -60,6 +60,25 @@ test('parseArgs: --ttl-days requires an integer', () => {
   assert.strictEqual(good.errors.length, 0);
 });
 
+test('parseArgs: a positional *.md path sets planFile and implies hasPlan', () => {
+  const result = parseArgs(['node', 'ship.js', 'docs/plan.md']);
+  assert.strictEqual(result.planFile, 'docs/plan.md');
+  assert.strictEqual(result.hasPlan, true);
+});
+
+test('parseArgs: --plan-file sets hasPlan', () => {
+  const result = parseArgs(['node', 'ship.js', '--plan-file', 'x.md']);
+  assert.strictEqual(result.planFile, 'x.md');
+  assert.strictEqual(result.hasPlan, true);
+});
+
+test('parseArgs: a non-.md positional is ignored and does not error', () => {
+  const result = parseArgs(['node', 'ship.js', 'patch']);
+  assert.strictEqual(result.planFile, null);
+  assert.strictEqual(result.hasPlan, false);
+  assert.deepStrictEqual(result.errors, []);
+});
+
 // ---------------------------------------------------------------------------
 // mergeFlags
 // ---------------------------------------------------------------------------
@@ -89,6 +108,42 @@ test('mergeFlags: CLI --steps fully replaces config steps', () => {
   );
   assert.deepStrictEqual(result.merged.steps, ['pr']);
   assert.strictEqual(result.sources.steps, 'cli');
+});
+
+test('mergeFlags: hasPlan is derived from cli.hasPlan || cli.planFile', () => {
+  const base = { auto: false, draft: false, bump: null, workspace: null, steps: null, quick: false };
+  assert.strictEqual(mergeFlags({ ...base, hasPlan: false, planFile: null }, null).merged.hasPlan, false);
+  assert.strictEqual(mergeFlags({ ...base, hasPlan: true, planFile: null }, null).merged.hasPlan, true);
+  assert.strictEqual(mergeFlags({ ...base, hasPlan: false, planFile: 'docs/plan.md' }, null).merged.hasPlan, true);
+});
+
+// ---------------------------------------------------------------------------
+// computeSteps
+// ---------------------------------------------------------------------------
+
+test('computeSteps: hasPlan true with execute in steps yields will_run / "plan detected in context"', () => {
+  const flags = { hasPlan: true, steps: ['execute'], quality: null, workspace: 'prompt', rebase: 'prompt', executeCommitWaves: false };
+  const flagSources = { steps: 'cli' };
+  const steps = computeSteps(flags, flagSources, { planFile: 'docs/plan.md' });
+  const execute = steps.find(s => s.name === 'execute');
+  assert.strictEqual(execute.status, 'will_run');
+  assert.strictEqual(execute.reason, 'plan detected in context');
+  assert.ok(execute.args.includes('--plan-file "docs/plan.md"'));
+});
+
+test('computeSteps: --plan-file forwarded in args no longer produces a skipped execute step', () => {
+  // Mirrors the flags mergeFlags derives from a `--plan-file` CLI invocation
+  // (hasPlan implied true), as `run-workflow.js --manifest ... docs/plan.md`
+  // would produce.
+  const cli = parseArgs(['node', 'ship.js', '--plan-file', 'docs/plan.md']);
+  const { merged: flags, sources: flagSources } = mergeFlags(
+    { ...cli, auto: false, draft: false, bump: null, workspace: null, steps: ['execute'], quick: false },
+    null
+  );
+  const steps = computeSteps(flags, flagSources, { planFile: cli.planFile });
+  const execute = steps.find(s => s.name === 'execute');
+  assert.notStrictEqual(execute.status, 'skipped');
+  assert.strictEqual(execute.status, 'will_run');
 });
 
 // ---------------------------------------------------------------------------

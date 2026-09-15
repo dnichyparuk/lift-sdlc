@@ -48,6 +48,12 @@ const { readSection, writeLocalConfig, resolveSdlcRoot } = require(path.join(LIB
 const { writeOutput } = require(path.join(LIB, 'output'));
 const { resolveSkipConfigCheck, ensureConfigVersion } = require(path.join(LIB, 'config-version-prepare'));
 const { getPluginVersion } = require(path.join(LIB, 'config-version'));
+const { truncateDiff } = require(path.join(LIB, 'diff-truncate'));
+
+// Warning threshold only — never cuts content. A dimension whose joined diff
+// exceeds this gets a warning suggesting narrower triggers or an opt-in
+// max-diff-bytes cap (F-review-orchestrator-idle-dimension-and-diff-truncation-3).
+const DIMENSION_DIFF_WARN_BYTES = 64 * 1024;
 
 // ---------------------------------------------------------------------------
 // Review config (.sdlc/review.json)
@@ -255,10 +261,15 @@ function fetchAndSplitDiff(base, projectRoot, scope = 'all') {
 
 /**
  * Write one .diff file per active dimension to tmpDir.
- * Mutates dim.diff_file on each active dimension.
+ * Mutates dim.diff_file (and diff-size fields) on each active dimension.
  * Returns tmpDir path.
+ *
+ * Warn-by-default, truncate-on-opt-in (F-review-orchestrator-idle-dimension-and-diff-truncation-3):
+ * a dimension whose joined diff exceeds DIMENSION_DIFF_WARN_BYTES always gets
+ * its full .diff file plus a warning — truncation only happens when the
+ * dimension sets `max-diff-bytes` in its frontmatter.
  */
-function writeDimensionDiffs(activeDimensions, fileDiffs, projectRoot) {
+function writeDimensionDiffs(activeDimensions, fileDiffs, projectRoot, { splitDiffByFile: splitDiffByFileFn = splitDiffByFile } = {}) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdlc-review-'));
 
   for (const dim of activeDimensions) {
@@ -270,7 +281,36 @@ function writeDimensionDiffs(activeDimensions, fileDiffs, projectRoot) {
     const parts = dim.matched_files
       .map(f => fileDiffs.get(f))
       .filter(Boolean);
-    fs.writeFileSync(path.join(tmpDir, `${dim.name}.diff`), parts.join('\n'), 'utf8');
+
+    let diff = parts.join('\n');
+    dim.diff_bytes = diff.length;
+    dim.diff_oversize = diff.length > DIMENSION_DIFF_WARN_BYTES;
+
+    const capValid = Number.isInteger(dim.max_diff_bytes) && dim.max_diff_bytes > 0;
+    if (dim.max_diff_bytes !== null && dim.max_diff_bytes !== undefined && !capValid) {
+      dim.warnings.push(`Invalid max-diff-bytes (${dim.max_diff_bytes}); ignoring — diff will not be truncated`);
+    }
+
+    if (capValid) {
+      const r = truncateDiff(diff, { splitDiffByFile: splitDiffByFileFn, maxBytes: dim.max_diff_bytes });
+      diff = r.diff;
+      dim.diff_truncated = r.diffTruncated;
+      dim.diff_omitted_files = r.truncatedFiles;
+    } else {
+      dim.diff_truncated = false;
+      dim.diff_omitted_files = [];
+    }
+
+    if (dim.diff_oversize) {
+      const kb = Math.round(dim.diff_bytes / 1024);
+      const thresholdKb = Math.round(DIMENSION_DIFF_WARN_BYTES / 1024);
+      dim.warnings.push(`Diff is ${kb} KB (> ${thresholdKb} KB); consider narrowing this dimension's triggers or setting max-diff-bytes`);
+    }
+    if (dim.diff_truncated) {
+      dim.warnings.push(`Diff truncated to ${diff.length} chars; omitted: ${dim.diff_omitted_files.join(', ')}`);
+    }
+
+    fs.writeFileSync(path.join(tmpDir, `${dim.name}.diff`), diff, 'utf8');
     dim.diff_file = path.join(tmpDir, `${dim.name}.diff`);
   }
 
@@ -451,6 +491,7 @@ function loadAndMatchDimensions(projectRoot, changedFiles, dimensionFilter) {
       matched_files:     effectiveMatched,
       matched_count:     effectiveMatched.length,
       truncated:         effectiveTruncated,
+      max_diff_bytes:    fm['max-diff-bytes'] !== undefined ? fm['max-diff-bytes'] : null,
       diff_file:         null,
       body,
       file_context:      [],
@@ -612,6 +653,8 @@ function main() {
       total_changed_files:   changedFiles.length,
       uncovered_file_count:  critique.uncoveredFiles.length,
       suggested_dimensions:  critique.uncoveredSuggestions.length,
+      oversize_dimensions:      dims.filter(d => d.diff_oversize).length,
+      byte_truncated_dimensions: dims.filter(d => d.diff_truncated).length,
     },
     diff_dir: tmpDir,
   };
@@ -628,4 +671,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { globToRegex, matchFiles, loadAndMatchDimensions, analyzeUncoveredFiles, UNCOVERED_PATTERN_CATALOG };
+module.exports = { globToRegex, matchFiles, loadAndMatchDimensions, analyzeUncoveredFiles, UNCOVERED_PATTERN_CATALOG, writeDimensionDiffs, DIMENSION_DIFF_WARN_BYTES };

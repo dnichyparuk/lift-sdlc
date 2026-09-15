@@ -339,10 +339,10 @@ When `lensReviewers[i].promptTemplatePath` is null, skip that lens and log to `.
 
 **No `Workspace: "branch"` or workspace isolation on any lens reviewer dispatch** (forbidden per issues #370/#372; use `Workspace: "inherit"`).
 
-**Merge lens reviewer results (per iteration):**
-1. **Status**: `Approved` iff ALL lens reviewers returned `Approved`; otherwise `Issues Found`
-2. **Issues**: union of blocking issues across all lenses — dedup by `(taskRef, message-normalized-prefix)` (keep first occurrence)
-3. **Recommendations**: collect all recommendations, dedup by string prefix (first 60 chars)
+**Merge lens reviewer results (per iteration):** Each lens reviewer returns a JSON object (`lens`, `status`, `issues[]`, `recommendations[]` — see `./resources/lens-architecture-prompt.md` Output Schema).
+1. **Status**: `status = "Approved"` iff every lens reviewer's JSON `status` field is `"Approved"`; otherwise `"Issues Found"`
+2. **Issues**: union of each lens's `issues[]` array — dedup by `(taskRef, message-normalized-prefix)` (keep first occurrence)
+3. **Recommendations**: union of each lens's `recommendations[]` array — dedup by string prefix (first 60 chars)
 4. **Iteration counter**: increment by 1 per complete fan-out dispatch, regardless of how many lenses returned
 
 **For plans with <5 tasks — Single reviewer (status quo):** Dispatch one reviewer with `{LENS}=all` using `./resources/plan-reviewer-prompt.md` directly (same model acceptable). Status quo behavior preserved.

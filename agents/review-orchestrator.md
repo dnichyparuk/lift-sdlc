@@ -97,6 +97,7 @@ For each dimension with `status: "ACTIVE"` or `status: "TRUNCATED"`:
    - `{dimension body}` → `dimension.body`
    - `{list of matched files}` → `dimension.matched_files` (one per line)
    - `{filtered diff}` → the content read from `dimension.diff_file`
+   - When `dimension.diff_truncated` is `true` (the dimension opted into `max-diff-bytes`), add one sentence immediately before the diff content stating that the diff is partial and naming the files in `dimension.diff_omitted_files`.
    - Add commit context section before the Output Format section:
 
      ```text
@@ -120,11 +121,21 @@ For each dimension with `status: "ACTIVE"` or `status: "TRUNCATED"`:
 
 **Dispatch ALL active dimensions in a SINGLE `invoke_subagent` call** (passing an array of `Subagents` entries). Do not dispatch one at a time.
 
-Collect all subagent results.
+## Step 2b — Classify Dimension Outcomes
+
+Collect all subagent results, then classify every dispatched dimension into exactly one outcome:
+
+| Outcome | Trigger | Handling |
+|---|---|---|
+| `returned` | Subagent returned structured `### Finding` blocks, or an explicit "No findings for this dimension." | Proceed to Steps 3–5 |
+| `returned-via-idle` | No structured result was returned directly, but the subagent's idle-notification text contains `### Finding` blocks — parse findings from that text and treat it as the returned result | Proceed to Steps 3–5 |
+| `not-reviewed` | Subagent error, a quota/429 failure, empty idle-notification text, or no result once every other dispatched subagent has finished | Do not wait on it further; record `{name, reason}` for use in Step 5's comment and Step 6's summary |
+
+Steps 3–5 operate only on dimensions classified `returned` or `returned-via-idle`. Never block waiting on a `not-reviewed` dimension.
 
 ## Step 3 (CRITIQUE) — Review Subagent Results
 
-After all subagents return:
+After every dimension is classified:
 
 - **Duplicates**: same `file:line` flagged by multiple dimensions?
 - **Contradictions**: conflicting recommendations at the same `file:line`?
@@ -161,6 +172,18 @@ Format the comment using the template from REFERENCE.md section 3.
 - `APPROVED WITH NOTES` — any `high` finding, OR ≥ 5 `medium` findings
 - `APPROVED` — all other cases
 
+**Not-reviewed dimensions:**
+
+- Add one summary-table row per `not-reviewed` dimension: `| {name} | not reviewed | — | — | — | — | — |`
+- Verdict computation ignores `not-reviewed` dimensions (they contribute no findings), but the one-sentence overall assessment must state `{N} dimension(s) not reviewed` whenever N > 0
+- Immediately after the verdict's one-sentence assessment, when there is at least one `not-reviewed` dimension, add a block listing each with its reason:
+
+  ```text
+  > **Not reviewed:** {name} — {reason}
+  ```
+
+  One line per not-reviewed dimension. Omit the block entirely when there are none.
+
 **Display the formatted comment in the terminal** so the user sees the content in your output.
 
 **Persist the comment body to disk** using the `write_to_file` tool:
@@ -181,6 +204,7 @@ Output this structured plain-text summary for the main context to parse:
 ```text
 Review complete
   Dimensions run:  {active} ({skipped} skipped — no matching files)
+  Not reviewed:    {comma list or —}
   Total findings:  {total}
     critical: {C} | high: {H} | medium: {M} | low: {L} | info: {I}
   Verdict:         {VERDICT}
@@ -194,13 +218,13 @@ Review complete
   Diff dir:        {manifest.diff_dir}
 ```
 
-Every field is required. Use `—` for `PR owner` / `PR repo` / `PR number` when `PR exists` is `false`.
+Every field is required. Use `—` for `PR owner` / `PR repo` / `PR number` when `PR exists` is `false`, and for `Not reviewed` when no dimension was left unreviewed.
 
 ## Quality Gates
 
 Before returning:
 
-- All active dimensions were dispatched and results collected
+- All active dimensions dispatched; every dimension classified as returned or not-reviewed
 - Deduplication pass completed
 - Consolidated comment has all 4 sections: header, summary table, verdict, per-dimension details
 - All findings reference a specific `file:line`

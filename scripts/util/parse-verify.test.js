@@ -3,7 +3,7 @@
 const test   = require('node:test');
 const assert = require('node:assert/strict');
 const path   = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnSync, spawn } = require('node:child_process');
 
 const { parseArgs, runParseVerify } = require('./parse-verify');
 
@@ -12,12 +12,26 @@ const SCRIPT = path.join(__dirname, 'parse-verify.js');
 test('parseArgs: --dispatched-ids flag', () => {
   assert.deepEqual(
     parseArgs(['node', 'parse-verify.js', '--dispatched-ids', '["a","b"]']),
-    { dispatchedIdsRaw: '["a","b"]' }
+    { dispatchedIdsRaw: '["a","b"]', showHelp: false }
   );
 });
 
 test('parseArgs: no flags -> dispatchedIdsRaw is null', () => {
-  assert.deepEqual(parseArgs(['node', 'parse-verify.js']), { dispatchedIdsRaw: null });
+  assert.deepEqual(parseArgs(['node', 'parse-verify.js']), { dispatchedIdsRaw: null, showHelp: false });
+});
+
+test('parseArgs: --help sets showHelp', () => {
+  assert.deepEqual(
+    parseArgs(['node', 'parse-verify.js', '--help']),
+    { dispatchedIdsRaw: null, showHelp: true }
+  );
+});
+
+test('parseArgs: -h sets showHelp', () => {
+  assert.deepEqual(
+    parseArgs(['node', 'parse-verify.js', '-h']),
+    { dispatchedIdsRaw: null, showHelp: true }
+  );
 });
 
 test('runParseVerify: success path — delegates to parseVerifySummary with parsed dispatched-ids array', () => {
@@ -99,4 +113,47 @@ test('CLI: exits 1 with a JSON error when --dispatched-ids is malformed', () => 
   assert.equal(res.status, 1);
   const parsed = JSON.parse(res.stdout.trim());
   assert.equal(parsed.schemaOk, false);
+});
+
+// ---------------------------------------------------------------------------
+// CLI --help fast-path — must exit without reading stdin. Uses async `spawn`
+// (not `spawnSync`) and deliberately never writes to or ends `child.stdin`,
+// so a regression that calls `readStdin()` before the `showHelp` check would
+// hang the child forever; the race against a 5s timer turns that hang into a
+// bounded test failure instead of a suite-wide hang.
+// ---------------------------------------------------------------------------
+
+function runHelpLeavingStdinOpen(flag) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [SCRIPT, flag], { cwd: __dirname });
+    let stdout = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve({ timedOut: true, code: null, stdout });
+    }, 5000);
+
+    child.on('exit', (code) => {
+      clearTimeout(timer);
+      resolve({ timedOut: false, code, stdout });
+    });
+    // Intentionally never call child.stdin.end() — stdin is left open.
+  });
+}
+
+test('CLI: --help prints Usage and exits 0 without reading stdin (stdin left open)', async () => {
+  const res = await runHelpLeavingStdinOpen('--help');
+
+  assert.equal(res.timedOut, false, 'process did not exit within 5s — showHelp is not checked before readStdin()');
+  assert.equal(res.code, 0);
+  assert.match(res.stdout, /^Usage:/);
+});
+
+test('CLI: -h prints Usage and exits 0 without reading stdin (stdin left open)', async () => {
+  const res = await runHelpLeavingStdinOpen('-h');
+
+  assert.equal(res.timedOut, false, 'process did not exit within 5s — showHelp is not checked before readStdin()');
+  assert.equal(res.code, 0);
+  assert.match(res.stdout, /^Usage:/);
 });

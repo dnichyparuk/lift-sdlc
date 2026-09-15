@@ -226,9 +226,16 @@ After all subagents complete and findings are deduplicated, post this as a singl
 | {name} | {total} | {critical} | {high} | {medium} | {low} | {info} |
 | **Total** | **{total}** | **{critical}** | **{high}** | **{medium}** | **{low}** | **{info}** |
 
+**Not-reviewed dimension row form:** for any dimension classified `not-reviewed` (see `agents/review-orchestrator.md` Step 2b), add a row instead of the usual counts: `| {name} | not reviewed | — | — | — | — | — |`. These rows are excluded from the `**Total**` row and from verdict computation.
+
 ### Verdict: {CHANGES REQUESTED | APPROVED WITH NOTES | APPROVED}
 
-{One-sentence overall assessment}
+{One-sentence overall assessment — when N > 0 dimensions were not reviewed, this sentence must also state "{N} dimension(s) not reviewed"}
+
+{if any not-reviewed dimensions}
+> **Not reviewed:** {name} — {reason}
+{one line per not-reviewed dimension; omit this block entirely when there are none}
+{end if}
 
 ---
 

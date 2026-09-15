@@ -132,6 +132,7 @@ EXIT_CODE=$?
 echo "PREPARE_OUTPUT_FILE: $PREPARE_OUTPUT_FILE"
 echo "STATUS: $EXIT_CODE"
 ```
+Script-internal note: `skill/ship.js`'s own arg parser also accepts a positional plan path (e.g. `docs/plan.md`) or `--plan-file <path>` as an alias that implies `hasPlan`, without requiring `--has-plan` as well. This is documentation of `ship.js`'s CLI surface, not an instruction to the LLM — the invocation above always passes the literal `--has-plan` flag; there is no condition under which this skill substitutes `--plan-file <path>` for it. The `/ship-sdlc` slash command itself has no plan-path argument (see `argument-hint` in the frontmatter above).
 > **Contract (Input/Output):**
 > - **Input**: Current branch context, plus the conditional flags below.
 > - **Output**: Prints the path of a temp JSON manifest (via `writeOutput`) containing PR and ship status. `--output-file` makes stdout the manifest path; capture it into `PREPARE_OUTPUT_FILE`.
