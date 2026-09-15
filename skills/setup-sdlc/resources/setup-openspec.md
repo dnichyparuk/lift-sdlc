@@ -5,7 +5,7 @@ Enriches `openspec/config.yaml` with a managed block pointing contributors to
 at the current plugin version is a no-op.
 
 > **Permission context:** This sub-flow inherits the parent skill's permission mode.
-> Do NOT call ExitPlanMode, change permission settings, or exit any mode during this sub-flow.
+> Do NOT leave plan mode, change permission settings, or exit any mode during this sub-flow.
 
 ---
 

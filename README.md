@@ -47,6 +47,8 @@ To make the plugin available in all your Antigravity workspaces, clone this repo
 git clone https://github.com/dnichyparuk/lift-sdlc.git ~/.gemini/config/plugins/sdlc
 ```
 
+> **IDE vs. CLI paths.** `~/.gemini/config/plugins/` is the global location documented for the [Antigravity IDE](https://antigravity.google/docs/plugins/). The [Antigravity CLI docs](https://antigravity.google/docs/cli/plugins/) name `~/.gemini/antigravity-cli/plugins/` instead; in practice the CLI (`agy`) also loads plugins from `~/.gemini/config/plugins/` and lists them in `~/.gemini/config/config.json`, so a single clone serves both. If your CLI version does not pick the plugin up, clone (or symlink) it into the CLI path as well, or run `agy plugin install <path-to-clone>`.
+
 ### Workspace Installation
 
 To install the plugin only for a specific workspace, navigate to the root of your project and clone it into the local `.agents` directory:
@@ -140,7 +142,9 @@ Skills delegate isolated, context-clean subtasks to specialized agents. There ar
 
 ### Registered Plugin Agents
 
-These agents are defined in `agents/*.md` and dispatched via `sdlc:<name>`. They inherit no conversation context — all inputs arrive through a prepared manifest file.
+These agents are defined in `agents/*.md` (frontmatter `subagent: true`) and dispatched by `name` through the native `invoke_subagent` tool. They inherit no conversation context — all inputs arrive through a prepared manifest file.
+
+> **Host support.** A plugin-bundled `agents/` directory is documented for the [Antigravity CLI](https://antigravity.google/docs/cli/plugins/) and on the [Subagents](https://antigravity.google/docs/subagents/) page (`plugins/<plugin_name>/agents/`), and `agy plugin validate` discovers all of them. The [IDE plugin page](https://antigravity.google/docs/plugins/) lists only skills, rules, MCP servers and hooks, so agent discovery under the IDE is not officially confirmed. Skills that depend on these agents (`/review-sdlc`, `/plan-sdlc`, `/commit-sdlc`, `/harden-sdlc`, `/received-review-sdlc`, `/learn-sdlc`) are verified under the CLI.
 
 | Agent | Dispatched by | Model | Role |
 |---|---|---|---|

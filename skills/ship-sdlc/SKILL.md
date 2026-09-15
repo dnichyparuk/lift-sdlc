@@ -397,9 +397,9 @@ Ship-sdlc retains full control of: pipeline table display, validation output, st
 
 ### Pipeline progress and state orchestration
 
-ship-sdlc tracks deterministic pipeline progress via `scripts/lib/ship-todos.js`. In Antigravity (where `TodoWrite` is not present), the `marker` emitted to stdout and user-facing status messages provide live progress and audit trail. Skip entirely when `flags.steps.length < 2`.
+ship-sdlc tracks deterministic pipeline progress via `scripts/lib/ship-todos.js`. Antigravity has no native todo-list tool, so the `marker` emitted to stdout and user-facing status messages provide live progress and audit trail. Skip entirely when `flags.steps.length < 2`.
 
-**For every event below:** run `node "<PLUGIN_ROOT>/scripts/lib/ship-todos.js" --state-file "$STATE_FILE" <event args>`, parse the JSON from stdout, call `TodoWrite` with the `todos[]` array if the tool is available (otherwise ignore), and echo `marker` verbatim to stdout (audit trail).
+**For every event below:** run `node "<PLUGIN_ROOT>/scripts/lib/ship-todos.js" --state-file "$STATE_FILE" <event args>`, parse the JSON from stdout, pass the `todos[]` array to the host's todo-list tool only if one exists (Antigravity has none — ignore the array), and echo `marker` verbatim to stdout (audit trail).
 
 | Event args | When to call |
 |---|---|
@@ -480,7 +480,7 @@ node "<PLUGIN_ROOT>/scripts/lib/ship-todos.js" --state-file "$STATE_FILE" --plan
 > - **Input**: `--state-file`, `--event`, `--current-step`.
 > - **Output**: Updates the IDE Todo UI and prints confirmation.
 
-`$PLAN_FILE` is the resolved plan file path. The helper expands the `execute` step's placeholder substep to one substep per plan task (one `### Task N:` heading per substep). Parse JSON. If the `TodoWrite` tool is available, call it. Echo `marker` verbatim to stdout.
+`$PLAN_FILE` is the resolved plan file path. The helper expands the `execute` step's placeholder substep to one substep per plan task (one `### Task N:` heading per substep). Parse JSON. Pass `todos[]` to the host's todo-list tool only if one exists (Antigravity has none). Echo `marker` verbatim to stdout.
 
 Then dispatch `execute-plan-sdlc` as below. On Agent return (success), run the post-execution completeness invariant **before** marking the step complete:
 
@@ -489,7 +489,7 @@ node "<PLUGIN_ROOT>/scripts/util/verify-completeness.js" --state-file "$STATE_FI
 ```
 > **Contract (Input/Output):**
 > - **Input**: `--state-file`, `--plan-file` (both required).
-> - **Output**: Evaluates task completeness and exits non-zero if incomplete. On failure it also emits the "execute step failed" TodoWrite payload itself (JSON on stdout, `marker` on stderr) — no separate `ship-todos.js --fail-step` call is needed.
+> - **Output**: Evaluates task completeness and exits non-zero if incomplete. On failure it also emits the "execute step failed" todo payload itself (JSON on stdout, `marker` on stderr) — no separate `ship-todos.js --fail-step` call is needed.
 
 If `verify-completeness` exits 65, the pipeline MUST halt before commit. The missing task IDs appear on stderr as JSON `{missingIds, totalPlanned, totalAccounted}`. Do NOT advance to the commit step.
 
@@ -724,7 +724,7 @@ Dispatch the cleanup step **as a direct `run_command` call**, not as an Agent. E
 }
 ```
 
-**Cleanup-step todo:** fire the `--event cleanup` TodoWrite call (see the table above) before invoking the cleanup command below. After the cleanup command returns (success or contract violation), fire the `--mark-completed cleanup` completion event.
+**Cleanup-step todo:** fire the `--event cleanup` progress event (see the table above) before invoking the cleanup command below. After the cleanup command returns (success or contract violation), fire the `--mark-completed cleanup` completion event.
 
 Selection rule: walk `steps[]` and check whether any prior step's recorded status (from the live state file, not the prepare snapshot) is `failed`. If so, dispatch with `step.invocation.forced`; otherwise dispatch with `step.invocation.normal`. `$SCRIPT` is the same `state/ship.js` path resolved in the state-persistence section above.
 
@@ -852,56 +852,15 @@ Each sub-skill has its own error recovery. ship-sdlc does not duplicate their re
 
 ---
 
-## Gotchas
+## Gotchas, Learning Capture and What's Next
 
-**Verdict detection is text-based.** Parse the conversation for a line matching `Verdict: <VERDICT>`. The review-sdlc orchestrator always emits this. If the conversation is compacted between review and verdict parsing, the verdict may be lost — treat missing verdict as APPROVED WITH NOTES and warn the user.
-
-**Double commit is intentional.** Feature commit (step 2) and review fix commit (step 5) are separate. This keeps feature work and review fixes distinct in git history. Do not squash them.
-
-**Config file is optional.** The pipeline runs with built-in defaults when no ship config exists in `.sdlc/local.json`. Do not error on missing config.
-
-**.sdlc/ must be gitignored** (see Step 1c's warning) **as the primary defense** — `ship-git-ops.js stage-post-execute`'s `git add` excluding `.sdlc/` is only a fallback.
-
-**State files are script-managed.** Use state/ship.js / state/execute.js for all state operations. Don't hand-write JSON to `.sdlc/execution/`.
-
-**Worktree lifecycle is script-driven.** `util/worktree-create.js` to create (handles branch collision), `util/worktree-lifecycle.js resolve` + `remove` to clean up. Never use EnterWorktree/ExitWorktree.
-
-**Worktree state is not persisted.** Git is the source of truth: branch name + `util/worktree-lifecycle.js resolve --branch <branch>` yields the worktree path. Do not add worktree fields to state files.
-
-**Worktree mode changes the version and PR steps.** `computeSteps` in skill/ship.js auto-skips the version step when `workspace === 'worktree'` (tags are repo-global) and adds `--label skip-version-check` to the PR step args so `gh pr create` carries the label from creation. Only worktree auto-skip triggers the label, not a `version` omitted from `ship.steps[]`; the label must already exist in the repository (pr-sdlc creates it if missing). Print the post-merge advisory (see "Post-pipeline advisory" above).
-
-**Auto mode does not auto-resume without --resume.** When `--auto` is set but `--resume` is not, the pipeline starts fresh even if a state file exists for the current branch. The state file is preserved (not deleted) so the user can explicitly `--resume` later.
-
----
-
-## Learning Capture
-
-After completing the pipeline, append to `.sdlc/learnings/log.md`:
-
-- Review verdicts that surprised (threshold too aggressive or too lenient)
-- Sub-skills that failed in unexpected ways during chaining
-- Config combinations that produced unintended pipeline shapes
-- Projects where the default `steps[]` behavior was wrong, or migrations from legacy v1 configs (`ship.preset`/`ship.skip`) that produced unexpected `steps[]` after auto-migration. CLI `--preset`/`--skip` are no longer accepted; ship-sdlc emits a migration-pointer error if either is passed.
-
-Format:
-```
-## YYYY-MM-DD — ship-sdlc: <brief summary>
-<what was learned>
-```
-
----
-
-## What's Next
-
-After the pipeline completes, common follow-ups include:
-- `/received-review-sdlc` — address deferred medium/low findings
-- `/opsx:verify` — validate implementation against OpenSpec (if detected)
-- `/opsx:archive` — archive the OpenSpec change and sync delta specs (if detected)
+Moved to `./resources/gotchas-and-next-steps.md`. Read its **Gotchas** section before Step 5 (EXECUTE) — verdict parsing, the intentional double commit, optional config, `.sdlc/` gitignore, script-managed state and worktree lifecycle, worktree-mode step changes, and the no-auto-resume rule. In Step 6 (REPORT) apply its **Learning Capture** format and print the **What's Next** follow-ups.
 
 ---
 
 ## See Also
 
+- `./resources/gotchas-and-next-steps.md` — gotchas (read before Step 5), learning capture and follow-ups (Step 6)
 - [`/execute-plan-sdlc`](../execute-plan-sdlc/SKILL.md) — plan execution with wave-based dispatch
 - [`/commit-sdlc`](../commit-sdlc/SKILL.md) — smart commit with style detection
 - [`/review-sdlc`](../review-sdlc/SKILL.md) — multi-dimension code review

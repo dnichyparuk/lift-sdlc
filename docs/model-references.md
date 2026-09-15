@@ -18,6 +18,29 @@ The SDLC execution and ship skills expose a `--quality` flag that adjusts the mo
 - **`--quality balanced` (Default — Hybrid):** Uses hybrid routing (*Flash Hands, Pro Brain & Eyes*). Assigns `gemini-3.8-flash-low` (Trivial), `gemini-3.8-flash-medium` (Standard), and `gemini-3.8-flash-high` (Complex). If a complex task fails verification, it automatically escalates to `gemini-3.1-pro-low` on Retry 1. Critical security and concurrency review dimensions run on `gemini-3.1-pro-low`, while structural and contract dimensions run on `gemini-3.8-flash-high`.
 - **`--quality full` (Quality):** Forces `gemini-3.1-pro` for non-trivial tasks (`-low` for Standard, `-high` for Complex) and routes Trivial to `gemini-3.8-flash-medium`. Runs a spec-compliance review.
 
+## Frontmatter `model:` Values vs. the Official Spec
+
+The official [Subagents](https://antigravity.google/docs/subagents/) page documents the agent
+frontmatter `model` field as accepting only the tiers `inherit` (default), `flash`, and `pro`.
+This plugin instead writes full reasoning-budget IDs (`gemini-3.8-flash-low`,
+`gemini-3.8-flash-medium`, `gemini-3.8-flash-high`, `gemini-3.1-pro-low`, `gemini-3.1-pro-high`)
+into `agents/*.md` and `skills/*/SKILL.md`, because the low/medium/high budget split is the whole
+point of the quality-tier routing above and the tier words cannot express it.
+
+Status of this choice (as of 2026-09-15):
+
+- **Undocumented, not rejected.** The `agy` 1.2.0 binary contains every one of these IDs as
+  string literals, together with `"unknown model"` / `"Invalid model"` diagnostics, and the CLI
+  logs on this repository show no such diagnostic for any plugin agent. `agy plugin validate` does
+  not check the field at all (it is a discovery counter).
+- **Not runtime-verified.** No test has yet confirmed that a subagent declared with
+  `model: gemini-3.8-flash-low` actually runs on that budget rather than on `inherit`. Until that
+  check exists, treat the per-agent budgets as *intended*, not *proven*.
+- **Fallback if the runtime ever rejects full IDs:** map `*-flash-*` → `flash` and `*-pro-*` →
+  `pro` in the frontmatter and keep the budget suffixes only in the programmatic dispatch paths
+  (`scripts/skill/ship.js`, `plan.js`, `review.js`), which pass the model per `invoke_subagent`
+  call rather than via frontmatter.
+
 ## Future Model Upgrades
 
 To upgrade to a new generation of models in the future, you must update the following four areas of the plugin:
