@@ -228,7 +228,7 @@ function parseArgs(argv) {
       // recognized flag name that isn't accepted by this subcommand (e.g.
       // --quality on wave-start), since its dedicated branch above requires
       // `allowed.has(a)` and therefore never matches in that case.
-      process.stderr.write(`Error: unknown flag "${a}" for ${subcommand}. Accepted: ${[...(SUBCOMMAND_FLAGS[subcommand] || []), ...GLOBAL_FLAGS].join(' ')}\n`);
+      process.stderr.write(`Error: unknown flag "${a}" for ${subcommand}. Accepted: ${[...allowed].join(' ')}\n`);
       process.exit(2);
     }
   }
@@ -333,7 +333,8 @@ function cmdInit(opts) {
     try {
       plannedTaskIds = parsePlanTasks(fs.readFileSync(opts.planPath, 'utf8')).map(t => String(t.n));
       if (!plannedTaskIds.length) plannedTaskIds = null;
-    } catch (_) {
+    } catch (e) {
+      process.stderr.write(`Warning: failed to derive planned-task-ids from --plan-path "${opts.planPath}": ${e.message}\n`);
       plannedTaskIds = null;
     }
   }

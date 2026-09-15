@@ -184,8 +184,9 @@ function parseArgs(argv) {
     } else if (!a.startsWith('--') && /\.md$/i.test(a)) {
       // R-PLANFILE: a bare positional plan path (e.g. `docs/plan.md`) is
       // equivalent to `--plan-file <path>` — both set hasPlan so the execute
-      // step runs. First `.md` token wins; a non-`.md` positional (e.g. a
-      // --bump value already consumed above) is ignored.
+      // step runs. Last `.md` token wins (each match overwrites `planFile`,
+      // consistent with `--plan-file` also being last-wins); a non-`.md`
+      // positional (e.g. a --bump value already consumed above) is ignored.
       planFile = a;
       hasPlan = true;
     }

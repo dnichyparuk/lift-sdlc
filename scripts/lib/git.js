@@ -31,6 +31,16 @@ const DEFAULT_MAX_BUFFER = 200 * 1024 * 1024; // 200 MiB
 
 /**
  * Run a shell command and return trimmed stdout, or null on failure.
+ *
+ * stderr handling differs by mode: when `throwOnError` is false (default), stderr
+ * is ignored (fd 2 -> 'ignore') so a failing command never leaks noise to the
+ * parent's console. When `throwOnError` is true, stderr is piped instead so
+ * Node's own execSync error-formatting appends the captured stderr text to
+ * `err.message` (`"Command failed: <cmd>\n<stderr>"`) — callers that build
+ * user-facing errors from `err.message` (e.g. worktree-create.js) keep the
+ * real failure reason instead of a bare "Command failed" message. Piping
+ * still does not write anything to the parent's actual console — it only
+ * buffers the output on the Error object.
  * @param {string} cmd
  * @param {object} [opts]  Passed to execSync (cwd, shell, etc.)
  * @param {boolean} [opts.throwOnError]  If true, rethrows on failure instead of returning null.
@@ -42,7 +52,7 @@ function exec(cmd, opts = {}) {
     return execSync(cmd, {
       encoding: 'utf8',
       maxBuffer: DEFAULT_MAX_BUFFER,
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: throwOnError ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'pipe', 'ignore'],
       ...execOpts,
     }).trim();
   } catch (err) {

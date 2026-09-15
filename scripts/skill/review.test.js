@@ -6,7 +6,7 @@ const fs     = require('node:fs');
 const os     = require('node:os');
 const path   = require('node:path');
 
-const { writeDimensionDiffs, DIMENSION_DIFF_WARN_BYTES } = require('./review.js');
+const { writeDimensionDiffs, DIMENSION_DIFF_WARN_BYTES, loadAndMatchDimensions } = require('./review.js');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -233,5 +233,93 @@ test('writeDimensionDiffs: still warns about matched files with no diff content'
     assert.strictEqual(dim.diff_oversize, false);
   } finally {
     cleanup(tmpDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// loadAndMatchDimensions: max-diff-bytes frontmatter -> max_diff_bytes wiring
+// ---------------------------------------------------------------------------
+
+function mkTempProject() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'review-prepare-'));
+}
+
+function writeDimensionFixture(projectRoot, fileName, frontmatterExtra) {
+  const dimsDir = path.join(projectRoot, '.sdlc', 'review-dimensions');
+  fs.mkdirSync(dimsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dimsDir, fileName),
+    `---\nname: ${fileName.replace(/\.md$/, '')}\ndescription: A test dimension.\n${frontmatterExtra}---\n\nReview instructions go here, well past ten characters.\n`,
+    'utf8'
+  );
+}
+
+test('loadAndMatchDimensions: reads frontmatter "max-diff-bytes" into dim.max_diff_bytes', () => {
+  const projectRoot = mkTempProject();
+  try {
+    writeDimensionFixture(projectRoot, 'dim-with-cap.md', 'triggers:\n  - "big.js"\nmax-diff-bytes: 50\n');
+    writeDimensionFixture(projectRoot, 'dim-no-cap.md', 'triggers:\n  - "small.js"\n');
+
+    const dims = loadAndMatchDimensions(projectRoot, ['big.js', 'small.js'], null);
+
+    const withCap = dims.find(d => d.name === 'dim-with-cap');
+    const noCap = dims.find(d => d.name === 'dim-no-cap');
+    assert.ok(withCap, 'dim-with-cap should be present');
+    assert.ok(noCap, 'dim-no-cap should be present');
+    assert.strictEqual(withCap.max_diff_bytes, 50);
+    assert.strictEqual(noCap.max_diff_bytes, null, 'absent max-diff-bytes must surface as null, not undefined');
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// oversize_dimensions / byte_truncated_dimensions summary counters (main())
+//
+// main() itself is not exported (it shells out to git/gh and calls
+// process.exit), so this exercises the same two building blocks main() uses
+// — loadAndMatchDimensions() then writeDimensionDiffs() — and reproduces
+// main()'s exact summary filter expressions against the result.
+// ---------------------------------------------------------------------------
+
+test('summary counters: oversize_dimensions and byte_truncated_dimensions reflect loadAndMatchDimensions + writeDimensionDiffs output', () => {
+  const projectRoot = mkTempProject();
+  try {
+    // dim-with-cap matches "big.js" and sets a byte cap small enough to force truncation.
+    writeDimensionFixture(projectRoot, 'dim-with-cap.md', 'triggers:\n  - "big.js"\nmax-diff-bytes: 50\n');
+    // dim-no-cap matches "small.js" and has no cap.
+    writeDimensionFixture(projectRoot, 'dim-no-cap.md', 'triggers:\n  - "small.js"\n');
+
+    const changedFiles = ['big.js', 'small.js'];
+    const dims = loadAndMatchDimensions(projectRoot, changedFiles, null);
+
+    const bigChunk = fileChunk('big.js', 'y'.repeat(DIMENSION_DIFF_WARN_BYTES + 1024));
+    const smallChunk = fileChunk('small.js', '+x');
+    const fileDiffs = new Map([
+      ['big.js', bigChunk],
+      ['small.js', smallChunk],
+    ]);
+
+    const activeDims = dims.filter(d => d.status === 'ACTIVE' || d.status === 'TRUNCATED');
+    const tmpDir = writeDimensionDiffs(activeDims, fileDiffs, projectRoot);
+    try {
+      // Mirrors the summary computation in review.js main().
+      const oversizeDimensions = dims.filter(d => d.diff_oversize).length;
+      const byteTruncatedDimensions = dims.filter(d => d.diff_truncated).length;
+
+      assert.strictEqual(oversizeDimensions, 1, 'only the big.js dimension exceeds DIMENSION_DIFF_WARN_BYTES');
+      assert.strictEqual(byteTruncatedDimensions, 1, 'only the capped dimension gets truncated');
+
+      const withCap = dims.find(d => d.name === 'dim-with-cap');
+      const noCap = dims.find(d => d.name === 'dim-no-cap');
+      assert.strictEqual(withCap.diff_oversize, true);
+      assert.strictEqual(withCap.diff_truncated, true);
+      assert.strictEqual(noCap.diff_oversize, false);
+      assert.strictEqual(noCap.diff_truncated, false);
+    } finally {
+      cleanup(tmpDir);
+    }
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
   }
 });
