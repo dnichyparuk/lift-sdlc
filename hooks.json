@@ -5,6 +5,7 @@
         "matcher": "run_command",
         "hooks": [
           {
+            "type": "command",
             "command": "node ./hooks/pre-tool-git-guard.js"
           }
         ]
@@ -17,6 +18,7 @@
         "matcher": "ask_question|AskUserQuestion",
         "hooks": [
           {
+            "type": "command",
             "command": "node ./hooks/question-suppression.js"
           }
         ]
@@ -26,44 +28,32 @@
   "session-context": {
     "PreInvocation": [
       {
-        "hooks": [
-          {
-            "command": "node ./hooks/session-start.js"
-          }
-        ]
+        "type": "command",
+        "command": "node ./hooks/session-start.js"
       }
     ]
   },
   "drift-nudge": {
     "PostInvocation": [
       {
-        "hooks": [
-          {
-            "command": "node ./hooks/post-tool-nudge.js"
-          }
-        ]
+        "type": "command",
+        "command": "node ./hooks/post-tool-nudge.js"
       }
     ]
   },
   "stop-block": {
     "Stop": [
       {
-        "hooks": [
-          {
-            "command": "node ./hooks/stop-block.js"
-          }
-        ]
+        "type": "command",
+        "command": "node ./hooks/stop-block.js"
       }
     ]
   },
   "state-save": {
     "Stop": [
       {
-        "hooks": [
-          {
-            "command": "node ./hooks/stop-state-save.js"
-          }
-        ]
+        "type": "command",
+        "command": "node ./hooks/stop-state-save.js"
       }
     ]
   },
@@ -73,6 +63,7 @@
         "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
         "hooks": [
           {
+            "type": "command",
             "command": "node ./hooks/pre-tool-validate.js"
           }
         ]

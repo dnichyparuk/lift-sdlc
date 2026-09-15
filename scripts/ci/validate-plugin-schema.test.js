@@ -12,6 +12,8 @@ const {
   extractFrontmatter,
   readToolsValue,
   checkToolBoundary,
+  checkHooksShape,
+  validateHooksDocument,
   runAgyValidate,
   evaluate,
   REQUIRED_TOOLS_VALUE,
@@ -152,6 +154,118 @@ test('checkToolBoundary reports both agents independently when both are wrong', 
 
 test('checkToolBoundary passes against the real repo agent files', () => {
   assert.deepEqual(checkToolBoundary(REPO_ROOT), []);
+});
+
+// ---------------------------------------------------------------------------
+// hooks.json shape — official Antigravity contract (docs/hooks)
+// ---------------------------------------------------------------------------
+
+const GOOD_HOOKS = {
+  'git-guard': {
+    PreToolUse: [
+      { matcher: 'run_command', hooks: [{ type: 'command', command: 'node ./hooks/a.js' }] },
+    ],
+  },
+  'safety-gate': {
+    enabled: false,
+    PostToolUse: [{ matcher: '*', hooks: [{ command: './x.sh', timeout: 10 }] }],
+  },
+  reminder: { PreInvocation: [{ type: 'command', command: './reminder.sh' }] },
+  nudge: { PostInvocation: [{ command: 'node ./hooks/b.js' }] },
+  'stop-block': { Stop: [{ command: 'node ./hooks/c.js' }] },
+};
+
+test('validateHooksDocument accepts the official example shapes for all five events', () => {
+  assert.deepEqual(validateHooksDocument(GOOD_HOOKS), []);
+});
+
+test('validateHooksDocument rejects a { hooks: [...] } wrapper under Stop (the regression the CLI logs as "must specify command")', () => {
+  const doc = { 'stop-block': { Stop: [{ hooks: [{ command: 'node ./hooks/c.js' }] }] } };
+  const reasons = validateHooksDocument(doc);
+  assert.equal(reasons.length, 1);
+  assert.match(reasons[0], /"stop-block"\.Stop\[0\]/);
+  assert.match(reasons[0], /handler objects DIRECTLY/);
+});
+
+test('validateHooksDocument rejects a wrapper under PreInvocation and PostInvocation too', () => {
+  const doc = {
+    a: { PreInvocation: [{ hooks: [{ command: 'x' }] }] },
+    b: { PostInvocation: [{ matcher: '', hooks: [{ command: 'y' }] }] },
+  };
+  const reasons = validateHooksDocument(doc);
+  assert.equal(reasons.length, 2);
+});
+
+test('validateHooksDocument rejects a bare handler under PreToolUse (must be wrapped)', () => {
+  const doc = { g: { PreToolUse: [{ command: 'node ./hooks/a.js' }] } };
+  const reasons = validateHooksDocument(doc);
+  assert.ok(reasons.some((r) => /must wrap handlers in "hooks"/.test(r)));
+});
+
+test('validateHooksDocument rejects handlers without a command, bad type, non-integer timeout', () => {
+  const doc = {
+    g: {
+      Stop: [{ type: 'command' }, { command: 'ok', type: 'script' }, { command: 'ok', timeout: '10' }],
+    },
+  };
+  const reasons = validateHooksDocument(doc);
+  assert.equal(reasons.length, 3);
+  assert.ok(reasons.some((r) => /non-empty string "command"/.test(r)));
+  assert.ok(reasons.some((r) => /"type" must be "command"/.test(r)));
+  assert.ok(reasons.some((r) => /"timeout" must be an integer/.test(r)));
+});
+
+test('validateHooksDocument rejects unknown events (SessionStart is not an Antigravity event)', () => {
+  const doc = { g: { SessionStart: [{ command: 'x' }] } };
+  const reasons = validateHooksDocument(doc);
+  assert.equal(reasons.length, 1);
+  assert.match(reasons[0], /unknown event "SessionStart"/);
+});
+
+test('validateHooksDocument rejects non-object top level and non-array event values', () => {
+  assert.equal(validateHooksDocument([]).length, 1);
+  assert.equal(validateHooksDocument({ g: { Stop: { command: 'x' } } }).length, 1);
+  assert.equal(validateHooksDocument({ g: 'nope' }).length, 1);
+  assert.equal(validateHooksDocument({ g: { enabled: 'yes', Stop: [] } }).length, 1);
+});
+
+test('checkHooksShape returns [] when hooks.json is absent (optional component)', () => {
+  const dir = makePluginDir();
+  assert.deepEqual(checkHooksShape(dir), []);
+});
+
+test('checkHooksShape reports invalid JSON', () => {
+  const dir = makePluginDir();
+  fs.writeFileSync(path.join(dir, 'hooks.json'), '{ not json');
+  const v = checkHooksShape(dir);
+  assert.equal(v.length, 1);
+  assert.equal(v[0].file, 'hooks.json');
+  assert.match(v[0].reason, /invalid JSON/);
+});
+
+test('checkHooksShape passes against the real repo hooks.json', () => {
+  assert.deepEqual(checkHooksShape(REPO_ROOT), []);
+});
+
+test('evaluate: hooks-shape violation alone -> exit 1 even when agy passes', () => {
+  const { exitCode, stderr } = evaluate({
+    toolViolations: [],
+    hooksViolations: [{ file: 'hooks.json', reason: '"stop-block".Stop[0]: wrapper' }],
+    agyResult: { installed: true, status: 0, stdout: '✔ hooks : 7 processed\n', stderr: '' },
+  });
+  assert.equal(exitCode, 1);
+  assert.ok(stderr.some((l) => l.startsWith('hooks-shape: hooks.json:')));
+});
+
+test('CLI: --plugin-dir with a wrapped Stop hook exits 1 with a hooks-shape line', () => {
+  const dir = makePluginDir();
+  fs.writeFileSync(
+    path.join(dir, 'hooks.json'),
+    JSON.stringify({ 'stop-block': { Stop: [{ hooks: [{ command: 'node ./hooks/c.js' }] }] } })
+  );
+  const result = run(['--plugin-dir', dir]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /hooks-shape: hooks\.json: "stop-block"\.Stop\[0\]/);
 });
 
 // ---------------------------------------------------------------------------

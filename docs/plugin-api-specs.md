@@ -50,9 +50,9 @@ statement plus a bulleted "Rules" list. Agents are narrow-scope specialist worke
 
 ### `hooks.json` + `hooks/`
 
-Event-keyed hook groups: `{ "<EventName>": [{ "matcher"?, "hooks": [{ "command": "node ./hooks/x.js" }] }] }`.
-Observed events: `PreToolUse`, `PreInvocation`, `PostInvocation`, `Stop`. Hooks are plain Node
-scripts, each with a `*.test.js` sibling in `lift-sdlc`'s convention.
+Named hook groups keyed by event, following the official Antigravity shape (see §2 item 5 for
+the two array forms). Events in use: `PreToolUse`, `PreInvocation`, `PostInvocation`, `Stop`.
+Hooks are plain Node scripts, each with a `*.test.js` sibling in `lift-sdlc`'s convention.
 
 ### Scripts convention (not a Claude Code requirement, but the `lift-*` house style)
 
@@ -82,7 +82,7 @@ Plugins live under `~/.gemini/antigravity-cli/plugins/<plugin_name>/`:
 |---|---|---|---|
 | `name` | string | **Required** | Machine-readable identifier, pattern `^[a-zA-Z0-9-_]+$` |
 | `description` | string | Optional | Human-readable purpose |
-| `$schema` | string | Optional | `https://antigravity.google/schemas/v1/plugin.json`, for editor validation |
+| `$schema` | string | Optional | Listed by the docs "for editor validation", but the documented URL `https://antigravity.google/schemas/v1/plugin.json` returns 404 (checked 2026-09-15); `lift-sdlc` omits it |
 
 Notably: **no `version` or `author` field is part of the documented schema.** The `lift-*`
 plugins' `plugin.json` files (including `lift-fix-price`'s, written this session) include both —
@@ -165,15 +165,58 @@ Followed by explicit agent instructions in the body. Skills auto-convert to slas
    }
    ```
 
-5. **`hooks.json` schema:**
-   Event-keyed array:
+5. **`hooks.json` schema** (source: `https://antigravity.google/docs/hooks`, fetched directly):
+   Top level maps a hook-group name to an event map. Optional `"enabled": false` disables the
+   group. Supported events (exact spelling): `PreToolUse`, `PostToolUse`, `PreInvocation`,
+   `PostInvocation`, `Stop`. There is **no** `SessionStart` or `UserPromptSubmit` event.
+
+   The array element shape differs by event:
+   - `PreToolUse` / `PostToolUse` → `{ "matcher": "<regex>", "hooks": [ <handler>, ... ] }`
+     wrapper objects. Matcher: `""`/`"*"` = all tools, `"run_command"` exact, `"a|b"` alternation,
+     `"browser_.*"` regex.
+   - `PreInvocation` / `PostInvocation` / `Stop` → handler objects **directly** in the array.
+     The official text: "For `PreInvocation`, `PostInvocation`, and `Stop`, the structure is
+     simpler (a list of handlers directly under the event key) and the matcher is ignored."
+
+   Handler: `{ "type": "command" (optional, default), "command": "<shell>" (required),
+   "timeout": <seconds> (optional, default 30) }`.
+
    ```json
    {
-     "SessionStart": [{ "matcher": "*", "hooks": [{ "command": "node ./hooks/session-start.js" }] }],
-     "PreToolUse": [{ "matcher": "run_command|ask_question", "hooks": [{ "command": "node ./hooks/pre-tool-use.js" }] }]
+     "git-guard": {
+       "PreToolUse": [
+         { "matcher": "run_command", "hooks": [ { "type": "command", "command": "node ./hooks/pre-tool-git-guard.js" } ] }
+       ]
+     },
+     "session-context": {
+       "PreInvocation": [
+         { "type": "command", "command": "node ./hooks/session-start.js" }
+       ]
+     }
    }
    ```
-   Validated by `agy plugin validate <dir>` (reports `✔ hooks: N processed`).
+
+   **Pitfall (observed in CLI logs on 2026-09-09/10):** wrapping a non-tool event's handler in
+   `{ "hooks": [...] }` makes the CLI reject the *entire* plugin hooks.json at load time
+   (`hooks.go: Failed to parse hooks for plugin lift-sdlc: invalid hook "<group>": command hook
+   must specify 'command'`), silently disabling every hook of the plugin — while
+   `agy plugin validate` still prints `✔ hooks : N processed`. `npm run check:plugin` now
+   asserts the correct shapes (`scripts/ci/validate-plugin-schema.js`).
+
+   Stdin/stdout contracts (camelCase). Common stdin fields on every event: `conversationId`,
+   `workspacePaths`, `transcriptPath`, `artifactDirectoryPath`, `modelName`.
+   - `PreToolUse` in: `{ toolCall: { name, args }, stepIdx, ... }`; out:
+     `{ decision: "allow|deny|ask|force_ask|deny_unless_prior_grant", reason?, permissionOverrides? }`.
+   - `PostToolUse` in: `{ stepIdx, error?, ... }`; out: `{}`.
+   - `PreInvocation` in: `{ invocationNum, initialNumSteps, ... }`; out:
+     `{ injectSteps: [ { toolCall } | { userMessage } | { ephemeralMessage } ] }`. Fires before
+     **every** model invocation — gate on `invocationNum` for once-per-session behaviour.
+   - `PostInvocation` in: same as PreInvocation; out: `{ injectSteps?, terminationBehavior?: "force_continue|terminate|" }`.
+   - `Stop` in: `{ executionNum, terminationReason, error?, fullyIdle, ... }`; out:
+     `{ decision: "continue" }` re-enters the loop; any other value lets the run stop.
+
+   Undocumented: which shell runs `command`, the working directory for relative paths, env
+   vars available to the hook process, and stderr/exit-code handling.
 
 ---
 
