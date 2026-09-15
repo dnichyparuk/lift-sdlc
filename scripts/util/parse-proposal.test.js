@@ -17,14 +17,28 @@ const SCRIPT = path.join(__dirname, 'parse-proposal.js');
 test('parseArgs: field positional argument', () => {
   assert.deepEqual(
     parseArgs(['node', 'parse-proposal.js', 'title']),
-    { field: 'title', errors: [] }
+    { field: 'title', showHelp: false, errors: [] }
   );
 });
 
 test('parseArgs: missing field -> error', () => {
   assert.deepEqual(
     parseArgs(['node', 'parse-proposal.js']),
-    { field: undefined, errors: ['Missing field'] }
+    { field: null, showHelp: false, errors: ['Missing field'] }
+  );
+});
+
+test('parseArgs: --help never becomes the field, no error', () => {
+  assert.deepEqual(
+    parseArgs(['node', 'parse-proposal.js', '--help']),
+    { field: null, showHelp: true, errors: [] }
+  );
+});
+
+test('parseArgs: -h never becomes the field, no error', () => {
+  assert.deepEqual(
+    parseArgs(['node', 'parse-proposal.js', '-h']),
+    { field: null, showHelp: true, errors: [] }
   );
 });
 
@@ -98,6 +112,35 @@ test('runParseProposal: invalid stdin JSON exits 2', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// runParseProposal: --help / -h fast path — stdin must never be touched
+// ---------------------------------------------------------------------------
+
+function poisonStdin() {
+  const fail = () => { throw new Error('stdin must not be touched when --help is set'); };
+  return { setEncoding: fail, on: fail, once: fail, resume: fail, removeListener: fail };
+}
+
+test('runParseProposal: --help short-circuits before reading stdin', async () => {
+  const result = await runParseProposal(
+    ['node', 'parse-proposal.js', '--help'],
+    { stdin: poisonStdin() }
+  );
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /^Usage:/);
+  assert.equal(result.stderr, null);
+});
+
+test('runParseProposal: -h short-circuits before reading stdin', async () => {
+  const result = await runParseProposal(
+    ['node', 'parse-proposal.js', '-h'],
+    { stdin: poisonStdin() }
+  );
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /^Usage:/);
+  assert.equal(result.stderr, null);
+});
+
+// ---------------------------------------------------------------------------
 // CLI integration — verifies stdin is read via process.stdin
 // ---------------------------------------------------------------------------
 
@@ -129,6 +172,38 @@ test('CLI: exits 2 on invalid JSON stdin', () => {
 
   assert.equal(res.status, 2);
   assert.match(res.stderr, /ERROR:/);
+});
+
+// ---------------------------------------------------------------------------
+// CLI: --help / -h fast path with an open (never-closed) stdin pipe.
+// Must exit promptly without waiting to read stdin.
+// ---------------------------------------------------------------------------
+
+test('CLI: --help exits 0 with Usage without reading an open stdin pipe', () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '--help'], {
+    cwd: __dirname,
+    encoding: 'utf8',
+    timeout: 5000,
+    // No `input` given: stdin stays open/unclosed for the child. If the
+    // script tried to read stdin before exiting, this would hang until the
+    // 5s timeout kills it and the assertions below would fail.
+  });
+
+  assert.notEqual(res.signal, 'SIGTERM', 'process hung and was killed by timeout');
+  assert.equal(res.status, 0);
+  assert.match(res.stdout, /^Usage:/);
+});
+
+test('CLI: -h exits 0 with Usage without reading an open stdin pipe', () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '-h'], {
+    cwd: __dirname,
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+
+  assert.notEqual(res.signal, 'SIGTERM', 'process hung and was killed by timeout');
+  assert.equal(res.status, 0);
+  assert.match(res.stdout, /^Usage:/);
 });
 
 // ---------------------------------------------------------------------------

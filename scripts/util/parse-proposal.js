@@ -27,45 +27,39 @@
 
 'use strict';
 
+const path = require('node:path');
+const LIB  = path.join(__dirname, '..', 'lib');
+
+const { readStdin } = require(path.join(LIB, 'stdin'));
+
+const USAGE = [
+  'Usage: node parse-proposal.js <field>',
+  '       printf \'%s\' "$ANALYZE_JSON" | node parse-proposal.js <field>',
+  '',
+  'Reads a JSON object from stdin shaped like { "proposal": { <field>: ... } }',
+  'and writes proposal[<field>] to stdout (falling back to \'\' for any',
+  'falsy value).',
+  '',
+  'Exit codes:',
+  '  0 = field extracted (or defaulted to \'\') and written to stdout',
+  '  2 = missing <field> argument, stdin was not valid JSON, or stdin JSON',
+  '      had no "proposal" object to index into',
+].join('\n') + '\n';
+
 // ---------------------------------------------------------------------------
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv) {
   const args = argv.slice(2);
-  const field = args[0];
+  const showHelp = args.includes('--help') || args.includes('-h');
+  const positionals = args.filter((a) => a !== '--help' && a !== '-h');
+  const field = positionals[0] || null;
   const errors = [];
-  if (!field) {
+  if (!showHelp && !field) {
     errors.push('Missing field');
   }
-  return { field, errors };
-}
-
-// ---------------------------------------------------------------------------
-// Core (injectable for tests)
-// ---------------------------------------------------------------------------
-
-function readStdin(stream = process.stdin) {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    stream.setEncoding('utf8');
-
-    const onData = (chunk) => { data += chunk; };
-    const onEnd = () => settle(() => resolve(data));
-    const onError = (err) => settle(() => reject(err));
-
-    function settle(action) {
-      stream.removeListener('data', onData);
-      stream.removeListener('end', onEnd);
-      stream.removeListener('error', onError);
-      action();
-    }
-
-    stream.on('data', onData);
-    stream.on('end', onEnd);
-    stream.on('error', onError);
-    stream.resume();
-  });
+  return { field, showHelp, errors };
 }
 
 /**
@@ -88,7 +82,10 @@ function extractProposalField(field, input) {
  * @returns {Promise<{exitCode:number, stdout:string, stderr:string|null}>}
  */
 async function runParseProposal(argv, { stdin = process.stdin } = {}) {
-  const { field, errors } = parseArgs(argv);
+  const { field, showHelp, errors } = parseArgs(argv);
+  if (showHelp) {
+    return { exitCode: 0, stdout: USAGE, stderr: null };
+  }
   if (errors.length > 0) {
     return { exitCode: 2, stdout: '', stderr: 'ERROR: Missing field\n' };
   }

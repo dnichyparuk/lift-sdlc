@@ -58,7 +58,7 @@ function levenshtein(a, b) {
 
 const KNOWN_FIELDS = new Set([
   'name', 'description', 'triggers', 'skip-when',
-  'severity', 'max-files', 'requires-full-diff', 'model',
+  'severity', 'max-files', 'max-diff-bytes', 'requires-full-diff', 'model',
 ]);
 
 const VALID_SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'info']);

@@ -68,3 +68,13 @@ const path = require('node:path');
 const LIB = path.join(__dirname, '..', 'lib');
 const { readSection } = require(path.join(LIB, 'config'));
 ```
+
+## CLI contract
+
+Every CLI script under `scripts/**/*.js` follows three rules:
+
+- **Help before I/O**: `--help`/`-h` prints usage and exits before the script touches stdin, the filesystem, or any other I/O — even when a parent process (e.g. an agent harness) holds the script's stdin pipe open and never closes it.
+- **Reject unknown flags**: an unrecognized flag for a (sub)command exits with code `2` and a message naming the flags that command accepts, rather than being silently ignored.
+- **`HELP_CONTRACT` allowlist**: a script that additionally promises a real, human-readable `Usage:` line (matching `/^Usage:/m`) and exit code `0` on `--help` must be added to the `HELP_CONTRACT` set. Every other enumerated script only promises termination on `--help` — it may exit non-zero, but must not hang or die by signal.
+
+These rules are enforced by `scripts/ci/cli-help-contract.test.js`, which spawns every CLI script under `scripts/` with `--help` against an open, never-ended stdin pipe and a fresh temp `cwd`, then asserts the process terminates without hanging or dying by signal (and, for scripts in `HELP_CONTRACT`, that it exits `0` and prints a `Usage:` line).

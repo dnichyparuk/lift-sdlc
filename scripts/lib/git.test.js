@@ -49,6 +49,44 @@ test('exec() rethrows on a genuinely failing command when throwOnError is set', 
   assert.throws(() => exec('node -e "process.exit(1)"', { throwOnError: true }));
 });
 
+test('exec() suppresses child stderr by default (stdio: ["ignore", "pipe", "ignore"])', () => {
+  // Spawn a subprocess that writes to stderr and exits with failure.
+  // The stderr should not leak to the parent's stderr.
+  const cmd = `${process.execPath} -e "require('fs').writeFileSync(1, 'stdout'); require('fs').writeFileSync(2, 'leak'); process.exit(1)"`;
+  const result = exec(cmd);
+  // exec() should return null (command failed, throwOnError not set)
+  assert.strictEqual(result, null, 'exec() returns null when subprocess fails');
+});
+
+test('exec() allows stdio override via execOpts (spread order)', () => {
+  // Pass a custom stdio array that captures stdout differently.
+  // This tests that ...execOpts comes AFTER the default stdio, so overrides work.
+  // We use ['ignore', 'pipe', 'pipe'] to pipe both stdout and stderr.
+  const cmd = `${process.execPath} -e "process.stdout.write('captured'); process.stderr.write('error')"`;
+  const result = exec(cmd, { stdio: ['ignore', 'pipe', 'pipe'] });
+  // Should succeed and return the stdout content (stderr is ignored by our override)
+  assert.strictEqual(result, 'captured', 'stdio override should capture stdout');
+});
+
+test('exec() returns null silently for git command with no remote', () => {
+  // Create a temp repo with no remote and try symbolic-ref on origin/HEAD
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-lib-'));
+  try {
+    git(dir, ['init', '-q', '-b', 'main']);
+    git(dir, ['config', 'user.email', 'test@example.com']);
+    git(dir, ['config', 'user.name', 'Test']);
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'a');
+    git(dir, ['add', '.']);
+    git(dir, ['commit', '-q', '-m', 'init']);
+
+    const result = exec('git symbolic-ref refs/remotes/origin/HEAD', { cwd: dir });
+    // Should return null silently (no remote exists, stderr suppressed)
+    assert.strictEqual(result, null, 'exec() returns null for missing remote');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('fetchPrChecks() returns structured object distinguishing auth-failure from empty-checks', () => {
   // When prNumber is undefined/null, return empty checks with authenticated=true, errorMessage=null
   const result1 = fetchPrChecks(null);

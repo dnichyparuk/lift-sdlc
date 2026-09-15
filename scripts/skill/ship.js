@@ -170,6 +170,7 @@ function parseArgs(argv) {
       }
     } else if (a === '--plan-file' && args[i + 1]) {
       planFile = args[++i];
+      hasPlan = true;
     } else if (a === '--hook-active-pipeline') {
       hookActivePipeline = true;
     } else if (a === '--verify-pipeline') {
@@ -180,6 +181,13 @@ function parseArgs(argv) {
       // Hard-removed (issue #130): the await-remote-review phase is now opt-in
       // via step membership in ship.steps[] / --steps. Boolean enabler removed.
       errors.push('--await-review is no longer accepted by ship-sdlc. Add `await-remote-review` to --steps <csv> or to ship.steps[] in .sdlc/local.json.');
+    } else if (!a.startsWith('--') && /\.md$/i.test(a)) {
+      // R-PLANFILE: a bare positional plan path (e.g. `docs/plan.md`) is
+      // equivalent to `--plan-file <path>` — both set hasPlan so the execute
+      // step runs. First `.md` token wins; a non-`.md` positional (e.g. a
+      // --bump value already consumed above) is ignored.
+      planFile = a;
+      hasPlan = true;
     }
   }
 
@@ -421,7 +429,9 @@ function mergeFlags(cli, config) {
   }
 
   // Pass-through flags that don't come from config.
-  merged.hasPlan = cli.hasPlan;
+  // R-PLANFILE: an explicit --plan-file (or positional *.md path) implies
+  // hasPlan even when --has-plan itself wasn't passed.
+  merged.hasPlan = cli.hasPlan || Boolean(cli.planFile);
   merged.dryRun = cli.dryRun;
   merged.resume = cli.resume;
   merged.openspecChange = cli.openspecChange || null;

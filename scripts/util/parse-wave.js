@@ -44,21 +44,49 @@ const { readStdin }        = require(path.join(LIB, 'stdin'));
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 
+// Usage text — kept in sync with the flags `parseArgs` accepts below and the
+// exit codes documented in the file header.
+const USAGE = [
+  'Usage:',
+  '  <producer of wave-runner text> | node parse-wave.js [--dispatched-ids <json-array>]',
+  '',
+  'Parses a wave-runner Agent\'s WAVE_SUMMARY token (read from stdin) via',
+  'parseWaveSummary().',
+  '',
+  'Options:',
+  '  --dispatched-ids <json-array>   JSON array of task IDs expected in the summary',
+  '  --help, -h                      show this help and exit',
+  '',
+  'Output (stdout, single JSON line):',
+  '  Success: {"schemaOk":bool,"dispatched":[...],"returned":[...],',
+  '            "missingIds":[...],"extraIds":[...],"parsed":object|null,',
+  '            "violations":[...],"tokenFound":bool}',
+  '  Usage error: {"schemaOk":false,"error":"<message>"}',
+  '',
+  'Exit codes:',
+  '  0 = parse ran (schema violations are reported in the JSON, not via exit code)',
+  '  1 = user-facing validation error (--dispatched-ids present but not valid JSON array)',
+  '  2 = unexpected script crash',
+].join('\n') + '\n';
+
 /**
  * @param {string[]} argv
- * @returns {{ dispatchedIdsRaw: string|null }}
+ * @returns {{ dispatchedIdsRaw: string|null, showHelp: boolean }}
  */
 function parseArgs(argv) {
   const args = argv.slice(2);
   let dispatchedIdsRaw = null;
+  let showHelp = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--dispatched-ids') {
       dispatchedIdsRaw = args[++i];
+    } else if (args[i] === '--help' || args[i] === '-h') {
+      showHelp = true;
     }
   }
 
-  return { dispatchedIdsRaw };
+  return { dispatchedIdsRaw, showHelp };
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +127,11 @@ function runParseWave(text, dispatchedIdsRaw, { parseWaveSummaryFn = parseWaveSu
 // ---------------------------------------------------------------------------
 
 async function main(argv) {
-  const { dispatchedIdsRaw } = parseArgs(argv);
+  const { dispatchedIdsRaw, showHelp } = parseArgs(argv);
+  if (showHelp) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+  }
   const text = await readStdin();
   const { json, exitCode } = runParseWave(text, dispatchedIdsRaw);
   writeJsonLine(json, { exitCode });

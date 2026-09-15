@@ -39,7 +39,12 @@ const DEFAULT_MAX_BUFFER = 200 * 1024 * 1024; // 200 MiB
 function exec(cmd, opts = {}) {
   const { throwOnError, ...execOpts } = opts;
   try {
-    return execSync(cmd, { encoding: 'utf8', maxBuffer: DEFAULT_MAX_BUFFER, ...execOpts }).trim();
+    return execSync(cmd, {
+      encoding: 'utf8',
+      maxBuffer: DEFAULT_MAX_BUFFER,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      ...execOpts,
+    }).trim();
   } catch (err) {
     if (throwOnError) throw err;
     return null;

@@ -28,12 +28,12 @@ How to check:
 3. For each such path, verify that one of the tasks declares `Depends on:` the other.
 4. Report any path shared by tasks without an explicit dependency relationship.
 
-**G10 — File existence:** Every path listed under `Files: Modify:` in the plan actually exists in the repository. Use Glob to check. `Files: Create:` paths are exempt (they will be created). `Files: Test:` paths may or may not exist — flag only when explicitly listed as `Modify:` and missing.
+**G10 — File existence:** Every path listed under `Files: Modify:` in the plan actually exists in the repository or is created by an earlier task. Use Glob to check. `Files: Create:` paths are exempt (they will be created). `Files: Test:` paths may or may not exist — flag only when explicitly listed as `Modify:` and missing.
 
 How to check:
-1. Extract all `Files: Modify:` paths from the plan.
-2. For each path, check existence relative to `{PROJECT_ROOT}` using Glob or file stat.
-3. Report any `Modify:` path that does not exist.
+1. Build `createdInPlan`: for every `Files: Create:` path in every task, record the path and its creating task number.
+2. Extract all `Files: Modify:` paths from each task with the task number.
+3. For each Modify path: if it exists on disk, pass. Else if in `createdInPlan` with the creating task number lower than the modifying task number, pass. Else if in `createdInPlan` with the creating task number higher than or equal to the modifying task number, flag as error with message "File '...' listed as Modify: in Task N created by Task M which does not precede Task N". Else flag as missing.
 
 ---
 

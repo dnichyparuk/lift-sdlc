@@ -92,11 +92,14 @@ severity counts.
 1. Display the orchestrator's summary to the user verbatim.
 2. Parse from it: `comment_file` (absolute path to `${diff_dir}/review-comment.md`),
    `pr.exists`/`pr.owner`/`pr.repo`/`pr.number`, `verdict` (`CHANGES REQUESTED` /
-   `APPROVED WITH NOTES` / `APPROVED`), `scope`, `branch`, `diff_dir`.
+   `APPROVED WITH NOTES` / `APPROVED`), `scope`, `branch`, `diff_dir`, `not_reviewed`
+   (from the `Not reviewed:` line — comma list or `—`).
 3. Read `comment_file` with the `view_file` tool and emit its full contents byte-for-byte
    inside a fenced markdown block — no summarization, no truncation, no collapsed
    severity table, no "see PR comment for details" placeholders. This must be visible
    before Step 4's posting prompt.
+4. If `not_reviewed` is non-empty (not `—`), print `Warning: N dimension(s) not
+   reviewed: {comma list}` before Step 4's posting prompt.
 
 Do NOT delete the manifest file here — cleanup happens in Step 6 on every terminal branch.
 

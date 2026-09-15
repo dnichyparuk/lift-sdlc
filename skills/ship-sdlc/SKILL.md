@@ -132,6 +132,7 @@ EXIT_CODE=$?
 echo "PREPARE_OUTPUT_FILE: $PREPARE_OUTPUT_FILE"
 echo "STATUS: $EXIT_CODE"
 ```
+A positional plan path (e.g. `ship.js --auto docs/plan.md`) or `--plan-file <path>` is equivalent to `--has-plan` — either sets `hasPlan` so the execute step runs, without requiring `--has-plan` as well.
 > **Contract (Input/Output):**
 > - **Input**: Current branch context, plus the conditional flags below.
 > - **Output**: Prints the path of a temp JSON manifest (via `writeOutput`) containing PR and ship status. `--output-file` makes stdout the manifest path; capture it into `PREPARE_OUTPUT_FILE`.
