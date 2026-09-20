@@ -10,7 +10,8 @@
     "lint": "eslint scripts skills",
     "check:refs": "node scripts/ci/validate-skill-script-refs.js",
     "check:plugin": "node scripts/ci/validate-plugin-schema.js",
-    "check:discovery": "node scripts/ci/validate-discovery.js"
+    "check:discovery": "node scripts/ci/validate-discovery.js",
+    "test:learning-loop": "node scripts/ci/simulate-learning-loop.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -116,3 +116,23 @@ test('readStdin: removes its data/end/error listeners from the stream on settle'
   assert.equal(stream.listenerCount('end'), 0);
   assert.equal(stream.listenerCount('error'), 0);
 });
+
+test('CLI: exits 0 and prints usage on --help without waiting for stdin', () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '--help'], {
+    encoding: 'utf8',
+    timeout: 2000,
+  });
+  assert.equal(res.status, 0);
+  assert.match(res.stdout, /Usage:/);
+  assert.match(res.stdout, /--dispatched-ids/);
+});
+
+test('CLI: exits 0 and prints usage on -h without waiting for stdin', () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '-h'], {
+    encoding: 'utf8',
+    timeout: 2000,
+  });
+  assert.equal(res.status, 0);
+  assert.match(res.stdout, /Usage:/);
+});
+

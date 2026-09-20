@@ -50,14 +50,19 @@ const { writeJsonLine }    = require(path.join(LIB, 'output'));
 function parseArgs(argv) {
   const args = argv.slice(2);
   let dispatchedIdsRaw = null;
+  let showHelp = false;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--dispatched-ids') {
+    if (args[i] === '--help' || args[i] === '-h') {
+      showHelp = true;
+    } else if (args[i] === '--dispatched-ids') {
       dispatchedIdsRaw = args[++i];
     }
   }
 
-  return { dispatchedIdsRaw };
+  const ret = { dispatchedIdsRaw };
+  if (showHelp) ret.showHelp = true;
+  return ret;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,13 +129,40 @@ function runParseWave(text, dispatchedIdsRaw, { parseWaveSummaryFn = parseWaveSu
   return { json: result, exitCode: 0 };
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
+const USAGE = `Usage:
+  <producer of wave-runner text> | node parse-wave.js [--dispatched-ids <json-array>]
 
-async function main(argv) {
-  const { dispatchedIdsRaw } = parseArgs(argv);
-  const text = await readStdin();
+Parses a wave-runner Agent's WAVE_SUMMARY token from piped stdin.
+
+Options:
+  --dispatched-ids <json-array>  JSON array of dispatched task IDs to validate against
+  --help, -h                     Show this help message and exit
+
+Exit codes:
+  0 = parse ran (schema violations reported in JSON)
+  1 = user-facing validation error (--dispatched-ids invalid JSON or stdin is a TTY)
+  2 = unexpected script crash
+`;
+
+async function main(argv, deps = {}) {
+  const stdout = deps.stdout || process.stdout;
+  const stderr = deps.stderr || process.stderr;
+  const stdin  = deps.stdin  || process.stdin;
+  const exit   = deps.exit   || process.exit;
+
+  const { dispatchedIdsRaw, showHelp } = parseArgs(argv);
+  if (showHelp) {
+    stdout.write(USAGE);
+    return exit(0);
+  }
+
+  if (stdin.isTTY) {
+    stderr.write('Error: parse-wave.js expects input piped via stdin, but stdin is an interactive TTY.\n\n');
+    stderr.write(USAGE);
+    return exit(1);
+  }
+
+  const text = await readStdin(stdin);
   const { json, exitCode } = runParseWave(text, dispatchedIdsRaw);
   writeJsonLine(json, { exitCode });
 }

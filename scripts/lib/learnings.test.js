@@ -2,14 +2,23 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
   parsePendingFile,
   filterRejected,
   groupBySignature,
   selectEligible,
+  recordGuardrailEvaluation,
+  readGuardrailEvaluations,
+  EVALUATIONS_REL_PATH,
   REQUIRED_FRONTMATTER_FIELDS,
   SIGNATURE_PATTERN,
+  MAX_TEXT_LENGTH,
+  MAX_IMPACT_LENGTH,
+  DEFAULT_THRESHOLD,
 } = require('./learnings');
 
 function makeContent(fields) {
@@ -287,4 +296,51 @@ test('SIGNATURE_PATTERN matches kebab-case and rejects invalid forms', () => {
   assert.ok(!SIGNATURE_PATTERN.test('1-bad-start'));
   assert.ok(!SIGNATURE_PATTERN.test('bad-end-'));
   assert.ok(!SIGNATURE_PATTERN.test('bad_underscore'));
+});
+
+// ---------------------------------------------------------------------------
+// Evaluations Telemetry Store
+// ---------------------------------------------------------------------------
+
+test('recordGuardrailEvaluation: records evaluation timestamps safely and atomically', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-test-'));
+  const ts1 = '2026-09-20T10:00:00.000Z';
+  const ts2 = '2026-09-20T11:00:00.000Z';
+
+  // Record single ID
+  const res1 = recordGuardrailEvaluation(root, 'rule-a', ts1);
+  assert.strictEqual(res1, true);
+
+  let evaluations = readGuardrailEvaluations(root);
+  assert.deepStrictEqual(evaluations, { 'rule-a': ts1 });
+
+  // Record array of IDs, deep-merging with existing
+  const res2 = recordGuardrailEvaluation(root, ['rule-b', 'rule-c'], ts2);
+  assert.strictEqual(res2, true);
+
+  evaluations = readGuardrailEvaluations(root);
+  assert.deepStrictEqual(evaluations, {
+    'rule-a': ts1,
+    'rule-b': ts2,
+    'rule-c': ts2,
+  });
+});
+
+test('recordGuardrailEvaluation: fail-open behavior on invalid inputs', () => {
+  assert.strictEqual(recordGuardrailEvaluation(null, 'some-rule'), false);
+  assert.strictEqual(recordGuardrailEvaluation('/tmp', null), false);
+  assert.strictEqual(recordGuardrailEvaluation('/tmp', []), false);
+  assert.strictEqual(recordGuardrailEvaluation('/tmp', ['']), false);
+});
+
+test('readGuardrailEvaluations: returns empty object on missing or invalid file', () => {
+  assert.deepStrictEqual(readGuardrailEvaluations(null), {});
+  assert.deepStrictEqual(readGuardrailEvaluations('/nonexistent/path/here'), {});
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-corrupt-'));
+  const target = path.join(root, EVALUATIONS_REL_PATH);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, '{ corrupt json');
+
+  assert.deepStrictEqual(readGuardrailEvaluations(root), {});
 });

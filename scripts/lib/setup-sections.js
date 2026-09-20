@@ -301,8 +301,36 @@ function summarizeWorkspace(cfg) {
   return parts.join('  ');
 }
 
+function summarizeLearn(cfg) {
+  if (!cfg) return '';
+  const threshold = cfg.recurrenceThreshold ?? 3;
+  const stale = cfg.staleAfterCycles ? `${cfg.staleAfterCycles}d` : 'off';
+  return `threshold: ${threshold}, staleness: ${stale}`;
+}
+
+const LEARN_FIELDS = [
+  {
+    name: 'recurrenceThreshold',
+    label: 'Recurrence threshold',
+    type: 'number',
+    min: 1,
+    options: null,
+    default: 3,
+    description: 'Minimum occurrences of an observed learning pattern in .sdlc/learnings/pending/ before /learn-sdlc considers it eligible for guardrail synthesis. Must be an integer >= 1 (default: 3).',
+  },
+  {
+    name: 'staleAfterCycles',
+    label: 'Stale evaluation window in days (or blank to disable)',
+    type: 'number',
+    min: 1,
+    options: null,
+    default: null,
+    description: 'Number of days without guardrail evaluation before learn-stale flags the rule as potentially obsolete. Leave empty to disable staleness checks.',
+  },
+];
+
 // ---------------------------------------------------------------------------
-// SETUP_SECTIONS — 13 entries, ordered by typical setup flow
+// SETUP_SECTIONS — ordered by typical setup flow
 // ---------------------------------------------------------------------------
 
 const SETUP_SECTIONS = [
@@ -510,6 +538,20 @@ const SETUP_SECTIONS = [
     confirmDetected: false,
     fields: [],
     summarize: summarizeExecutionGuardrails,
+  },
+  {
+    id: 'learn',
+    label: 'learn',
+    purpose: 'Self-learning loop configuration controlling how recurring observations are assimilated into project guardrails. Governs the minimum occurrence threshold before proposing a new guardrail and the inactivity threshold before flagging existing guardrails as stale.',
+    configFile: '.sdlc/config.json',
+    configPath: 'learn',
+    consumedBy: ['learn-sdlc', 'ship-sdlc'],
+    filesModified: ['.sdlc/config.json'],
+    optional: true,
+    delegatedTo: null,
+    confirmDetected: false,
+    fields: LEARN_FIELDS,
+    summarize: summarizeLearn,
   },
   {
     id: 'openspec-block',

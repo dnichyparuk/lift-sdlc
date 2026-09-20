@@ -150,13 +150,29 @@ function commitLearnings({
     result.reason = pushResult.stderr || pushResult.stdout || `git push exited ${pushResult.status}`;
   }
 
-  // Post-condition assert: git status --porcelain MUST be empty.
+  // Post-condition assert: git status --porcelain MUST be empty (exempting untracked pending learnings).
   const statusResult = run(spawnFn, ['status', '--porcelain'], cwd);
-  if (statusResult.status !== 0 || statusResult.stdout !== '') {
+  if (statusResult.status !== 0) {
     result.dirty = true;
-    result.postConditionReason = statusResult.status !== 0
-      ? (statusResult.stderr || `git status --porcelain exited ${statusResult.status}`)
-      : `working tree not clean after learnings commit: ${statusResult.stdout}`;
+    result.postConditionReason = statusResult.stderr || `git status --porcelain exited ${statusResult.status}`;
+  } else if (statusResult.stdout !== '') {
+    const PENDING_PREFIX = '.sdlc/learnings/pending/';
+    const unexemptLines = statusResult.stdout
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((line) => {
+        if (line.startsWith('?? ')) {
+          const p = line.slice(3).replace(/^"|"$/g, '').trim();
+          return !p.startsWith(PENDING_PREFIX);
+        }
+        return true;
+      });
+
+    if (unexemptLines.length > 0) {
+      result.dirty = true;
+      result.postConditionReason = `working tree not clean after learnings commit: ${unexemptLines.join('\n')}`;
+    }
   }
 
   return result;

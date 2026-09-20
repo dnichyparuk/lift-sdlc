@@ -38,6 +38,7 @@ const { spawnSync } = require('node:child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
 const { writeJsonLine } = require(path.join(LIB, 'output'));
+const { readGuardrailEvaluations } = require(path.join(LIB, 'learnings'));
 
 const CONFIG_REL_PATH = path.join('.sdlc', 'config.json');
 const LOG_REL_PATH    = path.join('.sdlc', 'learnings', 'log.md');
@@ -172,20 +173,44 @@ function readLearningsLog(cwd) {
  * @param {number|null} opts.staleAfterCycles  `null` = feature off.
  * @returns {{off: true, flagged: [], checked: 0} | {off: false, flagged: Array<{id: string, ageDays: number, mentionedInLog: boolean}>, checked: number}}
  */
-function findStaleGuardrails({ spawnFn = spawnSync, cwd = process.cwd(), staleAfterCycles } = {}) {
+function findStaleGuardrails({
+  spawnFn = spawnSync,
+  cwd = process.cwd(),
+  staleAfterCycles,
+  readEvaluationsFn = readGuardrailEvaluations,
+} = {}) {
   if (staleAfterCycles == null) {
     return { off: true, flagged: [], checked: 0 };
   }
 
   const ids = collectGuardrailIds(cwd);
   const log = readLearningsLog(cwd);
+  const evaluations = readEvaluationsFn(cwd) || {};
 
   const flagged = [];
   for (const id of ids) {
-    const ageDays = guardrailAgeDays(spawnFn, cwd, id);
+    let ageDays;
+    let source = 'git';
+    let lastEvaluated = null;
+
+    if (evaluations[id]) {
+      const evalDate = new Date(evaluations[id]);
+      if (!Number.isNaN(evalDate.getTime())) {
+        const diffMs = Date.now() - evalDate.getTime();
+        ageDays = Math.max(0, Math.floor(diffMs / MS_PER_DAY));
+        source = 'telemetry';
+        lastEvaluated = evaluations[id];
+      }
+    }
+
+    if (ageDays === undefined) {
+      ageDays = guardrailAgeDays(spawnFn, cwd, id);
+      source = 'git';
+    }
+
     const mentionedInLog = log.includes(id);
     if (ageDays > staleAfterCycles && !mentionedInLog) {
-      flagged.push({ id, ageDays, mentionedInLog: false });
+      flagged.push({ id, ageDays, mentionedInLog: false, lastEvaluated, source });
     }
   }
 
