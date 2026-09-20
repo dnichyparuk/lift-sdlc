@@ -10,7 +10,7 @@ and validates with the validation script.
 > written (simulation context), still emit the full proposed dimension YAML/Markdown inline.
 
 > **Permission context:** This sub-flow inherits the parent skill's permission mode.
-> Do NOT call ExitPlanMode, change permission settings, or exit any mode during this sub-flow.
+> Do NOT leave plan mode, change permission settings, or exit any mode during this sub-flow.
 > Do NOT ask the user to approve file writes individually — the parent (setup-sdlc) manages mode transitions.
 > Write all dimension files in a single Bash block or rapid sequence to minimize permission prompts.
 

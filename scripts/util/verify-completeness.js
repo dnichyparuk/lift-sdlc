@@ -22,9 +22,15 @@
  * Exit codes:
  *   0  = all planned tasks accounted for
  *   1  = --state-file / --plan-file missing, or an unknown flag was passed
- *   2  = could not locate scripts/state/execute.js, or an unexpected crash
+ *   2  = could not locate scripts/state/execute.js, an unexpected crash, OR
+ *        the child `scripts/state/execute.js verify-completeness` exited
+ *        with a state/argument error (child exit 2, or any exit other than
+ *        0/65) — passed through as-is, WITHOUT marking the execute step
+ *        failed (that exit means the child itself couldn't run, not that
+ *        tasks are unaccounted for)
  *   65 = one or more planned tasks unaccounted for (passed through from
- *        `scripts/state/execute.js verify-completeness`; BSD EX_DATAERR)
+ *        `scripts/state/execute.js verify-completeness`; BSD EX_DATAERR) —
+ *        marks the execute step failed via markExecuteFailed
  *
  * Uses only Node.js built-in modules. No npm install required.
  */
@@ -131,22 +137,36 @@ function runVerifyCompleteness(argv, { spawnFn = spawnSync, executeScript = EXEC
 
   let completenessExit;
   try {
-    const result = spawnFn(process.execPath, [executeScript, 'verify-completeness'], { stdio: 'inherit' });
+    const result = spawnFn(
+      process.execPath,
+      [executeScript, 'verify-completeness', '--state-file', args.stateFile],
+      { stdio: 'inherit' }
+    );
     if (result.error) throw result.error;
     completenessExit = result.status === null ? 2 : result.status;
   } catch (e) {
     return { exitCode: 2, stderr: `Unexpected error running verify-completeness: ${e.message}\n` };
   }
 
-  if (completenessExit !== 0) {
+  if (completenessExit === 0) {
+    return { exitCode: 0, stderr: null };
+  }
+
+  if (completenessExit === 65) {
     process.stderr.write(
       'ERROR: execute-plan-sdlc returned but planned tasks are unaccounted. Pipeline halted.\n'
     );
     markExecuteFailed(args.stateFile, args.planFile);
-    return { exitCode: completenessExit, stderr: null };
+    return { exitCode: 65, stderr: null };
   }
 
-  return { exitCode: 0, stderr: null };
+  // Any other exit (e.g. 2) means the child itself hit a state/argument
+  // error, not that tasks are unaccounted for — pass the code through
+  // without marking the execute step failed.
+  return {
+    exitCode: completenessExit,
+    stderr: `verify-completeness: state/argument error (child exit ${completenessExit}) — see message above\n`,
+  };
 }
 
 // ---------------------------------------------------------------------------

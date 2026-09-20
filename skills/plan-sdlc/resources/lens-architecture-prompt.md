@@ -46,12 +46,33 @@ Approve unless there are genuine blockers in your focus areas.
 
 ---
 
-## Output
+## Output Schema
 
-**Status:** Approved | Issues Found
+Return a single JSON object as your final output (no prose after the JSON block):
 
-**Issues (if any — list only execution blockers within architecture focus areas):**
-- Task N: [specific issue] — [why this would cause execution failure]
+```json
+{
+  "lens": "architecture",
+  "status": "Approved",
+  "issues": [
+    {
+      "taskRef": "Task 3",
+      "message": "Task description is too vague to implement without guessing",
+      "blocking": true
+    }
+  ],
+  "recommendations": [
+    "Consider adding more detail to Task 5's edge cases"
+  ]
+}
+```
 
-**Recommendations (advisory, do not block approval):**
-- [optional suggestions within architecture focus areas]
+**Field rules:**
+- `lens` — always `"architecture"`
+- `status` — `"Issues Found"` iff `issues` is non-empty; otherwise `"Approved"`
+- `issues[].taskRef` — the task identifier the issue applies to (e.g., `"Task 3"`)
+- `issues[].message` — the specific issue and why it would cause execution failure, within architecture focus areas only
+- `issues[].blocking` — always `true` (only execution blockers within architecture focus areas belong in `issues`)
+- `recommendations` — advisory suggestions within architecture focus areas; does not affect `status`
+
+Output the JSON object as the last content in your response.

@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 /**
  * session-start.js
- * SessionStart hook — outputs plugin version, skill count, and project
+ * PreInvocation hook — outputs plugin version, skill count, and project
  * context (pipeline resume, OpenSpec, git status, Jira cache, ship config)
- * into the system-reminder context.
+ * as an ephemeral message injected before the model is called.
+ *
+ * Antigravity has no SessionStart event; PreInvocation fires before EVERY
+ * model invocation, so this hook gates itself on `invocationNum` and only
+ * emits the banner on the first invocation of a conversation. Later
+ * invocations return `{}` (no injection).
  *
  * Lazy-loads ../scripts/lib/state.js and ../scripts/lib/git.js for project
  * context phases. Falls back gracefully if unavailable.
@@ -15,6 +20,38 @@
 'use strict';
 
 const fs   = require('node:fs');
+
+// ---------------------------------------------------------------------------
+// Invocation gate (PreInvocation fires every turn)
+// Stdin payload shape (official Antigravity PreInvocation contract):
+//   { invocationNum, initialNumSteps, conversationId, workspacePaths,
+//     transcriptPath, artifactDirectoryPath, modelName }
+// Only invocationNum === 1 (or a missing/unparseable payload, for graceful
+// degradation) emits the banner.
+// ---------------------------------------------------------------------------
+
+let stdinRaw = '';
+try {
+  stdinRaw = fs.readFileSync(0, 'utf8');
+} catch {
+  // Stdin unreadable — treat as first invocation (advisory-only contract).
+}
+
+let envelope = null;
+try {
+  if (stdinRaw) envelope = JSON.parse(stdinRaw);
+} catch {
+  // Non-JSON stdin — envelope stays null.
+}
+
+if (
+  envelope &&
+  typeof envelope.invocationNum === 'number' &&
+  envelope.invocationNum > 1
+) {
+  process.stdout.write('{}\n');
+  process.exit(0);
+}
 const os   = require('node:os');
 const path = require('node:path');
 
@@ -23,8 +60,10 @@ const { HOUR_MS, DAY_MS } = require('../scripts/lib/time-constants');
 const pluginRoot = path.resolve(__dirname, '..');
 
 // ---------------------------------------------------------------------------
-// SessionStart matcher source (Fixes #392 / R36)
-// Stdin payload shape (Antigravity Code SessionStart hook): { hook_event_name: 'SessionStart', source: 'startup' | 'clear' | 'compact' | 'resume', ... }
+// Resume-signal source (Fixes #392 / R36)
+// The official PreInvocation payload carries no `source` field. An optional
+// `source: 'startup' | 'clear' | 'compact' | 'resume'` is still honoured when
+// a host provides one (compatibility shim); otherwise 'startup' is assumed.
 // Source determines whether the execute-state line is emitted as the legacy
 // `Active execution:` (byte-stable for startup/clear; protects prompt-cache)
 // or as the new `Active execution (post-compact):` signal that execute-plan-sdlc
@@ -32,17 +71,8 @@ const pluginRoot = path.resolve(__dirname, '..');
 // ---------------------------------------------------------------------------
 
 let matcherSource = 'startup';
-try {
-  const stdinRaw = fs.readFileSync(0, 'utf8');
-  if (stdinRaw) {
-    const envelope = JSON.parse(stdinRaw);
-    if (envelope && typeof envelope.source === 'string') {
-      matcherSource = envelope.source;
-    }
-  }
-} catch {
-  // Stdin unreadable or non-JSON — keep default 'startup' (byte-stable
-  // legacy emission); graceful degradation per advisory-only contract.
+if (envelope && typeof envelope.source === 'string') {
+  matcherSource = envelope.source;
 }
 
 // ---------------------------------------------------------------------------

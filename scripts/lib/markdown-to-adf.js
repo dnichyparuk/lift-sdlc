@@ -263,7 +263,21 @@ function convert(markdown) {
 // CLI mode — read from stdin, write to stdout
 // ---------------------------------------------------------------------------
 
+const USAGE = [
+  'Usage: node markdown-to-adf.js --file <path>',
+  '       echo "# Hello" | node markdown-to-adf.js',
+  '',
+  'Converts markdown to Atlassian Document Format (ADF) v1 JSON.',
+  'Reads from --file <path> if given, otherwise from stdin.',
+  'Writes ADF JSON to stdout.',
+].join('\n') + '\n';
+
 if (require.main === module) {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+  }
+
   const { readFileSync } = require('node:fs');
 
   // --file <path> for file-based invocation (used by test runner)

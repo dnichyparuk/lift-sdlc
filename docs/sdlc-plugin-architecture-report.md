@@ -142,6 +142,7 @@ flowchart TD
 | [review-orchestrator](../agents/review-orchestrator.md) | Dimension Reviewers | Parallel `Agent` tool calls | Evaluates specific categories (e.g., `security-review`, `performance`). |
 | [/harden-sdlc](../skills/harden-sdlc/SKILL.md) | [harden-orchestrator](../agents/harden-orchestrator.md) | JSON Manifest file path + `Agent` tool | Generates proposals to strengthen guardrails and dimensions following a workflow failure. |
 | [/error-report-sdlc](../skills/error-report-sdlc/SKILL.md) | [error-report-orchestrator](../agents/error-report-orchestrator.md) | JSON Manifest file path + `Agent` tool | Forms issue descriptions using templates for upstream plugin crash reports. |
+| [/received-review-sdlc](../skills/received-review-sdlc/SKILL.md) | [received-review-orchestrator](../agents/received-review-orchestrator.md) | JSON Manifest file path + `Agent` tool | Reads the received-review manifest, fans out per-file verifier sub-agents, persists the verification report, and returns a bounded VERIFY_SUMMARY token. |
 
 ---
 
@@ -181,6 +182,7 @@ For agent dispatches, computational reasoning limits are assigned statically via
 | **Agent** | `plan-execution-validator` | `gemini-3.8-flash-high` | Fast deterministic graph circularity & collision check. |
 | **Agent** | `plan-generation-orchestrator` | `gemini-3.1-pro-high` | Deep multi-wave architectural plan drafting. |
 | **Agent** | `review-orchestrator` | `gemini-3.8-flash-low` | Diff-gathering coordination. |
+| **Agent** | `received-review-orchestrator` | `gemini-3.8-flash-low` | Fans out per-file verifier sub-agents and bounds the summary token. |
 | **Agent** | `wave-runner` | `gemini-3.8-flash-low` | Strict string parser & orchestrator loop. |
 | **Prompt** | `lane-static-structural` | `gemini-3.8-flash-low` | Basic structural verification checks. |
 | **Prompt** | `lens-requirements` | `gemini-3.8-flash-medium` | Balanced reasoning for deep requirements analysis. |

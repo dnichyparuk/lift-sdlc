@@ -47,12 +47,33 @@ Approve unless there are genuine blockers in your focus areas.
 
 ---
 
-## Output
+## Output Schema
 
-**Status:** Approved | Issues Found
+Return a single JSON object as your final output (no prose after the JSON block):
 
-**Issues (if any — list only execution blockers within risk focus areas):**
-- Task N: [specific issue] — [why this would cause execution failure]
+```json
+{
+  "lens": "risk",
+  "status": "Approved",
+  "issues": [
+    {
+      "taskRef": "Task 3",
+      "message": "File path '/Users/dev/src/auth.ts' is absolute, not relative to project root",
+      "blocking": true
+    }
+  ],
+  "recommendations": [
+    "Consider tightening Task 5's scope to the stated requirement"
+  ]
+}
+```
 
-**Recommendations (advisory, do not block approval):**
-- [optional suggestions within risk focus areas]
+**Field rules:**
+- `lens` — always `"risk"`
+- `status` — `"Issues Found"` iff `issues` is non-empty; otherwise `"Approved"`
+- `issues[].taskRef` — the task identifier the issue applies to (e.g., `"Task 3"`)
+- `issues[].message` — the specific issue and why it would cause execution failure, within risk focus areas only
+- `issues[].blocking` — always `true` (only execution blockers within risk focus areas belong in `issues`)
+- `recommendations` — advisory suggestions within risk focus areas; does not affect `status`
+
+Output the JSON object as the last content in your response.

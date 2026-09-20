@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const {
   clusterFindings,
@@ -18,7 +19,10 @@ const {
   resolveMatrixMode,
   formatDeferredLogEntry,
   buildResult,
+  parseArgs,
 } = require('./received-review-cluster');
+
+const SCRIPT = path.join(__dirname, 'received-review-cluster.js');
 
 function finding(overrides) {
   return {
@@ -329,4 +333,71 @@ test('buildResult: re-run guard suppresses a cluster already logged', () => {
   } finally {
     fs.unlinkSync(tmp);
   }
+});
+
+// ---------------------------------------------------------------------------
+// parseArgs
+// ---------------------------------------------------------------------------
+
+test('parseArgs: --input-file flag', () => {
+  assert.deepStrictEqual(
+    parseArgs(['--input-file', '/tmp/x.json']),
+    { inputFile: '/tmp/x.json', showHelp: false }
+  );
+});
+
+test('parseArgs: no flags -> inputFile is null, showHelp is false', () => {
+  assert.deepStrictEqual(parseArgs([]), { inputFile: null, showHelp: false });
+});
+
+test('parseArgs: --help sets showHelp', () => {
+  assert.deepStrictEqual(parseArgs(['--help']), { inputFile: null, showHelp: true });
+});
+
+test('parseArgs: -h sets showHelp', () => {
+  assert.deepStrictEqual(parseArgs(['-h']), { inputFile: null, showHelp: true });
+});
+
+// ---------------------------------------------------------------------------
+// CLI --help fast-path — must exit without reading stdin, even if stdin is
+// left open (never closed by the caller).
+// ---------------------------------------------------------------------------
+
+test('CLI: --help prints Usage and exits 0 without reading stdin', { timeout: 5000 }, () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '--help'], {
+    input: '',
+    encoding: 'utf8',
+    cwd: __dirname,
+    timeout: 5000,
+  });
+
+  assert.strictEqual(res.status, 0, res.stderr);
+  assert.match(res.stdout, /^Usage:/);
+});
+
+test('CLI: -h prints Usage and exits 0 without reading stdin', { timeout: 5000 }, () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '-h'], {
+    input: '',
+    encoding: 'utf8',
+    cwd: __dirname,
+    timeout: 5000,
+  });
+
+  assert.strictEqual(res.status, 0, res.stderr);
+  assert.match(res.stdout, /^Usage:/);
+});
+
+// ---------------------------------------------------------------------------
+// CLI — no input provided
+// ---------------------------------------------------------------------------
+
+test('CLI: no stdin content and no --input-file exits 1 with the "no input provided" message', () => {
+  const res = spawnSync(process.execPath, [SCRIPT], {
+    input: '',
+    encoding: 'utf8',
+    cwd: __dirname,
+  });
+
+  assert.strictEqual(res.status, 1);
+  assert.match(res.stderr, /no input provided/);
 });

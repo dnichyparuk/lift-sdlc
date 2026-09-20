@@ -102,7 +102,7 @@ If `openspec.present` is false, skip this entire block — no OpenSpec in this p
      > 3. **Use existing spec** — pass `--spec`, or re-invoke with `/plan-sdlc --from-openspec <name>` if `openspec.branchMatch` matched a change at stage `ready-for-plan`
      >
      > Select (1/2/3):
-     - On **1**: Stop plan-sdlc. Tell the user to run `/opsx:propose "<their description>"`. In plan mode, call ExitPlanMode first.
+     - On **1**: Stop plan-sdlc. Tell the user to run `/opsx:propose "<their description>"`. In plan mode, leave plan mode first via the host's mechanism (Antigravity has no plan-mode exit tool — simply end the turn).
      - On **2**: Skip the rest of the OpenSpec block. `openspecContext` remains empty. Continue with standard planning.
      - On **3**: Resolve the change per the next bullet, then go to "Read artifacts".
 - **Resolve the change** (when not already resolved above): If the user provided a spec file path into `openspec/changes/<name>/`, use `<name>`. Otherwise use `openspec.activeChanges` from the prepare output: if exactly one entry, use it; if multiple, prefer `openspec.branchMatch`; if still ambiguous, use `ask_question` listing the change names from `openspec.activeChanges`.
@@ -345,10 +345,10 @@ When `lensReviewers[i].promptTemplatePath` is null, skip that lens and log to `.
 
 **No `Workspace: "branch"` or workspace isolation on any lens reviewer dispatch** (forbidden per issues #370/#372; use `Workspace: "inherit"`).
 
-**Merge lens reviewer results (per iteration):**
-1. **Status**: `Approved` iff ALL lens reviewers returned `Approved`; otherwise `Issues Found`
-2. **Issues**: union of blocking issues across all lenses — dedup by `(taskRef, message-normalized-prefix)` (keep first occurrence)
-3. **Recommendations**: collect all recommendations, dedup by string prefix (first 60 chars)
+**Merge lens reviewer results (per iteration):** Each lens reviewer returns a JSON object (`lens`, `status`, `issues[]`, `recommendations[]` — see `./resources/lens-architecture-prompt.md` Output Schema).
+1. **Status**: `status = "Approved"` iff every lens reviewer's JSON `status` field is `"Approved"`; otherwise `"Issues Found"`
+2. **Issues**: union of each lens's `issues[]` array — dedup by `(taskRef, message-normalized-prefix)` (keep first occurrence)
+3. **Recommendations**: union of each lens's `recommendations[]` array — dedup by string prefix (first 60 chars)
 4. **Iteration counter**: increment by 1 per complete fan-out dispatch, regardless of how many lenses returned
 
 **For plans with <5 tasks — Single reviewer (status quo):** Dispatch one reviewer with `{LENS}=all` using `./resources/plan-reviewer-prompt.md` directly (same model acceptable). Status quo behavior preserved.
@@ -404,7 +404,7 @@ The script reads `$TMPDIR/sdlc-context-stats.json` and emits a `/compact` adviso
 >   ship    — run the full pipeline: execute → commit → review → version → PR (/ship-sdlc)
 >   execute — execute the plan only (/execute-plan-sdlc)
 
-Then call ExitPlanMode. Do NOT invoke execute-plan-sdlc or ship-sdlc in this turn — they run after the user accepts in the next turn.
+Then leave plan mode via the host's mechanism (Antigravity has no plan-mode exit tool — simply end the turn). Do NOT invoke execute-plan-sdlc or ship-sdlc in this turn — they run after the user accepts in the next turn.
 
 **Normal mode:** Announce the plan path, then present the Workflow Continuation menu (see below). Prepend any advisory output from the wrapper above the menu's `ship` / `execute` / `done` lines.
 

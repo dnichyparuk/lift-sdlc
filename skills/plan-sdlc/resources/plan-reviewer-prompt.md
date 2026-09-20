@@ -75,15 +75,36 @@ invoke_subagent:
 
         Approve unless there are genuine execution blockers within your focus areas.
 
-        ## Output
+        ## Output Schema
 
-        **Status:** Approved | Issues Found
+        Return a single JSON object as your final output (no prose after the JSON block):
 
-        **Issues (if any — list only execution blockers within your focus areas):**
-        - Task N: [specific issue] — [why this would cause execution failure]
+        ```json
+        {
+          "lens": "all",
+          "status": "Approved",
+          "issues": [
+            {
+              "taskRef": "Task 3",
+              "message": "Task description is too vague to implement without guessing",
+              "blocking": true
+            }
+          ],
+          "recommendations": [
+            "Consider adding more detail to Task 5's edge cases"
+          ]
+        }
+        ```
 
-        **Recommendations (advisory, do not block approval):**
-        - [optional suggestions that improve the plan but are not blocking]
+        **Field rules:**
+        - `lens` — always `"all"`
+        - `status` — `"Issues Found"` iff `issues` is non-empty; otherwise `"Approved"`
+        - `issues[].taskRef` — the task identifier the issue applies to (e.g., `"Task 3"`)
+        - `issues[].message` — the specific issue and why it would cause execution failure, within your focus areas
+        - `issues[].blocking` — always `true` (only execution blockers within your focus areas belong in `issues`)
+        - `recommendations` — advisory suggestions that improve the plan but are not blocking; does not affect `status`
+
+        Output the JSON object as the last content in your response.
 ```
 
 ## Handling Reviewer Output

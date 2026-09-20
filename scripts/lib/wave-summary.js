@@ -10,6 +10,8 @@
  * No I/O. Zero npm dependencies.
  */
 
+const { extractFinalLineToken } = require('./token-line');
+
 /**
  * Normalize a task ID to its canonical numeric form (R-IDNORM).
  * Strips a single leading 'T' or 't' and trims whitespace.
@@ -57,6 +59,11 @@ const VALID_WAVE_STATUSES = new Set([
  */
 function validateTaskEntry(task) {
   const violations = [];
+
+  if (typeof task !== 'object' || task === null) {
+    violations.push('task is not an object');
+    return violations;
+  }
 
   if (typeof task.id !== 'string' || task.id.length === 0) {
     violations.push('task missing required string field: id');
@@ -132,20 +139,8 @@ function parseWaveSummary(text, dispatched = []) {
   }
 
   // Find WAVE_SUMMARY token — must be on the final non-empty line
-  const lines = text.split('\n').map(l => l.trimEnd());
-  let tokenLine = null;
-
-  // Scan from end, skip blank lines, find first non-blank line
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim();
-    if (line.length === 0) continue;
-    if (line.startsWith('WAVE_SUMMARY:')) {
-      tokenLine = line;
-    }
-    break; // only check the final non-blank line
-  }
-
-  if (!tokenLine) {
+  const token = extractFinalLineToken(text, 'WAVE_SUMMARY:');
+  if (!token.found) {
     result.violations.push('WAVE_SUMMARY token not found as final non-blank line of output');
     result.missingIds = [...dispatched];
     return result;
@@ -154,7 +149,7 @@ function parseWaveSummary(text, dispatched = []) {
   result.tokenFound = true;
 
   // Extract JSON payload
-  const jsonStr = tokenLine.slice('WAVE_SUMMARY:'.length).trim();
+  const jsonStr = token.payload;
 
   let parsed;
   try {
@@ -194,7 +189,7 @@ function parseWaveSummary(text, dispatched = []) {
 
   // Extract returned IDs
   result.returned = parsed.tasks
-    .filter(t => typeof t.id === 'string' && t.id.length > 0)
+    .filter(t => typeof t === 'object' && t !== null && typeof t.id === 'string' && t.id.length > 0)
     .map(t => t.id);
 
   // Compute missing and extra IDs relative to dispatched set.
@@ -225,4 +220,4 @@ function parseWaveSummary(text, dispatched = []) {
   return result;
 }
 
-module.exports = { parseWaveSummary, normalizeTaskId, VALID_ERROR_CODES, VALID_STATUSES, VALID_WAVE_STATUSES };
+module.exports = { parseWaveSummary, normalizeTaskId, extractFinalLineToken, VALID_ERROR_CODES, VALID_STATUSES, VALID_WAVE_STATUSES };

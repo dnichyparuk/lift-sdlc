@@ -28,6 +28,8 @@ test('stop-state-save: exits 0 with decision: allow when no pipeline state exist
 
 test('stop-state-save: saves compact recovery for active custom pipeline', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stop-hook-test-'));
+  const prevOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
+  process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
   try {
     const branch = exec('git branch --show-current');
     if (!branch) return; // Skip if no current branch in test env
@@ -59,6 +61,11 @@ test('stop-state-save: saves compact recovery for active custom pipeline', () =>
       assert.strictEqual(rec.flags.auto, true);
     }
   } finally {
+    if (prevOverride !== undefined) {
+      process.env.SDLC_STATE_DIR_OVERRIDE = prevOverride;
+    } else {
+      delete process.env.SDLC_STATE_DIR_OVERRIDE;
+    }
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

@@ -38,14 +38,40 @@ const LIB  = path.join(__dirname, '..', 'lib');
 
 const { parseWaveSummary } = require(path.join(LIB, 'wave-summary'));
 const { writeJsonLine }    = require(path.join(LIB, 'output'));
+const { readStdin }        = require(path.join(LIB, 'stdin'));
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 
+// Usage text — kept in sync with the flags `parseArgs` accepts below and the
+// exit codes documented in the file header.
+const USAGE = [
+  'Usage:',
+  '  <producer of wave-runner text> | node parse-wave.js [--dispatched-ids <json-array>]',
+  '',
+  'Parses a wave-runner Agent\'s WAVE_SUMMARY token (read from stdin) via',
+  'parseWaveSummary().',
+  '',
+  'Options:',
+  '  --dispatched-ids <json-array>   JSON array of task IDs expected in the summary',
+  '  --help, -h                      show this help and exit',
+  '',
+  'Output (stdout, single JSON line):',
+  '  Success: {"schemaOk":bool,"dispatched":[...],"returned":[...],',
+  '            "missingIds":[...],"extraIds":[...],"parsed":object|null,',
+  '            "violations":[...],"tokenFound":bool}',
+  '  Usage error: {"schemaOk":false,"error":"<message>"}',
+  '',
+  'Exit codes:',
+  '  0 = parse ran (schema violations are reported in the JSON, not via exit code)',
+  '  1 = user-facing validation error (--dispatched-ids present but not valid JSON array)',
+  '  2 = unexpected script crash',
+].join('\n') + '\n';
+
 /**
  * @param {string[]} [argv]
- * @returns {{ dispatchedIdsRaw: string|null, showHelp?: boolean }}
+ * @returns {{ dispatchedIdsRaw: string|null, showHelp: boolean }}
  */
 function parseArgs(argv = process.argv) {
   const args = Array.isArray(argv)
@@ -62,40 +88,7 @@ function parseArgs(argv = process.argv) {
     }
   }
 
-  const ret = { dispatchedIdsRaw };
-  if (showHelp) ret.showHelp = true;
-  return ret;
-}
-
-// ---------------------------------------------------------------------------
-// stdin helper
-// ---------------------------------------------------------------------------
-
-/**
- * Read all of stdin as a UTF-8 string.
- * @returns {Promise<string>}
- */
-function readStdin(stream = process.stdin) {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    stream.setEncoding('utf8');
-
-    const onData = (chunk) => { data += chunk; };
-    const onEnd = () => settle(() => resolve(data));
-    const onError = (err) => settle(() => reject(err));
-
-    function settle(action) {
-      stream.removeListener('data', onData);
-      stream.removeListener('end', onEnd);
-      stream.removeListener('error', onError);
-      action();
-    }
-
-    stream.on('data', onData);
-    stream.on('end', onEnd);
-    stream.on('error', onError);
-    stream.resume();
-  });
+  return { dispatchedIdsRaw, showHelp };
 }
 
 // ---------------------------------------------------------------------------
@@ -130,21 +123,6 @@ function runParseWave(text, dispatchedIdsRaw, { parseWaveSummaryFn = parseWaveSu
   const result = parseWaveSummaryFn(text, dispatched);
   return { json: result, exitCode: 0 };
 }
-
-const USAGE = `Usage:
-  <producer of wave-runner text> | node parse-wave.js [--dispatched-ids <json-array>]
-
-Parses a wave-runner Agent's WAVE_SUMMARY token from piped stdin.
-
-Options:
-  --dispatched-ids <json-array>  JSON array of dispatched task IDs to validate against
-  --help, -h                     Show this help message and exit
-
-Exit codes:
-  0 = parse ran (schema violations reported in JSON)
-  1 = user-facing validation error (--dispatched-ids invalid JSON or stdin is a TTY)
-  2 = unexpected script crash
-`;
 
 async function main(argv = process.argv, deps = {}) {
   const stdout = deps.stdout || process.stdout;

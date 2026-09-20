@@ -138,10 +138,28 @@ function classifyLogs(text) {
 // CLI entry
 // ---------------------------------------------------------------------------
 
+// Usage text — kept in sync with the flags `main` accepts below and the
+// stdout shape documented in the file header.
+const USAGE = [
+  'Usage:',
+  '  echo "$LOG" | node verify-pipeline-sdlc-classify.js',
+  '  node verify-pipeline-sdlc-classify.js --logs-file <path>',
+  '',
+  'Options:',
+  '  --logs-file <path>   read log text from a file instead of stdin',
+  '  --help, -h           show this help and exit',
+  '',
+  'Stdout: single JSON line describing the classified category and signals.',
+].join('\n') + '\n';
+
 function main(argv) {
   let logsFile = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--logs-file') logsFile = argv[++i];
+    else if (argv[i] === '--help' || argv[i] === '-h') {
+      process.stdout.write(USAGE);
+      return;
+    }
   }
   let text = '';
   if (logsFile) {

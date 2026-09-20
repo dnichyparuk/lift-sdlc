@@ -4,82 +4,81 @@ const test   = require('node:test');
 const assert = require('node:assert/strict');
 const path   = require('node:path');
 const { spawnSync, spawn } = require('node:child_process');
-const { PassThrough } = require('node:stream');
 
-const { parseArgs, runParseWave, readStdin } = require('./parse-wave');
+const { parseArgs, runParseVerify } = require('./parse-verify');
 
-const SCRIPT = path.join(__dirname, 'parse-wave.js');
+const SCRIPT = path.join(__dirname, 'parse-verify.js');
 
 test('parseArgs: --dispatched-ids flag', () => {
   assert.deepEqual(
-    parseArgs(['node', 'parse-wave.js', '--dispatched-ids', '["1","2"]']),
-    { dispatchedIdsRaw: '["1","2"]', showHelp: false }
+    parseArgs(['node', 'parse-verify.js', '--dispatched-ids', '["a","b"]']),
+    { dispatchedIdsRaw: '["a","b"]', showHelp: false }
   );
 });
 
 test('parseArgs: no flags -> dispatchedIdsRaw is null', () => {
-  assert.deepEqual(parseArgs(['node', 'parse-wave.js']), { dispatchedIdsRaw: null, showHelp: false });
+  assert.deepEqual(parseArgs(['node', 'parse-verify.js']), { dispatchedIdsRaw: null, showHelp: false });
 });
 
 test('parseArgs: --help sets showHelp', () => {
   assert.deepEqual(
-    parseArgs(['node', 'parse-wave.js', '--help']),
+    parseArgs(['node', 'parse-verify.js', '--help']),
     { dispatchedIdsRaw: null, showHelp: true }
   );
 });
 
 test('parseArgs: -h sets showHelp', () => {
   assert.deepEqual(
-    parseArgs(['node', 'parse-wave.js', '-h']),
+    parseArgs(['node', 'parse-verify.js', '-h']),
     { dispatchedIdsRaw: null, showHelp: true }
   );
 });
 
-test('runParseWave: success path — delegates to parseWaveSummary with parsed dispatched-ids array', () => {
+test('runParseVerify: success path — delegates to parseVerifySummary with parsed dispatched-ids array', () => {
   let calledWith = null;
-  const parseWaveSummaryFn = (text, dispatched) => {
+  const parseVerifySummaryFn = (text, dispatched) => {
     calledWith = { text, dispatched };
-    return { schemaOk: true, dispatched, returned: ['1', '2'], missingIds: [], extraIds: [], parsed: {}, violations: [], tokenFound: true };
+    return { schemaOk: true, dispatched, returned: ['a', 'b'], missingIds: [], extraIds: [], parsed: {}, violations: [], tokenFound: true };
   };
 
-  const { json, exitCode } = runParseWave('WAVE_SUMMARY: {}', '["1","2"]', { parseWaveSummaryFn });
+  const { json, exitCode } = runParseVerify('VERIFY_SUMMARY: {}', '["a","b"]', { parseVerifySummaryFn });
 
-  assert.deepEqual(calledWith, { text: 'WAVE_SUMMARY: {}', dispatched: ['1', '2'] });
+  assert.deepEqual(calledWith, { text: 'VERIFY_SUMMARY: {}', dispatched: ['a', 'b'] });
   assert.equal(exitCode, 0);
   assert.equal(json.schemaOk, true);
 });
 
-test('runParseWave: success path — no --dispatched-ids defaults to an empty array', () => {
+test('runParseVerify: success path — no --dispatched-ids defaults to an empty array', () => {
   let calledWith = null;
-  const parseWaveSummaryFn = (text, dispatched) => {
+  const parseVerifySummaryFn = (text, dispatched) => {
     calledWith = { text, dispatched };
     return { schemaOk: true, dispatched: [], returned: [], missingIds: [], extraIds: [], parsed: {}, violations: [], tokenFound: true };
   };
 
-  const { exitCode } = runParseWave('WAVE_SUMMARY: {}', null, { parseWaveSummaryFn });
+  const { exitCode } = runParseVerify('VERIFY_SUMMARY: {}', null, { parseVerifySummaryFn });
 
   assert.deepEqual(calledWith.dispatched, []);
   assert.equal(exitCode, 0);
 });
 
-test('runParseWave: error path — --dispatched-ids is not valid JSON', () => {
-  const parseWaveSummaryFn = () => {
+test('runParseVerify: error path — --dispatched-ids is not valid JSON', () => {
+  const parseVerifySummaryFn = () => {
     throw new Error('should not be called');
   };
 
-  const { json, exitCode } = runParseWave('WAVE_SUMMARY: {}', 'not-json', { parseWaveSummaryFn });
+  const { json, exitCode } = runParseVerify('VERIFY_SUMMARY: {}', 'not-json', { parseVerifySummaryFn });
 
   assert.equal(exitCode, 1);
   assert.equal(json.schemaOk, false);
   assert.match(json.error, /not valid JSON/);
 });
 
-test('runParseWave: error path — --dispatched-ids is valid JSON but not an array', () => {
-  const parseWaveSummaryFn = () => {
+test('runParseVerify: error path — --dispatched-ids is valid JSON but not an array', () => {
+  const parseVerifySummaryFn = () => {
     throw new Error('should not be called');
   };
 
-  const { json, exitCode } = runParseWave('WAVE_SUMMARY: {}', '{"a":1}', { parseWaveSummaryFn });
+  const { json, exitCode } = runParseVerify('VERIFY_SUMMARY: {}', '{"a":1}', { parseVerifySummaryFn });
 
   assert.equal(exitCode, 1);
   assert.equal(json.schemaOk, false);
@@ -87,14 +86,14 @@ test('runParseWave: error path — --dispatched-ids is valid JSON but not an arr
 });
 
 // ---------------------------------------------------------------------------
-// CLI integration — verifies stdin is read via process.stdin (not /dev/stdin)
+// CLI integration — verifies stdin is read and a JSON line is written
 // ---------------------------------------------------------------------------
 
-test('CLI: reads wave-runner text from stdin and writes a JSON line to stdout', () => {
-  const waveSummaryText = 'WAVE_SUMMARY: {"wave":1,"status":"completed","tasks":[{"id":"1","status":"DONE","filesTouched":[]}],"escalationsUsed":0}';
+test('CLI: reads verifier text from stdin and writes a JSON line to stdout', () => {
+  const verifySummaryText = 'VERIFY_SUMMARY: {"status":"completed","reportFile":"report.md","findings":[{"id":"a","verificationStatus":"confirmed","evidence":[],"rippleEffects":[],"reasoning":"ok"}]}';
 
-  const res = spawnSync(process.execPath, [SCRIPT, '--dispatched-ids', '["1"]'], {
-    input: waveSummaryText,
+  const res = spawnSync(process.execPath, [SCRIPT, '--dispatched-ids', '["a"]'], {
+    input: verifySummaryText,
     encoding: 'utf8',
   });
 
@@ -107,7 +106,7 @@ test('CLI: reads wave-runner text from stdin and writes a JSON line to stdout', 
 
 test('CLI: exits 1 with a JSON error when --dispatched-ids is malformed', () => {
   const res = spawnSync(process.execPath, [SCRIPT, '--dispatched-ids', 'nope'], {
-    input: 'WAVE_SUMMARY: {}',
+    input: 'VERIFY_SUMMARY: {}',
     encoding: 'utf8',
   });
 
@@ -158,52 +157,3 @@ test('CLI: -h prints Usage and exits 0 without reading stdin (stdin left open)',
   assert.equal(res.code, 0);
   assert.match(res.stdout, /^Usage:/);
 });
-
-// ---------------------------------------------------------------------------
-// readStdin — listener hygiene
-// ---------------------------------------------------------------------------
-
-test('readStdin: removes its data/end/error listeners from the stream on settle', async () => {
-  const stream = new PassThrough();
-  const promise = readStdin(stream);
-  stream.end('WAVE_SUMMARY: {}');
-  const result = await promise;
-  assert.equal(result, 'WAVE_SUMMARY: {}');
-  assert.equal(stream.listenerCount('data'), 0);
-  assert.equal(stream.listenerCount('end'), 0);
-  assert.equal(stream.listenerCount('error'), 0);
-});
-
-test('CLI: exits 0 and prints usage on --help without waiting for stdin', () => {
-  const res = spawnSync(process.execPath, [SCRIPT, '--help'], {
-    encoding: 'utf8',
-    timeout: 2000,
-  });
-  assert.equal(res.status, 0);
-  assert.match(res.stdout, /Usage:/);
-  assert.match(res.stdout, /--dispatched-ids/);
-});
-
-test('CLI: exits 0 and prints usage on -h without waiting for stdin', () => {
-  const res = spawnSync(process.execPath, [SCRIPT, '-h'], {
-    encoding: 'utf8',
-    timeout: 2000,
-  });
-  assert.equal(res.status, 0);
-  assert.match(res.stdout, /Usage:/);
-});
-
-test('main: exits 1 when stdin.isTTY is true', async () => {
-  const { main } = require('./parse-wave');
-  let exitCode = null;
-  let stderrOutput = '';
-  await main([], {
-    stdin: { isTTY: true },
-    stdout: { write: () => {} },
-    stderr: { write: (msg) => { stderrOutput += msg; } },
-    exit: (code) => { exitCode = code; },
-  });
-  assert.equal(exitCode, 1);
-  assert.match(stderrOutput, /expects input piped via stdin/);
-});
-

@@ -1,10 +1,20 @@
 #!/usr/bin/env node
 /**
  * @file ci/validate-plugin-schema.js
- * @description Wraps `agy plugin validate <plugin-dir>` and adds a targeted
- *   frontmatter assertion for the two read-only self-learning agents
- *   (`agents/learn-synthesis-orchestrator.md`, `agents/learn-review-only.md`)
- *   that no schema tool checks for us.
+ * @description Wraps `agy plugin validate <plugin-dir>` and adds two
+ *   hand-rolled assertions that no schema tool checks for us:
+ *     1. a frontmatter assertion for the two read-only self-learning agents
+ *        (`agents/learn-synthesis-orchestrator.md`, `agents/learn-review-only.md`);
+ *     2. a structural check of `hooks.json` against the official Antigravity
+ *        hooks contract (https://antigravity.google/docs/hooks): `PreToolUse`
+ *        and `PostToolUse` arrays hold `{ matcher?, hooks: [handler] }`
+ *        wrapper objects, while `PreInvocation`, `PostInvocation` and `Stop`
+ *        arrays hold handler objects DIRECTLY (`{ type?, command, timeout? }`).
+ *        Wrapping a non-tool event's handler in `{ hooks: [...] }` makes the
+ *        CLI reject the WHOLE plugin hooks.json at load time
+ *        (`hooks.go: Failed to parse hooks for plugin <name>: invalid hook
+ *        "<group>": command hook must specify 'command'`) while
+ *        `agy plugin validate` still reports `✔ hooks : N processed`.
  *
  *   HONESTY NOTE (do not remove, do not let a future reader mistake a green
  *   run for schema conformance): `agy plugin validate` is a DISCOVERY
@@ -33,10 +43,12 @@
  *   CI" means by this repo's own existing standard for the phrase.
  *
  * @usage node scripts/ci/validate-plugin-schema.js [--plugin-dir <path>]
- * @exit 0 valid (schema + tool-boundary), or `agy` not installed (schema
- *          check skipped, tool-boundary assertion still runs and must pass)
- * @exit 1 agy-reported schema violation, or either read-only agent's
- *          `tools:` value is not exactly `view_file`
+ * @exit 0 valid (schema + tool-boundary + hooks shape), or `agy` not
+ *          installed (schema check skipped, the two hand-rolled assertions
+ *          still run and must pass)
+ * @exit 1 agy-reported schema violation, either read-only agent's `tools:`
+ *          value is not exactly `view_file`, or hooks.json violates the
+ *          official event-array shapes
  * @exit 2 crash
  */
 'use strict';
@@ -146,6 +158,130 @@ function checkToolBoundary(pluginDir) {
 }
 
 // ---------------------------------------------------------------------------
+// hooks.json shape assertion (official contract — see header)
+// ---------------------------------------------------------------------------
+
+/** Events whose array elements are `{ matcher?, hooks: [handler, ...] }` wrappers. */
+const MATCHER_EVENTS = ['PreToolUse', 'PostToolUse'];
+/** Events whose array elements are handler objects directly (matcher ignored). */
+const DIRECT_EVENTS = ['PreInvocation', 'PostInvocation', 'Stop'];
+const ALL_EVENTS = [...MATCHER_EVENTS, ...DIRECT_EVENTS];
+
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * Validate one handler object (`{ type?, command, timeout? }`).
+ * @param {*} handler
+ * @param {string} where  human-readable location for the message
+ * @returns {string[]} reasons (empty when valid)
+ */
+function checkHandler(handler, where) {
+  const reasons = [];
+  if (!isPlainObject(handler)) {
+    reasons.push(`${where}: handler must be an object`);
+    return reasons;
+  }
+  if (typeof handler.command !== 'string' || handler.command.trim() === '') {
+    reasons.push(`${where}: handler must specify a non-empty string "command"`);
+  }
+  if (handler.type !== undefined && handler.type !== 'command') {
+    reasons.push(`${where}: handler "type" must be "command" when present (got ${JSON.stringify(handler.type)})`);
+  }
+  if (handler.timeout !== undefined && !Number.isInteger(handler.timeout)) {
+    reasons.push(`${where}: handler "timeout" must be an integer (seconds) when present`);
+  }
+  return reasons;
+}
+
+/**
+ * Pure structural check of a parsed hooks.json document.
+ * @param {*} doc  parsed JSON
+ * @returns {string[]} reasons (empty when the document conforms)
+ */
+function validateHooksDocument(doc) {
+  const reasons = [];
+  if (!isPlainObject(doc)) {
+    return ['top level must be an object mapping hook-group names to event maps'];
+  }
+  for (const [group, spec] of Object.entries(doc)) {
+    if (!isPlainObject(spec)) {
+      reasons.push(`"${group}": must be an object of event arrays`);
+      continue;
+    }
+    for (const [key, value] of Object.entries(spec)) {
+      if (key === 'enabled') {
+        if (typeof value !== 'boolean') reasons.push(`"${group}".enabled: must be a boolean`);
+        continue;
+      }
+      if (!ALL_EVENTS.includes(key)) {
+        reasons.push(`"${group}": unknown event "${key}" (supported: ${ALL_EVENTS.join(', ')})`);
+        continue;
+      }
+      if (!Array.isArray(value)) {
+        reasons.push(`"${group}".${key}: must be an array`);
+        continue;
+      }
+      value.forEach((el, i) => {
+        const where = `"${group}".${key}[${i}]`;
+        if (MATCHER_EVENTS.includes(key)) {
+          if (!isPlainObject(el)) { reasons.push(`${where}: must be a { matcher?, hooks: [...] } object`); return; }
+          if (el.command !== undefined) {
+            reasons.push(`${where}: ${key} elements must wrap handlers in "hooks": [...] — a bare handler here is not read by the CLI`);
+          }
+          if (el.matcher !== undefined && typeof el.matcher !== 'string') {
+            reasons.push(`${where}: "matcher" must be a string`);
+          }
+          if (!Array.isArray(el.hooks) || el.hooks.length === 0) {
+            reasons.push(`${where}: must contain a non-empty "hooks" array`);
+            return;
+          }
+          el.hooks.forEach((h, j) => reasons.push(...checkHandler(h, `${where}.hooks[${j}]`)));
+        } else {
+          if (!isPlainObject(el)) { reasons.push(`${where}: must be a handler object`); return; }
+          if (el.hooks !== undefined || el.matcher !== undefined) {
+            reasons.push(
+              `${where}: ${key} elements must be handler objects DIRECTLY ({ "command": ... }); ` +
+              'a { "matcher"/"hooks": [...] } wrapper here makes the CLI reject the whole plugin hooks.json ' +
+              '("command hook must specify \'command\'")'
+            );
+            return;
+          }
+          reasons.push(...checkHandler(el, where));
+        }
+      });
+    }
+  }
+  return reasons;
+}
+
+/**
+ * Read `<pluginDir>/hooks.json` (optional component — absent file is not a
+ * violation) and validate its shape against the official contract.
+ * @param {string} pluginDir
+ * @returns {Array<{file: string, reason: string}>}
+ */
+function checkHooksShape(pluginDir) {
+  const rel = 'hooks.json';
+  const abs = path.join(pluginDir, rel);
+  if (!fs.existsSync(abs)) return [];
+  let text;
+  try {
+    text = fs.readFileSync(abs, 'utf8');
+  } catch (err) {
+    return [{ file: rel, reason: `cannot read file: ${err.message}` }];
+  }
+  let doc;
+  try {
+    doc = JSON.parse(text);
+  } catch (err) {
+    return [{ file: rel, reason: `invalid JSON: ${err.message}` }];
+  }
+  return validateHooksDocument(doc).map((reason) => ({ file: rel, reason }));
+}
+
+// ---------------------------------------------------------------------------
 // agy wrapper
 // ---------------------------------------------------------------------------
 
@@ -197,20 +333,24 @@ function runAgyValidate(spawnFn, pluginDir) {
  * drive every branch (agy missing, agy schema error, agy pass, tool-boundary
  * failure, combinations thereof) without spawning a real process.
  *
- * @param {{toolViolations: Array<{file: string, reason: string}>, agyResult: object}} input
+ * @param {{toolViolations: Array<{file: string, reason: string}>, hooksViolations?: Array<{file: string, reason: string}>, agyResult: object}} input
  * @returns {{exitCode: 0|1, stdout: string[], stderr: string[]}}
  */
-function evaluate({ toolViolations, agyResult }) {
+function evaluate({ toolViolations, hooksViolations = [], agyResult }) {
   const stdout = [];
   const stderr = [];
 
   for (const v of toolViolations) {
     stderr.push(`tools-boundary: ${v.file}: ${v.reason}`);
   }
+  for (const v of hooksViolations) {
+    stderr.push(`hooks-shape: ${v.file}: ${v.reason}`);
+  }
+  const localFailures = toolViolations.length + hooksViolations.length;
 
   if (!agyResult.installed) {
     stderr.push(SKIP_NOTE);
-    return { exitCode: toolViolations.length > 0 ? 1 : 0, stdout, stderr };
+    return { exitCode: localFailures > 0 ? 1 : 0, stdout, stderr };
   }
 
   // Surface agy's own output (the "✔ agents: N processed" / "✔ hooks: N
@@ -225,7 +365,7 @@ function evaluate({ toolViolations, agyResult }) {
     );
   }
 
-  const exitCode = !schemaOk || toolViolations.length > 0 ? 1 : 0;
+  const exitCode = !schemaOk || localFailures > 0 ? 1 : 0;
   return { exitCode, stdout, stderr };
 }
 
@@ -246,10 +386,11 @@ function main() {
   // Runs unconditionally — even when `agy` itself is absent (see header and
   // Contract: "tool-boundary assertion still runs").
   const toolViolations = checkToolBoundary(pluginDir);
+  const hooksViolations = checkHooksShape(pluginDir);
 
   const agyResult = runAgyValidate(spawnSync, pluginDir);
 
-  const { exitCode, stdout, stderr } = evaluate({ toolViolations, agyResult });
+  const { exitCode, stdout, stderr } = evaluate({ toolViolations, hooksViolations, agyResult });
   writeLines(process.stdout, stdout);
   writeLines(process.stderr, stderr);
 
@@ -261,6 +402,10 @@ module.exports = {
   extractFrontmatter,
   readToolsValue,
   checkToolBoundary,
+  checkHooksShape,
+  validateHooksDocument,
+  MATCHER_EVENTS,
+  DIRECT_EVENTS,
   runAgyValidate,
   evaluate,
   REQUIRED_TOOLS_VALUE,

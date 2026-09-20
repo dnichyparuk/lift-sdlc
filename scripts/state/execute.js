@@ -13,13 +13,17 @@
  *   node execute-state.js task-done   --wave <n> --task <id> --name <name> --complexity <c> --risk <r> --files-changed <json>
  *   node execute-state.js task-fail   --wave <n> --task <id> --name <name> --complexity <c> --risk <r> --error <text> [--skipped-dependency]
  *   node execute-state.js context     --data <json>
- *   node execute-state.js read        [--branch <b>]
+ *   node execute-state.js read        [--branch <b>]   (aliases: show, status)
  *   node execute-state.js cleanup     [--branch <b>]
  *   node execute-state.js gc          [--ttl-days <N>] [--dry-run]
- *   node execute-state.js summarize-prior-wave-context [--run-id <id>] [--max-files <n>] [--max-decisions <n>] [--max-interfaces <n>]
+ *   node execute-state.js summarize-prior-wave-context [--max-files <n>] [--max-decisions <n>] [--max-interfaces <n>]
  *   node execute-state.js wave-split --wave <n> --dispatched <json-id-array> [--missing-ids <json-id-array>] [--split-depth <n>] [--max-split-depth <n>]
- *   node execute-state.js verify-completeness --run-id <id>
+ *   node execute-state.js verify-completeness
  *   node execute-state.js detect-resume --branch <name>
+ *
+ * Every subcommand also accepts `--branch <b>`, `--state-file <path>`, and
+ * `--help`/`-h`. Run with `--help`, `-h`, `help`, or no arguments to print
+ * this usage (see the `USAGE` constant near the bottom of this file).
  *
  * Exit codes:
  *   0 = success
@@ -44,91 +48,188 @@ const {
 
 const { writeTaskFactSheet, taskFactSheetPath } = require(path.join(LIB, 'task-factsheet'));
 const { splitWave, MaxSplitDepthExceededError } = require(path.join(LIB, 'wave-split'));
+const { parsePlanTasks } = require(path.join(LIB, 'ship-todos'));
 
 // ---------------------------------------------------------------------------
 // Arg parsing
 // ---------------------------------------------------------------------------
 
+// Per-subcommand accepted flags (F-execute-subcommand-cli-hardening-3/-12).
+// Verified against each `cmd*` handler's `opts.*` reads on main. `--preset`
+// is deliberately absent everywhere — it is hard-rejected for every
+// subcommand regardless of this table (see the `--preset` branch below).
+const SUBCOMMAND_FLAGS = {
+  init: ['--branch', '--quality', '--total-tasks', '--planned-task-ids', '--plan-path', '--plan-hash'],
+  'wave-start': ['--wave', '--tasks-json', '--run-id'],
+  'wave-done': ['--wave'],
+  'wave-fail': ['--wave'],
+  'wave-committed': ['--wave', '--sha'],
+  'task-done': ['--wave', '--task', '--name', '--complexity', '--risk', '--files-changed'],
+  'task-fail': ['--wave', '--task', '--name', '--complexity', '--risk', '--error', '--skipped-dependency'],
+  context: ['--data'],
+  read: [],
+  show: [],
+  status: [],
+  cleanup: [],
+  gc: ['--ttl-days', '--dry-run'],
+  'summarize-prior-wave-context': ['--max-files', '--max-decisions', '--max-interfaces'],
+  'wave-split': ['--wave', '--dispatched', '--missing-ids', '--split-depth', '--max-split-depth'],
+  'verify-completeness': [],
+  'detect-resume': [],
+};
+
+// Flags accepted on every subcommand, in addition to SUBCOMMAND_FLAGS.
+const GLOBAL_FLAGS = ['--branch', '--state-file', '--help', '-h'];
+
+/**
+ * Require a value token to follow the current flag. Exits 2 with the
+ * documented "requires a value" message when the flag is the last token
+ * (F-execute-subcommand-cli-hardening-10: `args[i + 1] !== undefined`, not
+ * truthy, so a deliberate `--sha ""` is not mistaken for a missing value).
+ */
+function requireValue(flag, args, i) {
+  if (args[i + 1] === undefined) {
+    process.stderr.write(`Error: ${flag} requires a value\n`);
+    process.exit(2);
+  }
+}
+
 function parseArgs(argv) {
   const args = argv.slice(2);
-  const result = { subcommand: args[0] || null };
+  const subcommand = args[0] || null;
+  const result = { subcommand, showHelp: false };
+
+  if (args.length === 0 || subcommand === '--help' || subcommand === '-h' || subcommand === 'help') {
+    result.showHelp = true;
+    return result;
+  }
+
+  // Flags allowed for this subcommand (unknown subcommands accept only globals).
+  const allowed = new Set([...(SUBCOMMAND_FLAGS[subcommand] || []), ...GLOBAL_FLAGS]);
 
   for (let i = 1; i < args.length; i++) {
     const a = args[i];
-    if (a === '--branch' && args[i + 1]) {
-      result.branch = args[++i];
-    } else if (a === '--quality' && args[i + 1]) {
-      result.quality = args[++i];
+
+    if (a === '--help' || a === '-h') {
+      // showHelp short-circuits before any required-flag validation — see
+      // the main dispatch below, which checks it before calling into any
+      // cmd* handler.
+      result.showHelp = true;
+      break;
     } else if (a === '--preset') {
       // Hard-removed (#190): --preset renamed to --quality. Consume the
       // following value (if any) and surface a clear error so callers update
       // their invocations. The error is written to stderr and exits non-zero;
-      // the orchestrator surfaces it in the agent prompt.
-      if (args[i + 1] && !args[i + 1].startsWith('--')) i++;
+      // the orchestrator surfaces it in the agent prompt. Accepted for every
+      // subcommand (not gated by `allowed`) so the rejection message always
+      // wins over a generic "unknown flag" error.
+      if (args[i + 1] !== undefined && !args[i + 1].startsWith('--')) i++;
       result._presetRejected = true;
-    } else if (a === '--total-tasks' && args[i + 1]) {
+    } else if (a === '--branch' && allowed.has(a)) {
+      requireValue(a, args, i);
+      result.branch = args[++i];
+    } else if (a === '--quality' && allowed.has(a)) {
+      requireValue(a, args, i);
+      result.quality = args[++i];
+    } else if (a === '--total-tasks' && allowed.has(a)) {
+      requireValue(a, args, i);
       const val = parseInt(args[++i], 10);
       if (isNaN(val)) { process.stderr.write(`Error: --total-tasks requires a number, got "${args[i]}"\n`); process.exit(2); }
       result.totalTasks = val;
-    } else if (a === '--planned-task-ids' && args[i + 1]) {
+    } else if (a === '--planned-task-ids' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.plannedTaskIds = args[++i];
-    } else if (a === '--plan-path' && args[i + 1]) {
+    } else if (a === '--plan-path' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.planPath = args[++i];
-    } else if (a === '--plan-hash' && args[i + 1]) {
+    } else if (a === '--plan-hash' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.planHash = args[++i];
-    } else if (a === '--wave' && args[i + 1]) {
+    } else if (a === '--wave' && allowed.has(a)) {
+      requireValue(a, args, i);
       const val = parseInt(args[++i], 10);
       if (isNaN(val)) { process.stderr.write(`Error: --wave requires a number, got "${args[i]}"\n`); process.exit(2); }
       result.wave = val;
-    } else if (a === '--task' && args[i + 1]) {
+    } else if (a === '--task' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.task = args[++i];
-    } else if (a === '--name' && args[i + 1]) {
+    } else if (a === '--name' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.name = args[++i];
-    } else if (a === '--complexity' && args[i + 1]) {
+    } else if (a === '--complexity' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.complexity = args[++i];
-    } else if (a === '--risk' && args[i + 1]) {
+    } else if (a === '--risk' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.risk = args[++i];
-    } else if (a === '--files-changed' && args[i + 1]) {
+    } else if (a === '--files-changed' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.filesChanged = args[++i];
-    } else if (a === '--error' && args[i + 1]) {
+    } else if (a === '--error' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.error = args[++i];
-    } else if (a === '--data' && args[i + 1]) {
+    } else if (a === '--data' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.data = args[++i];
-    } else if (a === '--sha' && args[i + 1]) {
+    } else if (a === '--sha' && allowed.has(a)) {
+      // Note: an explicit `--sha ""` is a valid, deliberate value (the
+      // "no diff produced a commit" soft-success path handled downstream in
+      // cmdWaveCommitted) — requireValue only rejects a truly missing token.
+      requireValue(a, args, i);
       result.sha = args[++i];
-    } else if (a === '--ttl-days' && args[i + 1]) {
+    } else if (a === '--ttl-days' && allowed.has(a)) {
+      requireValue(a, args, i);
       const val = parseInt(args[++i], 10);
       if (isNaN(val)) { process.stderr.write(`Error: --ttl-days requires a number, got "${args[i]}"\n`); process.exit(2); }
       result.ttlDays = val;
-    } else if (a === '--dry-run') {
+    } else if (a === '--dry-run' && allowed.has(a)) {
       result.dryRun = true;
-    } else if (a === '--tasks-json' && args[i + 1]) {
+    } else if (a === '--tasks-json' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.tasksJson = args[++i];
-    } else if (a === '--run-id' && args[i + 1]) {
+    } else if (a === '--run-id' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.runId = args[++i];
-    } else if (a === '--max-files' && args[i + 1]) {
+    } else if (a === '--max-files' && allowed.has(a)) {
+      requireValue(a, args, i);
       const val = parseInt(args[++i], 10);
       if (!isNaN(val)) result.maxFiles = val;
-    } else if (a === '--max-decisions' && args[i + 1]) {
+    } else if (a === '--max-decisions' && allowed.has(a)) {
+      requireValue(a, args, i);
       const val = parseInt(args[++i], 10);
       if (!isNaN(val)) result.maxDecisions = val;
-    } else if (a === '--max-interfaces' && args[i + 1]) {
+    } else if (a === '--max-interfaces' && allowed.has(a)) {
+      requireValue(a, args, i);
       const val = parseInt(args[++i], 10);
       if (!isNaN(val)) result.maxInterfaces = val;
-    } else if (a === '--dispatched' && args[i + 1]) {
+    } else if (a === '--dispatched' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.dispatched = args[++i];
-    } else if (a === '--missing-ids' && args[i + 1]) {
+    } else if (a === '--missing-ids' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.missingIds = args[++i];
-    } else if (a === '--split-depth' && args[i + 1]) {
+    } else if (a === '--split-depth' && allowed.has(a)) {
+      requireValue(a, args, i);
       const val = parseInt(args[++i], 10);
       if (!isNaN(val)) result.splitDepth = val;
-    } else if (a === '--max-split-depth' && args[i + 1]) {
+    } else if (a === '--max-split-depth' && allowed.has(a)) {
+      requireValue(a, args, i);
       const val = parseInt(args[++i], 10);
       if (!isNaN(val)) result.maxSplitDepth = val;
-    } else if (a === '--state-file' && args[i + 1]) {
+    } else if (a === '--state-file' && allowed.has(a)) {
+      requireValue(a, args, i);
       result.stateFile = args[++i];
-    } else if (a === '--skipped-dependency') {
+    } else if (a === '--skipped-dependency' && allowed.has(a)) {
       result.skippedDependency = true;
+    } else {
+      // Terminal else — reject the first unknown token (mirrors the
+      // reject-first-unknown-token convention at
+      // scripts/util/execute-workspace-setup.js:100-150). Also catches a
+      // recognized flag name that isn't accepted by this subcommand (e.g.
+      // --quality on wave-start), since its dedicated branch above requires
+      // `allowed.has(a)` and therefore never matches in that case.
+      process.stderr.write(`Error: unknown flag "${a}" for ${subcommand}. Accepted: ${[...allowed].join(' ')}\n`);
+      process.exit(2);
     }
   }
 
@@ -197,10 +298,9 @@ function deepMerge(target, source) {
 // ---------------------------------------------------------------------------
 
 function cmdInit(opts) {
-  if (opts._presetRejected) {
-    process.stderr.write('Error: --preset is no longer accepted by execute-plan-sdlc state init. Use --quality <full|balanced|minimal> instead (#190).\n');
-    process.exit(2);
-  }
+  // --preset rejection (#190) is now handled centrally in the main dispatch,
+  // before any cmd* handler runs, so it applies uniformly to every
+  // subcommand rather than just `init`.
   if (!opts.branch) {
     process.stderr.write('Error: --branch is required for init\n');
     process.exit(2);
@@ -223,6 +323,24 @@ function cmdInit(opts) {
       process.stderr.write(`Error: --planned-task-ids must be a JSON array: ${e.message}\n`);
       process.exit(2);
     }
+  }
+
+  // Fallback derivation (F-execute-subcommand-cli-hardening-5): when the caller
+  // did not pass --planned-task-ids but did pass --plan-path, derive the planned
+  // task ID list from the plan markdown's "### Task N:" headings so
+  // verify-completeness has something to check against.
+  if (plannedTaskIds === null && opts.planPath) {
+    try {
+      plannedTaskIds = parsePlanTasks(fs.readFileSync(opts.planPath, 'utf8')).map(t => String(t.n));
+      if (!plannedTaskIds.length) plannedTaskIds = null;
+    } catch (e) {
+      process.stderr.write(`Warning: failed to derive planned-task-ids from --plan-path "${opts.planPath}": ${e.message}\n`);
+      plannedTaskIds = null;
+    }
+  }
+
+  if (plannedTaskIds === null) {
+    process.stderr.write('Warning: plannedTaskIds not set — verify-completeness will fail; pass --planned-task-ids or --plan-path\n');
   }
 
   const data = {
@@ -267,25 +385,26 @@ function cmdWaveStart(opts) {
   if (!Array.isArray(data.waves)) data.waves = [];
 
   const wave = data.waves.find(w => w.number === opts.wave);
+  let waveEntry;
   if (wave) {
     wave.status = 'in_progress';
     wave.startedAt = new Date().toISOString();
+    waveEntry = wave;
   } else {
-    data.waves.push({
+    waveEntry = {
       number: opts.wave,
       status: 'in_progress',
       startedAt: new Date().toISOString(),
       tasks: [],
-    });
+    };
+    data.waves.push(waveEntry);
   }
 
-  writeState(filePath, data);
-
-  // Write per-task fact sheets when --tasks-json is provided (R-FACT-SHEET-DISPATCH, #432).
-  // --tasks-json is a JSON array of task objects; --run-id is the execution run ID
-  // (defaults to the state file's startedAt timestamp slug when not provided).
+  // Parse --tasks-json up front (before seeding/writeState) so both the
+  // wave.tasks seeding below and the fact-sheet writing further down share
+  // the same parsed array (F-git-stderr-leak-and-wave-start-task-seeding-2).
+  let tasks = null;
   if (opts.tasksJson) {
-    let tasks;
     try {
       tasks = JSON.parse(opts.tasksJson);
     } catch (e) {
@@ -296,6 +415,30 @@ function cmdWaveStart(opts) {
       process.stderr.write('Error: --tasks-json must be a JSON array\n');
       process.exit(2);
     }
+
+    if (!Array.isArray(waveEntry.tasks)) waveEntry.tasks = [];
+    for (const t of tasks) {
+      if (!t || !t.id) continue;
+      const exists = waveEntry.tasks.some(x => String(x.id) === String(t.id));
+      if (!exists) {
+        waveEntry.tasks.push({
+          id: String(t.id),
+          name: t.name || '',
+          complexity: t.complexity || '',
+          risk: t.risk || '',
+          status: 'in_progress',
+          filesChanged: [],
+        });
+      }
+    }
+  }
+
+  writeState(filePath, data);
+
+  // Write per-task fact sheets when --tasks-json is provided (R-FACT-SHEET-DISPATCH, #432).
+  // --tasks-json is a JSON array of task objects; --run-id is the execution run ID
+  // (defaults to the state file's startedAt timestamp slug when not provided).
+  if (tasks) {
     const stateDir = resolveStateDir();
     // Derive runId from --run-id flag or from the state file's startedAt field
     const runId = opts.runId || (data.startedAt
@@ -933,8 +1076,47 @@ function cmdDetectResume(opts) {
 // Main
 // ---------------------------------------------------------------------------
 
+const USAGE = [
+  'Usage: node execute-state.js <init|wave-start|wave-done|wave-fail|wave-committed|task-done|task-fail|context|read|show|status|cleanup|gc|summarize-prior-wave-context|wave-split|verify-completeness|detect-resume> [options]',
+  '',
+  '  node execute-state.js init        --branch <b> --quality <X> --total-tasks <n> [--planned-task-ids <json>] [--plan-path <p>] [--plan-hash <h>]',
+  '  node execute-state.js wave-start  --wave <n> [--tasks-json <json>] [--run-id <id>]',
+  '  node execute-state.js wave-done   --wave <n>',
+  '  node execute-state.js wave-fail   --wave <n>',
+  '  node execute-state.js wave-committed --branch <b> --wave <n> --sha <sha>',
+  '  node execute-state.js task-done   --wave <n> --task <id> --name <name> --complexity <c> --risk <r> --files-changed <json>',
+  '  node execute-state.js task-fail   --wave <n> --task <id> --name <name> --complexity <c> --risk <r> --error <text> [--skipped-dependency]',
+  '  node execute-state.js context     --data <json>',
+  '  node execute-state.js read        [--branch <b>]   (aliases: show, status)',
+  '  node execute-state.js cleanup     [--branch <b>]',
+  '  node execute-state.js gc          [--ttl-days <N>] [--dry-run]',
+  '  node execute-state.js summarize-prior-wave-context [--max-files <n>] [--max-decisions <n>] [--max-interfaces <n>]',
+  '  node execute-state.js wave-split --wave <n> --dispatched <json-id-array> [--missing-ids <json-id-array>] [--split-depth <n>] [--max-split-depth <n>]',
+  '  node execute-state.js verify-completeness',
+  '  node execute-state.js detect-resume --branch <name>',
+  '',
+  'Every subcommand also accepts --branch <b> and --state-file <path>.',
+  '  --help, -h   print this help and exit 0',
+  '',
+  'Exit codes:',
+  '  0  = success',
+  '  1  = state file not found (read/cleanup)',
+  '  2  = unexpected error',
+  '  65 = verify-completeness only — one or more planned tasks unaccounted for',
+].join('\n') + '\n';
+
 try {
   const opts = parseArgs(process.argv);
+
+  if (opts.showHelp) {
+    process.stdout.write(USAGE);
+    process.exit(0);
+  }
+
+  if (opts._presetRejected) {
+    process.stderr.write('Error: --preset is no longer accepted by execute-plan-sdlc state commands. Use --quality <full|balanced|minimal> instead (#190).\n');
+    process.exit(2);
+  }
 
   switch (opts.subcommand) {
     case 'init':        cmdInit(opts);       break;
@@ -945,7 +1127,7 @@ try {
     case 'task-done':   cmdTaskDone(opts);   break;
     case 'task-fail':   cmdTaskFail(opts);   break;
     case 'context':     cmdContext(opts);    break;
-    case 'read':        cmdRead(opts);       break;
+    case 'read': case 'show': case 'status': cmdRead(opts); break;
     case 'cleanup':     cmdCleanup(opts);    break;
     case 'gc':          cmdGc(opts);         break;
     case 'summarize-prior-wave-context': cmdSummarizePriorWaveContext(opts); break;
@@ -954,7 +1136,7 @@ try {
     case 'detect-resume': cmdDetectResume(opts); break;
     default:
       process.stderr.write(`Error: unknown subcommand "${opts.subcommand}"\n`);
-      process.stderr.write('Usage: node execute-state.js <init|wave-start|wave-done|wave-fail|wave-committed|task-done|task-fail|context|read|cleanup|gc|summarize-prior-wave-context|wave-split|verify-completeness|detect-resume> [options]\n');
+      process.stderr.write(USAGE);
       process.exit(2);
   }
 } catch (e) {

@@ -65,7 +65,7 @@ test('runVerifyCompleteness invokes scripts/state/execute.js verify-completeness
     { spawnFn, existsFn: () => true, executeScript: '/fake/execute.js' }
   );
   assert.strictEqual(calls.length, 1);
-  assert.deepStrictEqual(calls[0].args, ['/fake/execute.js', 'verify-completeness']);
+  assert.deepStrictEqual(calls[0].args, ['/fake/execute.js', 'verify-completeness', '--state-file', '/s.json']);
   assert.strictEqual(res.exitCode, 0);
 });
 
@@ -82,6 +82,34 @@ test('runVerifyCompleteness propagates a non-zero completeness exit code (e.g. 6
     { spawnFn, existsFn: () => true }
   );
   assert.strictEqual(res.exitCode, 65);
+});
+
+test('runVerifyCompleteness maps a child exit 2 to wrapper exit 2 without marking execute failed', () => {
+  const spawnFn = () => ({ status: 2, error: null });
+  const dir = makeTempDir();
+  const stateFile = path.join(dir, 'state.json');
+  const planFile = path.join(dir, 'plan.md');
+  fs.writeFileSync(stateFile, JSON.stringify({ flags: { steps: ['execute'] }, steps: { execute: { status: 'in_progress' } } }));
+  fs.writeFileSync(planFile, '### Task 1: Do the thing\n');
+
+  const originalWrite = process.stderr.write;
+  const writes = [];
+  process.stderr.write = (chunk, ...rest) => { writes.push(String(chunk)); return true; };
+  let res;
+  try {
+    res = runVerifyCompleteness(
+      ['node', 'verify-completeness.js', '--state-file', stateFile, '--plan-file', planFile],
+      { spawnFn, existsFn: () => true }
+    );
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  assert.strictEqual(res.exitCode, 2);
+  assert.match(res.stderr, /verify-completeness: state\/argument error \(child exit 2\) — see message above/);
+  // markExecuteFailed (called only for exit 65) would emit a
+  // "[task-tray] execute:" marker line — confirm it never ran.
+  assert.ok(!writes.some((w) => /\[task-tray\]/.test(w)));
 });
 
 test('runVerifyCompleteness surfaces an unexpected subprocess failure as exit 2 (no set -e/$? dance)', () => {
