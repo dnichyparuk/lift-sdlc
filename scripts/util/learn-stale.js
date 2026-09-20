@@ -171,7 +171,7 @@ function readLearningsLog(cwd) {
  * @param {Function} [opts.spawnFn=spawnSync]  Injectable for tests — no real git history required.
  * @param {string} [opts.cwd=process.cwd()]
  * @param {number|null} opts.staleAfterCycles  `null` = feature off.
- * @returns {{off: true, flagged: [], checked: 0} | {off: false, flagged: Array<{id: string, ageDays: number, mentionedInLog: boolean}>, checked: number}}
+ * @returns {{off: true, flagged: [], checked: 0} | {off: false, flagged: Array<{id: string, ageDays: number, mentionedInLog: boolean, source?: string, lastEvaluated?: string|null}>, checked: number}}
  */
 function findStaleGuardrails({
   spawnFn = spawnSync,
@@ -185,7 +185,8 @@ function findStaleGuardrails({
 
   const ids = collectGuardrailIds(cwd);
   const log = readLearningsLog(cwd);
-  const evaluations = readEvaluationsFn(cwd) || {};
+  const root = resolveSdlcRoot({ cwd }) || cwd;
+  const evaluations = readEvaluationsFn(root) || {};
 
   const flagged = [];
   for (const id of ids) {

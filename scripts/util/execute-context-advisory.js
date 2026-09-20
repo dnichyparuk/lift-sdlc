@@ -59,7 +59,7 @@ function parseArgs(argv) {
  * Resolve the execute-guardrails array and (best-effort) context advisory.
  *
  * @param {string} cwd  Working directory to read project config from
- * @param {{ readSectionFn?: Function, getAdvisoryFn?: Function }} [deps]  Injectable for tests
+ * @param {{ readSectionFn?: Function, getAdvisoryFn?: Function, recordGuardrailEvaluationFn?: Function }} [deps]  Injectable for tests
  * @returns {{ guardrails: Array, advisory: string|null }}
  */
 function runExecuteContextAdvisory(cwd, {
@@ -81,7 +81,8 @@ function runExecuteContextAdvisory(cwd, {
     const ids = guardrails.map((g) => (typeof g === 'string' ? g : g?.id)).filter(Boolean);
     if (ids.length > 0) {
       try {
-        recordGuardrailEvaluationFn(cwd, ids);
+        const projectRoot = resolveSdlcRoot({ cwd }) || cwd;
+        recordGuardrailEvaluationFn(projectRoot, ids);
       } catch (_) {
         // fail-open
       }

@@ -58,20 +58,23 @@ Exit codes:
   2 = unexpected crash
 `;
 
-function parseArgs(argv) {
+function parseArgs(argv = process.argv) {
+  const args = Array.isArray(argv)
+    ? (argv[0]?.endsWith('node') || (argv[1] && argv[1].endsWith('.js')) ? argv.slice(2) : argv)
+    : [];
   let mode = null;
   let filePath = null;
   let showHelp = false;
 
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     if (arg === '--help' || arg === '-h') {
       showHelp = true;
     } else if (arg === '--stdin') {
       mode = 'stdin';
     } else if (arg === '--file') {
       mode = 'file';
-      filePath = argv[++i];
+      filePath = args[++i];
     }
   }
 

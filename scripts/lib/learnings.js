@@ -211,6 +211,11 @@ function selectEligible(groups, threshold = DEFAULT_THRESHOLD) {
 
 const EVALUATIONS_REL_PATH = path.join('.sdlc', 'learnings', 'evaluations.json');
 
+let resolveSdlcRoot = null;
+try {
+  ({ resolveSdlcRoot } = require('./config.js'));
+} catch (_) {}
+
 /**
  * Record evaluation timestamps for one or more guardrail IDs in .sdlc/learnings/evaluations.json.
  * Safe, atomic, and fail-open (never throws; swallows all errors).
@@ -221,13 +226,15 @@ const EVALUATIONS_REL_PATH = path.join('.sdlc', 'learnings', 'evaluations.json')
  * @returns {boolean} true if successfully written, false on failure or empty input
  */
 function recordGuardrailEvaluation(projectRoot, guardrailIds, timestamp = new Date().toISOString()) {
+  let tmp = null;
   try {
     if (!projectRoot || !guardrailIds) return false;
     const ids = Array.isArray(guardrailIds) ? guardrailIds : [guardrailIds];
     const validIds = ids.filter((id) => typeof id === 'string' && id.trim().length > 0);
     if (validIds.length === 0) return false;
 
-    const evaluationsPath = path.join(projectRoot, EVALUATIONS_REL_PATH);
+    const root = (resolveSdlcRoot ? resolveSdlcRoot({ cwd: projectRoot }) : null) || projectRoot;
+    const evaluationsPath = path.join(root, EVALUATIONS_REL_PATH);
     const dir = path.dirname(evaluationsPath);
     fs.mkdirSync(dir, { recursive: true });
 
@@ -249,11 +256,14 @@ function recordGuardrailEvaluation(projectRoot, guardrailIds, timestamp = new Da
     }
 
     const payload = JSON.stringify({ evaluations: existing }, null, 2) + '\n';
-    const tmp = path.join(dir, `.evaluations.${crypto.randomBytes(4).toString('hex')}.tmp`);
+    tmp = path.join(dir, `.evaluations.${crypto.randomBytes(4).toString('hex')}.tmp`);
     fs.writeFileSync(tmp, payload, 'utf8');
     fs.renameSync(tmp, evaluationsPath);
     return true;
   } catch {
+    if (tmp && fs.existsSync(tmp)) {
+      try { fs.unlinkSync(tmp); } catch (_) {}
+    }
     return false;
   }
 }
@@ -268,7 +278,8 @@ function recordGuardrailEvaluation(projectRoot, guardrailIds, timestamp = new Da
 function readGuardrailEvaluations(projectRoot) {
   try {
     if (!projectRoot) return {};
-    const evaluationsPath = path.join(projectRoot, EVALUATIONS_REL_PATH);
+    const root = (resolveSdlcRoot ? resolveSdlcRoot({ cwd: projectRoot }) : null) || projectRoot;
+    const evaluationsPath = path.join(root, EVALUATIONS_REL_PATH);
     if (!fs.existsSync(evaluationsPath)) return {};
     const raw = fs.readFileSync(evaluationsPath, 'utf8');
     const parsed = JSON.parse(raw);

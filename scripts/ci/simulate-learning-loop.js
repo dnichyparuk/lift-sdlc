@@ -241,7 +241,7 @@ if (require.main === module) {
     process.exit(0);
   } catch (err) {
     console.error(`[simulate-learning-loop] ❌ Failed: ${err.message}\n${err.stack}`);
-    process.exit(1);
+    process.exit(2);
   }
 }
 

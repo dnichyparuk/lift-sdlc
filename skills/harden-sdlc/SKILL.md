@@ -151,7 +151,7 @@ Rationale:      {RESULT.classificationRationale}
 ```
 
 If `RESULT.proposals` is empty, report `No actionable hardening proposals — the
-failure signal does not point at any of the loaded surfaces.` and capture the candidate signature into `.sdlc/learnings/pending/` for recurrence tracking via `node scripts/util/capture-learning.js --file <temp-file> 2>/dev/null || true`, then exit cleanly (the trap from Step 1 cleans up the manifest).
+failure signal does not point at any of the loaded surfaces.` and capture the candidate signature into `.sdlc/learnings/pending/` for recurrence tracking via `node "<PLUGIN_ROOT>/scripts/util/capture-learning.js" --file <temp-file> 2>/dev/null || true`, then exit cleanly (the trap from Step 1 cleans up the manifest).
 
 ---
 

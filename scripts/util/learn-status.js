@@ -36,16 +36,24 @@ const {
 
 const PENDING_REL_PATH = path.join('.sdlc', 'learnings', 'pending');
 
-function parseArgs(argv) {
+function parseArgs(argv = process.argv) {
+  const args = Array.isArray(argv)
+    ? (argv[0]?.endsWith('node') || (argv[1] && argv[1].endsWith('.js')) ? argv.slice(2) : argv)
+    : [];
   let cwd = null;
   let showHelp = false;
 
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     if (arg === '--help' || arg === '-h') {
       showHelp = true;
     } else if (arg === '--cwd') {
-      cwd = argv[++i];
+      if (i + 1 >= args.length || args[i + 1].startsWith('-')) {
+        const err = new Error('--cwd requires a directory path argument');
+        err.isValidationError = true;
+        throw err;
+      }
+      cwd = args[++i];
     }
   }
 
@@ -108,8 +116,21 @@ function getLearnStatus(deps = {}) {
 
 async function runLearnStatus(argv, deps = {}) {
   const stdout = deps.stdout || process.stdout;
+  const stderr = deps.stderr || process.stderr;
   const exit = deps.exit || process.exit;
-  const { cwd, showHelp } = parseArgs(argv);
+
+  let parsed;
+  try {
+    parsed = parseArgs(argv);
+  } catch (err) {
+    if (err.isValidationError) {
+      stderr.write(`Error: ${err.message}\n`);
+      return exit(1);
+    }
+    throw err;
+  }
+
+  const { cwd, showHelp } = parsed;
 
   if (showHelp) {
     stdout.write('Usage: node learn-status.js [--cwd <dir>]\n');

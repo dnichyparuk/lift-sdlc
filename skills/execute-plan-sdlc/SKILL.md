@@ -458,7 +458,7 @@ node "<PLUGIN_ROOT>/scripts/util/parse-wave.js" --dispatched-ids '<json-array-of
 
 3. **Conflict detection:** Check `git diff --stat` for files touched by multiple tasks in this wave. If found, treat as a file conflict.
 
-4. **Verification suite:** Run verification commands specified in the plan (tests, build, lint). You must also add `npm run preflight` to the mandatory gate alongside regular tests. **CRITICAL:** Always run tests, builds, linters, preflight, and package manager commands (such as npm, pnpm, pnpm build, or yarn) via the truncated wrapper script to prevent context bloat: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`.
+4. **Verification suite:** Run verification commands specified in the plan (tests, build, lint). If the project defines a `preflight` script in `package.json`, also run `npm run preflight` as part of the verification gate. **CRITICAL:** Always run tests, builds, linters, preflight, and package manager commands (such as npm, pnpm, pnpm build, or yarn) via the truncated wrapper script to prevent context bloat: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`.
 
 5. **Task status handling** (from `WAVE_SUMMARY.tasks[].status`):
    - STATUS: DONE → proceed normally

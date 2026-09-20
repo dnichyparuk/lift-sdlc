@@ -161,3 +161,12 @@ test('CLI: executes end-to-end and outputs single JSON line', () => {
   assert.deepStrictEqual(parsed.eligibleSignatures, ['test-rule']);
   assert.strictEqual(parsed.waitingCount, 0);
 });
+
+test('CLI: exits 1 with error on missing --cwd argument', () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '--cwd'], {
+    encoding: 'utf8',
+  });
+
+  assert.strictEqual(res.status, 1);
+  assert.match(res.stderr, /--cwd requires a directory path argument/);
+});

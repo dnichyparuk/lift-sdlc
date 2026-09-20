@@ -55,6 +55,7 @@ const { SHIP_FIELDS } = require('./ship-fields');
 const { parseRemoteOwner, detectBaseBranchSafe } = require('./git');
 const { WORKSPACE_FIELDS } = require('./workspace-fields');
 const { resolveSdlcRoot } = require('./config');
+const { DEFAULT_THRESHOLD } = require('./learnings');
 
 // ---------------------------------------------------------------------------
 // Section descriptors
@@ -303,7 +304,7 @@ function summarizeWorkspace(cfg) {
 
 function summarizeLearn(cfg) {
   if (!cfg) return '';
-  const threshold = cfg.recurrenceThreshold ?? 3;
+  const threshold = cfg.recurrenceThreshold ?? DEFAULT_THRESHOLD;
   const stale = cfg.staleAfterCycles ? `${cfg.staleAfterCycles}d` : 'off';
   return `threshold: ${threshold}, staleness: ${stale}`;
 }
@@ -315,8 +316,8 @@ const LEARN_FIELDS = [
     type: 'number',
     min: 1,
     options: null,
-    default: 3,
-    description: 'Minimum occurrences of an observed learning pattern in .sdlc/learnings/pending/ before /learn-sdlc considers it eligible for guardrail synthesis. Must be an integer >= 1 (default: 3).',
+    default: DEFAULT_THRESHOLD,
+    description: `Minimum occurrences of an observed learning pattern in .sdlc/learnings/pending/ before /learn-sdlc considers it eligible for guardrail synthesis. Must be an integer >= 1 (default: ${DEFAULT_THRESHOLD}).`,
   },
   {
     name: 'staleAfterCycles',

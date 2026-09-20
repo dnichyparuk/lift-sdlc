@@ -136,3 +136,17 @@ test('CLI: exits 0 and prints usage on -h without waiting for stdin', () => {
   assert.match(res.stdout, /Usage:/);
 });
 
+test('main: exits 1 when stdin.isTTY is true', async () => {
+  const { main } = require('./parse-wave');
+  let exitCode = null;
+  let stderrOutput = '';
+  await main([], {
+    stdin: { isTTY: true },
+    stdout: { write: () => {} },
+    stderr: { write: (msg) => { stderrOutput += msg; } },
+    exit: (code) => { exitCode = code; },
+  });
+  assert.equal(exitCode, 1);
+  assert.match(stderrOutput, /expects input piped via stdin/);
+});
+

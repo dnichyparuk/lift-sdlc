@@ -10,18 +10,18 @@
 
 ### 1.1 Current State (Verified via Code & Test Suite)
 The core assimilation engine of `learn-sdlc` is **fully implemented and tested**:
-- **Preparation & Filtering:** [`scripts/skill/learn-prepare.js`](file:///root/.gemini/config/plugins/lift-sdlc/scripts/skill/learn-prepare.js) validates frontmatter, applies negative cache filtering against `config.rejected_guardrails`, enforces `recurrenceThreshold` (default 3), snapshots `preImage` of `.sdlc/config.json`, verifies clean tree (`checkCleanTree`), and creates isolated branch `sdlc/assimilation-<ts>`.
-- **Synthesis & Pre-Screen:** Read-only subagents [`learn-synthesis-orchestrator.md`](file:///root/.gemini/config/plugins/lift-sdlc/agents/learn-synthesis-orchestrator.md) and [`learn-review-only.md`](file:///root/.gemini/config/plugins/lift-sdlc/agents/learn-review-only.md) are defined with dual-host read-only tool whitelists.
-- **Mechanical Regression Gate:** [`scripts/ci/validate-guardrail-regression.js`](file:///root/.gemini/config/plugins/lift-sdlc/scripts/ci/validate-guardrail-regression.js) guarantees **strengthen-only** evolution (existing guardrails must remain byte-identical; only pure appends permitted).
-- **Application & Safe Rollback:** [`scripts/skill/learn-apply.js`](file:///root/.gemini/config/plugins/lift-sdlc/scripts/skill/learn-apply.js) handles `--validate`, `--abort` (safe return to `initialBranch` without data loss), and `--ship` (PR creation via `gh`, post-PR cleanup of pending files).
-- **Negative Cache & Rejection:** [`scripts/skill/learn-reject.js`](file:///root/.gemini/config/plugins/lift-sdlc/scripts/skill/learn-reject.js) parses PR bodies, records rejected signatures into `config.rejected_guardrails`, and closes PRs.
-- **Guardrail Consumers:** Both [`plan-sdlc`](file:///root/.gemini/config/plugins/lift-sdlc/skills/plan-sdlc/SKILL.md) (`plan.guardrails`) and [`execute-plan-sdlc`](file:///root/.gemini/config/plugins/lift-sdlc/skills/execute-plan-sdlc/SKILL.md) (`execute.guardrails` via [`execute-context-advisory.js`](file:///root/.gemini/config/plugins/lift-sdlc/scripts/util/execute-context-advisory.js)) actively load and enforce active guardrails.
+- **Preparation & Filtering:** [`scripts/skill/learn-prepare.js`](../scripts/skill/learn-prepare.js) validates frontmatter, applies negative cache filtering against `config.rejected_guardrails`, enforces `recurrenceThreshold` (default 3), snapshots `preImage` of `.sdlc/config.json`, verifies clean tree (`checkCleanTree`), and creates isolated branch `sdlc/assimilation-<ts>`.
+- **Synthesis & Pre-Screen:** Read-only subagents [`learn-synthesis-orchestrator.md`](../agents/learn-synthesis-orchestrator.md) and [`learn-review-only.md`](../agents/learn-review-only.md) are defined with dual-host read-only tool whitelists.
+- **Mechanical Regression Gate:** [`scripts/ci/validate-guardrail-regression.js`](../scripts/ci/validate-guardrail-regression.js) guarantees **strengthen-only** evolution (existing guardrails must remain byte-identical; only pure appends permitted).
+- **Application & Safe Rollback:** [`scripts/skill/learn-apply.js`](../scripts/skill/learn-apply.js) handles `--validate`, `--abort` (safe return to `initialBranch` without data loss), and `--ship` (PR creation via `gh`, post-PR cleanup of pending files).
+- **Negative Cache & Rejection:** [`scripts/skill/learn-reject.js`](../scripts/skill/learn-reject.js) parses PR bodies, records rejected signatures into `config.rejected_guardrails`, and closes PRs.
+- **Guardrail Consumers:** Both [`plan-sdlc`](../skills/plan-sdlc/SKILL.md) (`plan.guardrails`) and [`execute-plan-sdlc`](../skills/execute-plan-sdlc/SKILL.md) (`execute.guardrails` via [`execute-context-advisory.js`](../scripts/util/execute-context-advisory.js)) actively load and enforce active guardrails.
 
 ### 1.2 The Missing Pieces (Gaps Identified)
 1. **The Ingestion Gap (Critical):** No agent or skill currently creates files in `.sdlc/learnings/pending/*.md`. Skills only write human-readable freeform text to `.sdlc/learnings/log.md`. Without automated ingestion, `learn-prepare.js` never finds files to process unless manually created by a developer.
 2. **Lifecycle & Trigger Gap:** `learn-sdlc` can only be launched manually via `/learn-sdlc`. There is no proactive notification or advisory when pending changesets reach the recurrence threshold.
-3. **Setup Onboarding Gap:** [`skills/setup-sdlc/SKILL.md`](file:///root/.gemini/config/plugins/lift-sdlc/skills/setup-sdlc/SKILL.md) has no interactive flow for the `learn` section (`recurrenceThreshold`, `staleAfterCycles`).
-4. **Staleness Telemetry Weakness:** [`scripts/util/learn-stale.js`](file:///root/.gemini/config/plugins/lift-sdlc/scripts/util/learn-stale.js) relies solely on git commit age and regex search in `log.md`. It lacks a direct signal indicating when a guardrail was actually evaluated during plan/execute.
+3. **Setup Onboarding Gap:** [`skills/setup-sdlc/SKILL.md`](../skills/setup-sdlc/SKILL.md) has no interactive flow for the `learn` section (`recurrenceThreshold`, `staleAfterCycles`).
+4. **Staleness Telemetry Weakness:** [`scripts/util/learn-stale.js`](../scripts/util/learn-stale.js) relies solely on git commit age and regex search in `log.md`. It lacks a direct signal indicating when a guardrail was actually evaluated during plan/execute.
 
 ---
 
@@ -122,7 +122,7 @@ The core assimilation engine of `learn-sdlc` is **fully implemented and tested**
 
 #### Task 3.2: Post-Ship Advisory in `ship-sdlc`
 - **Target File:** `skills/ship-sdlc/SKILL.md`
-- **Location:** In the final completion report (Step 9 / PR opened).
+- **Location:** In the final completion report (Step 6 REPORT / PR opened).
 - **Behavior:**
   - Run `node scripts/util/learn-status.js`.
   - If `eligibleCount > 0`: Display a prominent non-blocking notice:
@@ -152,9 +152,9 @@ The core assimilation engine of `learn-sdlc` is **fully implemented and tested**
   }
   ```
 - **Writers:**
-  - [`scripts/util/execute-context-advisory.js`](file:///root/.gemini/config/plugins/lift-sdlc/scripts/util/execute-context-advisory.js) and `scripts/skill/plan.js` record timestamps when guardrails are loaded/checked.
+  - [`scripts/util/execute-context-advisory.js`](../scripts/util/execute-context-advisory.js) and `scripts/skill/plan.js` record timestamps when guardrails are loaded/checked.
 - **Reader:**
-  - Update [`scripts/util/learn-stale.js`](file:///root/.gemini/config/plugins/lift-sdlc/scripts/util/learn-stale.js) to check `.sdlc/learnings/evaluations.json` directly. If a guardrail has not been evaluated for `staleAfterCycles` days, it is flagged as stale.
+  - Update [`scripts/util/learn-stale.js`](../scripts/util/learn-stale.js) to check `.sdlc/learnings/evaluations.json` directly. If a guardrail has not been evaluated for `staleAfterCycles` days, it is flagged as stale.
 
 ---
 
