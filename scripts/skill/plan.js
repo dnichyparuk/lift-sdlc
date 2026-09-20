@@ -35,6 +35,7 @@ const { writeOutput } = require(path.join(LIB, 'output'));
 const { resolveSkipConfigCheck, ensureConfigVersion } = require(path.join(LIB, 'config-version-prepare'));
 const { initState, findStateFile, readState, writeState, slugifyBranch, pruneStateFiles } = require(path.join(LIB, 'state'));
 const { exec, parseRemoteOwner } = require(path.join(LIB, 'git'));
+const { recordGuardrailEvaluation } = require(path.join(LIB, 'learnings'));
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -548,6 +549,14 @@ function main() {
     const planConfig = readSection(projectRoot, 'plan');
     if (planConfig && Array.isArray(planConfig.guardrails)) {
       guardrails = planConfig.guardrails;
+      const ids = guardrails.map((g) => (typeof g === 'string' ? g : g?.id)).filter(Boolean);
+      if (ids.length > 0) {
+        try {
+          recordGuardrailEvaluation(projectRoot, ids);
+        } catch (_) {
+          // fail-open
+        }
+      }
     }
   } catch (err) {
     errors.push(`Failed to read plan config: ${err.message}`);

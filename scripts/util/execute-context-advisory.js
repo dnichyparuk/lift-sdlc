@@ -33,6 +33,7 @@ const LIB = path.join(__dirname, '..', 'lib');
 const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
 const { getAdvisory }  = require(path.join(LIB, 'context-advisory'));
 const { writeJsonLine } = require(path.join(LIB, 'output'));
+const { recordGuardrailEvaluation } = require(path.join(LIB, 'learnings'));
 
 const SKILL_NAME = 'execute-plan-sdlc';
 
@@ -58,10 +59,14 @@ function parseArgs(argv) {
  * Resolve the execute-guardrails array and (best-effort) context advisory.
  *
  * @param {string} cwd  Working directory to read project config from
- * @param {{ readSectionFn?: Function, getAdvisoryFn?: Function }} [deps]  Injectable for tests
+ * @param {{ readSectionFn?: Function, getAdvisoryFn?: Function, recordGuardrailEvaluationFn?: Function }} [deps]  Injectable for tests
  * @returns {{ guardrails: Array, advisory: string|null }}
  */
-function runExecuteContextAdvisory(cwd, { readSectionFn = readSection, getAdvisoryFn = getAdvisory } = {}) {
+function runExecuteContextAdvisory(cwd, {
+  readSectionFn = readSection,
+  getAdvisoryFn = getAdvisory,
+  recordGuardrailEvaluationFn = recordGuardrailEvaluation,
+} = {}) {
   let advisory = null;
   try {
     advisory = getAdvisoryFn({ skill: SKILL_NAME });
@@ -71,6 +76,18 @@ function runExecuteContextAdvisory(cwd, { readSectionFn = readSection, getAdviso
 
   const execute = readSectionFn(cwd, 'execute');
   const guardrails = (execute && execute.guardrails) || [];
+
+  if (Array.isArray(guardrails) && guardrails.length > 0) {
+    const ids = guardrails.map((g) => (typeof g === 'string' ? g : g?.id)).filter(Boolean);
+    if (ids.length > 0) {
+      try {
+        const projectRoot = resolveSdlcRoot({ cwd }) || cwd;
+        recordGuardrailEvaluationFn(projectRoot, ids);
+      } catch (_) {
+        // fail-open
+      }
+    }
+  }
 
   return { guardrails, advisory };
 }

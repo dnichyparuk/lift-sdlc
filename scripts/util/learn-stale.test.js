@@ -264,3 +264,54 @@ test('CLI: treats a missing learn section as feature off', () => {
   const parsed = JSON.parse(result.stdout.trim());
   assert.deepEqual(parsed, { off: true, flagged: [], checked: 0 });
 });
+
+// ---------------------------------------------------------------------------
+// Telemetry store integration
+// ---------------------------------------------------------------------------
+
+test('findStaleGuardrails: uses recent evaluations.json telemetry to prevent flagging', () => {
+  const root = makeRoot({
+    plan: { guardrails: [{ id: 'active-rule' }] },
+  });
+  // Git says 300 days old
+  const spawnFn = makeGitStub({ 'active-rule': daysAgoIso(300) });
+  // Telemetry says evaluated 3 days ago
+  const readEvaluationsFn = () => ({
+    'active-rule': daysAgoIso(3),
+  });
+
+  const result = findStaleGuardrails({
+    spawnFn,
+    cwd: root,
+    staleAfterCycles: 90,
+    readEvaluationsFn,
+  });
+
+  assert.equal(result.off, false);
+  assert.equal(result.checked, 1);
+  assert.equal(result.flagged.length, 0);
+});
+
+test('findStaleGuardrails: flags guardrail when evaluations.json timestamp exceeds threshold', () => {
+  const root = makeRoot({
+    plan: { guardrails: [{ id: 'neglected-rule' }] },
+  });
+  const spawnFn = makeGitStub({ 'neglected-rule': daysAgoIso(300) });
+  const readEvaluationsFn = () => ({
+    'neglected-rule': daysAgoIso(120),
+  });
+
+  const result = findStaleGuardrails({
+    spawnFn,
+    cwd: root,
+    staleAfterCycles: 90,
+    readEvaluationsFn,
+  });
+
+  assert.equal(result.off, false);
+  assert.equal(result.checked, 1);
+  assert.equal(result.flagged.length, 1);
+  assert.equal(result.flagged[0].id, 'neglected-rule');
+  assert.equal(result.flagged[0].source, 'telemetry');
+  assert.ok(result.flagged[0].ageDays >= 120);
+});

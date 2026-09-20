@@ -522,6 +522,11 @@ The script owns the staging command (`git add -A -- ':!.sdlc/'` — `.sdlc/` is 
 - `{"staged":["src/middleware/auth.ts", ...]}` (exit 0) — print each staged path, the total count, and the reason (execute-plan-sdlc creates files but does not stage them; `.sdlc/` is excluded to prevent committing runtime state).
 - `{"staged":[],"error":"<message>"}` (exit 1) — staging failed. Show the `error` and stop the pipeline.
 
+### Between commit and review (Preflight Gate)
+
+Before dispatching `review-sdlc`, if the project defines a `preflight` script in `package.json`, run the preflight verification command: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "npm run preflight"`.
+If preflight fails (exits non-zero), halt the pipeline immediately and present the output to the user. Do not dispatch `review-sdlc`. This prevents token waste on structural/layering defects. If no `preflight` script is defined, skip this gate.
+
 ### Between review and received-review
 
 Evaluate the verdict (see Step 2 conditional logic). Print the decision tree. If received-review-sdlc triggers and makes changes, check `git status`:
@@ -768,6 +773,8 @@ Print a summary report containing, in order:
 2. A **Decisions log** listing key resolved decisions: steps resolved and their source, whether `--quality` was forwarded, version bump/skip reason, review-threshold outcome, and any `--draft`/base-branch flags used.
 3. **Deferred review findings** (if any): one line per finding as `[severity] file:line — description`, followed by `→ Run /received-review-sdlc to address these`.
 4. The state-file cleanup confirmation line (path deleted).
+5. **Self-Learning Opportunity Advisory:** Run `node "<PLUGIN_ROOT>/scripts/util/learn-status.js"` and parse the JSON output (extracting `eligibleCount` and `threshold`). If `eligibleCount > 0`, display:
+   > 💡 **Self-Learning Opportunity:** {eligibleCount} recurring pattern(s) have met the recurrence threshold ({threshold}). Run `/learn-sdlc` to generate an automated guardrail proposal PR.
 
 Then append an OpenSpec follow-up line: `→ OpenSpec change "<name>" archived and committed.` if OpenSpec was detected in Step 1f and archive-openspec ran successfully; otherwise, if OpenSpec was detected but archive-openspec was skipped or not triggered, append the `/opsx:verify` and `/opsx:archive` follow-up pointers.
 

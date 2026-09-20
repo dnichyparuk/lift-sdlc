@@ -220,6 +220,12 @@ FROM_OPENSPEC_DIRECT: <"true" or "false">
 
 The `plan-generation-orchestrator` handles file mapping, task decomposition (with exact metadata formatting), Key Decisions writing, OpenSpec constraints validation, and writes the entire generated content to the plan file path.
 
+**Architectural Boundary Contract:** You must instruct the orchestrator to mandate an Architectural Boundary Contract for every generated task containing:
+- Target directory and layer classification (e.g. `apps/api/src/facade/`)
+- Permitted import modules
+- Prohibited import modules
+- Verification command (e.g. `npm run preflight`)
+
 **Wait for the orchestrator to finish** before proceeding to Step 3. The orchestrator returns a short summary upon writing the plan.
 
 ## Step 3 (CRITIQUE): Self-Review Plan — 5-Lane Parallel Gate Evaluation

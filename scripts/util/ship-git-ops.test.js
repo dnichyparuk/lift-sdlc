@@ -150,6 +150,28 @@ test('commitLearnings flags dirty when the post-condition git status --porcelain
   assert.match(result.postConditionReason, /not clean/);
 });
 
+test('commitLearnings ignores untracked files in .sdlc/learnings/pending/ during post-condition cleanliness assert', () => {
+  const spawnFn = (cmd, args) => {
+    if (args[0] === 'diff') return { status: 1, stdout: '', stderr: '' };
+    if (args[0] === 'add') return { status: 0, stdout: '', stderr: '' };
+    if (args[0] === 'commit') return { status: 0, stdout: '', stderr: '' };
+    if (args[0] === 'push') return { status: 0, stdout: '', stderr: '' };
+    if (args[0] === 'status') {
+      return {
+        status: 0,
+        stdout: '?? .sdlc/learnings/pending/2026-09-20-auth-sql.md\n?? ".sdlc/learnings/pending/2026-09-20-another.md"\n',
+        stderr: '',
+      };
+    }
+    throw new Error(`unexpected call: ${args.join(' ')}`);
+  };
+  const result = commitLearnings({ spawnFn });
+  assert.strictEqual(result.committed, true);
+  assert.strictEqual(result.pushed, true);
+  assert.strictEqual(result.dirty, undefined);
+  assert.strictEqual(result.postConditionReason, undefined);
+});
+
 test('commitLearnings returns committed:false with a reason when git add fails', () => {
   const spawnFn = (cmd, args) => {
     if (args[0] === 'diff') return { status: 1, stdout: '', stderr: '' };

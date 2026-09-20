@@ -68,3 +68,25 @@ test('runExecuteContextAdvisory: error path — a readSectionFn throw is NOT swa
     /config\.js missing/
   );
 });
+
+test('runExecuteContextAdvisory: records evaluation timestamps for present guardrails', () => {
+  const recorded = [];
+  const readSectionFn = () => ({
+    guardrails: [{ id: 'rule-x' }, 'rule-y', { id: '' }],
+  });
+  const getAdvisoryFn = () => null;
+  const recordGuardrailEvaluationFn = (cwd, ids) => {
+    recorded.push({ cwd, ids });
+  };
+
+  const result = runExecuteContextAdvisory('/repo', {
+    readSectionFn,
+    getAdvisoryFn,
+    recordGuardrailEvaluationFn,
+  });
+
+  assert.equal(recorded.length, 1);
+  assert.equal(recorded[0].cwd, '/repo');
+  assert.deepEqual(recorded[0].ids, ['rule-x', 'rule-y']);
+  assert.equal(result.guardrails.length, 3);
+});

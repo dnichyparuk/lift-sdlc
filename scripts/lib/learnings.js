@@ -18,6 +18,10 @@
 
 'use strict';
 
+const fs     = require('node:fs');
+const path   = require('node:path');
+const crypto = require('node:crypto');
+
 const { extractFrontmatter, parseSimpleYaml } = require('./yaml.js');
 
 // ---------------------------------------------------------------------------
@@ -201,11 +205,104 @@ function selectEligible(groups, threshold = DEFAULT_THRESHOLD) {
   return { eligible, waiting };
 }
 
+// ---------------------------------------------------------------------------
+// Evaluations Telemetry Store (.sdlc/learnings/evaluations.json)
+// ---------------------------------------------------------------------------
+
+const EVALUATIONS_REL_PATH = path.join('.sdlc', 'learnings', 'evaluations.json');
+
+let resolveSdlcRoot = null;
+try {
+  ({ resolveSdlcRoot } = require('./config.js'));
+} catch (_) {}
+
+/**
+ * Record evaluation timestamps for one or more guardrail IDs in .sdlc/learnings/evaluations.json.
+ * Safe, atomic, and fail-open (never throws; swallows all errors).
+ *
+ * @param {string} projectRoot
+ * @param {string|string[]} guardrailIds
+ * @param {string} [timestamp]
+ * @returns {boolean} true if successfully written, false on failure or empty input
+ */
+function recordGuardrailEvaluation(projectRoot, guardrailIds, timestamp = new Date().toISOString()) {
+  let tmp = null;
+  try {
+    if (!projectRoot || !guardrailIds) return false;
+    const ids = Array.isArray(guardrailIds) ? guardrailIds : [guardrailIds];
+    const validIds = ids.filter((id) => typeof id === 'string' && id.trim().length > 0);
+    if (validIds.length === 0) return false;
+
+    const root = (resolveSdlcRoot ? resolveSdlcRoot({ cwd: projectRoot }) : null) || projectRoot;
+    const evaluationsPath = path.join(root, EVALUATIONS_REL_PATH);
+    const dir = path.dirname(evaluationsPath);
+    fs.mkdirSync(dir, { recursive: true });
+
+    let existing = {};
+    if (fs.existsSync(evaluationsPath)) {
+      try {
+        const raw = fs.readFileSync(evaluationsPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.evaluations === 'object' && parsed.evaluations !== null && !Array.isArray(parsed.evaluations)) {
+          existing = parsed.evaluations;
+        }
+      } catch {
+        existing = {};
+      }
+    }
+
+    for (const id of validIds) {
+      existing[id.trim()] = timestamp;
+    }
+
+    const payload = JSON.stringify({ evaluations: existing }, null, 2) + '\n';
+    tmp = path.join(dir, `.evaluations.${crypto.randomBytes(4).toString('hex')}.tmp`);
+    fs.writeFileSync(tmp, payload, 'utf8');
+    fs.renameSync(tmp, evaluationsPath);
+    return true;
+  } catch {
+    if (tmp && fs.existsSync(tmp)) {
+      try { fs.unlinkSync(tmp); } catch (_) {}
+    }
+    return false;
+  }
+}
+
+/**
+ * Read the current guardrail evaluations mapping from .sdlc/learnings/evaluations.json.
+ * Safe and fail-open: returns {} if file is missing, unreadable, or invalid.
+ *
+ * @param {string} projectRoot
+ * @returns {Record<string, string>}
+ */
+function readGuardrailEvaluations(projectRoot) {
+  try {
+    if (!projectRoot) return {};
+    const root = (resolveSdlcRoot ? resolveSdlcRoot({ cwd: projectRoot }) : null) || projectRoot;
+    const evaluationsPath = path.join(root, EVALUATIONS_REL_PATH);
+    if (!fs.existsSync(evaluationsPath)) return {};
+    const raw = fs.readFileSync(evaluationsPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.evaluations === 'object' && parsed.evaluations !== null && !Array.isArray(parsed.evaluations)) {
+      return parsed.evaluations;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
 module.exports = {
   parsePendingFile,
   filterRejected,
   groupBySignature,
   selectEligible,
+  recordGuardrailEvaluation,
+  readGuardrailEvaluations,
+  EVALUATIONS_REL_PATH,
   REQUIRED_FRONTMATTER_FIELDS,
   SIGNATURE_PATTERN,
+  MAX_TEXT_LENGTH,
+  MAX_IMPACT_LENGTH,
+  DEFAULT_THRESHOLD,
 };

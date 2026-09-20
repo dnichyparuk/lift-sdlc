@@ -703,6 +703,17 @@ outcomes (accepted or rejected — to calibrate future responses), unclear feedb
 that revealed communication gaps, YAGNI findings that removed unnecessary work, or codebase
 facts uncovered during verification.
 
+**Structured Changeset Capture (via `capture-learning.js`):**
+If a reviewer comment points out a generalizable rule, missing boundary check, recurring anti-pattern, or architectural convention worth enforcing across the project:
+1. Prepare a JSON payload:
+   `{"signature": "<kebab-case-id>", "rationale": "<text>", "evidence": "<text>", "impact": "<low|medium|high>", "sourceSkill": "received-review-sdlc"}`
+2. Write the JSON payload to a temporary file in `os.tmpdir()`, invoke `capture-learning.js`, and delete the temp file:
+   ```bash
+   node "<PLUGIN_ROOT>/scripts/util/capture-learning.js" --file "<temp-file>" 2>/dev/null || true
+   rm -f "<temp-file>"
+   ```
+3. Invocations must use `2>/dev/null || true` — capturing is best-effort and non-blocking, and must never fail review processing.
+
 ---
 
 ## What's Next

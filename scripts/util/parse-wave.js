@@ -70,19 +70,21 @@ const USAGE = [
 ].join('\n') + '\n';
 
 /**
- * @param {string[]} argv
+ * @param {string[]} [argv]
  * @returns {{ dispatchedIdsRaw: string|null, showHelp: boolean }}
  */
-function parseArgs(argv) {
-  const args = argv.slice(2);
+function parseArgs(argv = process.argv) {
+  const args = Array.isArray(argv)
+    ? (argv[0]?.endsWith('node') || (argv[1] && argv[1].endsWith('.js')) ? argv.slice(2) : argv)
+    : [];
   let dispatchedIdsRaw = null;
   let showHelp = false;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--dispatched-ids') {
-      dispatchedIdsRaw = args[++i];
-    } else if (args[i] === '--help' || args[i] === '-h') {
+    if (args[i] === '--help' || args[i] === '-h') {
       showHelp = true;
+    } else if (args[i] === '--dispatched-ids') {
+      dispatchedIdsRaw = args[++i];
     }
   }
 
@@ -122,19 +124,32 @@ function runParseWave(text, dispatchedIdsRaw, { parseWaveSummaryFn = parseWaveSu
   return { json: result, exitCode: 0 };
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
+async function main(argv = process.argv, deps = {}) {
+  const stdout = deps.stdout || process.stdout;
+  const stderr = deps.stderr || process.stderr;
+  const stdin  = deps.stdin  || process.stdin;
+  const exit   = deps.exit   || process.exit;
 
-async function main(argv) {
-  const { dispatchedIdsRaw, showHelp } = parseArgs(argv);
-  if (showHelp) {
-    process.stdout.write(USAGE);
-    process.exit(0);
+  try {
+    const { dispatchedIdsRaw, showHelp } = parseArgs(argv);
+    if (showHelp) {
+      stdout.write(USAGE);
+      return exit(0);
+    }
+
+    if (stdin.isTTY) {
+      stderr.write('Error: parse-wave.js expects input piped via stdin, but stdin is an interactive TTY.\n\n');
+      stderr.write(USAGE);
+      return exit(1);
+    }
+
+    const text = await readStdin(stdin);
+    const { json, exitCode } = runParseWave(text, dispatchedIdsRaw);
+    writeJsonLine(json, { exitCode });
+  } catch (err) {
+    stderr.write(`Unexpected error: ${err.message}\n`);
+    return exit(2);
   }
-  const text = await readStdin();
-  const { json, exitCode } = runParseWave(text, dispatchedIdsRaw);
-  writeJsonLine(json, { exitCode });
 }
 
 if (require.main === module) {

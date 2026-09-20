@@ -1,8 +1,8 @@
 ---
 name: setup-sdlc
-description: "Use this skill when setting up Lift-SDLC for a project, initializing configuration, or when any skill reports missing config. Renders a selective-section menu so users choose which sections to configure; each selected section prints a verbose header (purpose, files-modified, consuming skills, per-option description) before any prompt. Supports direct sub-flow entry via --only, --dimensions, --pr-template, --guardrails, --execution-guardrails, --openspec-enrich. Arguments: [--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--remove-openspec] [--add] [--no-copilot]"
+description: "Use this skill when setting up Lift-SDLC for a project, initializing configuration, or when any skill reports missing config. Renders a selective-section menu so users choose which sections to configure; each selected section prints a verbose header (purpose, files-modified, consuming skills, per-option description) before any prompt. Supports direct sub-flow entry via --only, --dimensions, --pr-template, --guardrails, --execution-guardrails, --openspec-enrich, --learn. Arguments: [--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--learn] [--remove-openspec] [--add] [--no-copilot]"
 user-invocable: true
-argument-hint: "[--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--remove-openspec] [--add] [--no-copilot]"
+argument-hint: "[--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--learn] [--remove-openspec] [--add] [--no-copilot]"
 model: gemini-3.8-flash-medium
 ---
 
@@ -21,14 +21,15 @@ delegates content creation to specialized skills.
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--migrate` | Force migration of legacy config files even if no legacy files are auto-detected | off |
-| `--skip <section>` | Skip a config section during setup. Valid values: `version`, `ship`, `jira`, `review`, `commit`, `pr` | none |
+| `--skip <section>` | Skip a config section during setup. Valid values: `version`, `ship`, `jira`, `review`, `commit`, `pr`, `learn` | none |
 | `--force` | Pre-check every menu row (reconfigure everything) instead of selecting only `not-set` rows | off |
-| `--only <ids>` | Comma-separated section ids to configure non-interactively (skips the menu). Valid ids match `prepare.sections[].id`: `version`, `ship`, `jira`, `review`, `commit`, `pr`, `pr-labels`, `review-dimensions`, `pr-template`, `plan-guardrails`, `execution-guardrails`, `openspec-block` | none |
+| `--only <ids>` | Comma-separated section ids to configure non-interactively (skips the menu). Valid ids match `prepare.sections[].id`: `version`, `ship`, `jira`, `review`, `commit`, `pr`, `pr-labels`, `review-dimensions`, `pr-template`, `plan-guardrails`, `execution-guardrails`, `openspec-block`, `hooks`, `learn` | none |
 | `--dimensions` | Jump directly to review dimensions sub-flow (alias for `--only review-dimensions`) | off |
 | `--pr-template` | Jump directly to PR template sub-flow (skip config builder) | off |
 | `--guardrails` | Jump directly to plan guardrails sub-flow (skip config builder) | off |
 | `--execution-guardrails` | Jump directly to execution guardrails sub-flow (skip config builder) | off |
 | `--openspec-enrich` | Jump directly to openspec config enrichment sub-flow | off |
+| `--learn` | Jump directly to self-learning loop configuration (alias for `--only learn`) | off |
 | `--remove-openspec` | Remove the managed block from openspec/config.yaml (with --openspec-enrich) | off |
 | `--add` | Expansion mode (with --dimensions or --guardrails) | off |
 | `--no-copilot` | Skip GitHub Copilot instructions (with --dimensions) | off |
@@ -85,6 +86,7 @@ Each direct-entry flag is sugar for the `--only <id>` value below. If any is pas
 | `--guardrails` | `plan-guardrails` |
 | `--execution-guardrails` | `execution-guardrails` |
 | `--openspec-enrich` | `openspec-block` |
+| `--learn` | `learn` |
 
 If `--only <ids>` is passed (directly or via translation), skip Step 1's menu and proceed to Step 2 → Step 3 with `selectedIds = <ids>`. Pass through `--add`, `--no-copilot`, and `--remove-openspec` to the relevant sub-flow when invoked.
 

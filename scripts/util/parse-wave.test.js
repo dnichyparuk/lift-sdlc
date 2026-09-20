@@ -173,3 +173,37 @@ test('readStdin: removes its data/end/error listeners from the stream on settle'
   assert.equal(stream.listenerCount('end'), 0);
   assert.equal(stream.listenerCount('error'), 0);
 });
+
+test('CLI: exits 0 and prints usage on --help without waiting for stdin', () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '--help'], {
+    encoding: 'utf8',
+    timeout: 2000,
+  });
+  assert.equal(res.status, 0);
+  assert.match(res.stdout, /Usage:/);
+  assert.match(res.stdout, /--dispatched-ids/);
+});
+
+test('CLI: exits 0 and prints usage on -h without waiting for stdin', () => {
+  const res = spawnSync(process.execPath, [SCRIPT, '-h'], {
+    encoding: 'utf8',
+    timeout: 2000,
+  });
+  assert.equal(res.status, 0);
+  assert.match(res.stdout, /Usage:/);
+});
+
+test('main: exits 1 when stdin.isTTY is true', async () => {
+  const { main } = require('./parse-wave');
+  let exitCode = null;
+  let stderrOutput = '';
+  await main([], {
+    stdin: { isTTY: true },
+    stdout: { write: () => {} },
+    stderr: { write: (msg) => { stderrOutput += msg; } },
+    exit: (code) => { exitCode = code; },
+  });
+  assert.equal(exitCode, 1);
+  assert.match(stderrOutput, /expects input piped via stdin/);
+});
+

@@ -55,6 +55,7 @@ const { SHIP_FIELDS } = require('./ship-fields');
 const { parseRemoteOwner, detectBaseBranchSafe } = require('./git');
 const { WORKSPACE_FIELDS } = require('./workspace-fields');
 const { resolveSdlcRoot } = require('./config');
+const { DEFAULT_THRESHOLD } = require('./learnings');
 
 // ---------------------------------------------------------------------------
 // Section descriptors
@@ -301,8 +302,36 @@ function summarizeWorkspace(cfg) {
   return parts.join('  ');
 }
 
+function summarizeLearn(cfg) {
+  if (!cfg) return '';
+  const threshold = cfg.recurrenceThreshold ?? DEFAULT_THRESHOLD;
+  const stale = cfg.staleAfterCycles ? `${cfg.staleAfterCycles}d` : 'off';
+  return `threshold: ${threshold}, staleness: ${stale}`;
+}
+
+const LEARN_FIELDS = [
+  {
+    name: 'recurrenceThreshold',
+    label: 'Recurrence threshold',
+    type: 'number',
+    min: 1,
+    options: null,
+    default: DEFAULT_THRESHOLD,
+    description: `Minimum occurrences of an observed learning pattern in .sdlc/learnings/pending/ before /learn-sdlc considers it eligible for guardrail synthesis. Must be an integer >= 1 (default: ${DEFAULT_THRESHOLD}).`,
+  },
+  {
+    name: 'staleAfterCycles',
+    label: 'Stale evaluation window in days (or blank to disable)',
+    type: 'number',
+    min: 1,
+    options: null,
+    default: null,
+    description: 'Number of days without guardrail evaluation before learn-stale flags the rule as potentially obsolete. Leave empty to disable staleness checks.',
+  },
+];
+
 // ---------------------------------------------------------------------------
-// SETUP_SECTIONS — 13 entries, ordered by typical setup flow
+// SETUP_SECTIONS — ordered by typical setup flow
 // ---------------------------------------------------------------------------
 
 const SETUP_SECTIONS = [
@@ -510,6 +539,20 @@ const SETUP_SECTIONS = [
     confirmDetected: false,
     fields: [],
     summarize: summarizeExecutionGuardrails,
+  },
+  {
+    id: 'learn',
+    label: 'learn',
+    purpose: 'Self-learning loop configuration controlling how recurring observations are assimilated into project guardrails. Governs the minimum occurrence threshold before proposing a new guardrail and the inactivity threshold before flagging existing guardrails as stale.',
+    configFile: '.sdlc/config.json',
+    configPath: 'learn',
+    consumedBy: ['learn-sdlc', 'ship-sdlc'],
+    filesModified: ['.sdlc/config.json'],
+    optional: true,
+    delegatedTo: null,
+    confirmDetected: false,
+    fields: LEARN_FIELDS,
+    summarize: summarizeLearn,
   },
   {
     id: 'openspec-block',

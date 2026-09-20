@@ -379,6 +379,10 @@ Options:
 
    **Manifest extensions:** every wave manifest MUST additionally carry:
    - `guardrails: [{id, description, severity}]` — sourced verbatim from `activeGuardrails` loaded in Step 1 (Guardrail loading block above). When `activeGuardrails` is empty, the field is still present as `[]` (stable shape across waves — never omitted). Wave-runner threads this into the conditional `## Project Guardrails` block of every per-task and batched-trivial Agent prompt; when empty the block renders nothing.
+   - `layerBoundaries: string[]` — Layer-Aware Prompt Injection pattern. When dispatching subagents for tasks touching specific directories, inject layer boundaries into the agent's prompt via this field. Check the expected files for the wave and inject the following rules if matched:
+     - `apps/api/src/facade/`: Pure HTTP translation, no direct Access/Engine calls.
+     - `apps/api/src/utilities/`: Utility isolation, no upward imports into domain layers.
+     - `apps/api/tests/`: Deterministic testing rules, no naked `setTimeout`, use `workerGate`.
    - `expectedFiles: string[]` — deterministic union of every `Files: Create:` / `Files: Modify:` / `Files: Test:` path declared across the wave's tasks (computed by main context during wave build per `resources/classifying-and-waving-tasks.md` step 6b). Used by Step 5c-bis to cross-check `git diff --stat` output.
    - `verificationHint?: string` — optional; populated only when every task in the wave shares the same `Verify:` value verbatim.
 
@@ -454,7 +458,7 @@ node "<PLUGIN_ROOT>/scripts/util/parse-wave.js" --dispatched-ids '<json-array-of
 
 3. **Conflict detection:** Check `git diff --stat` for files touched by multiple tasks in this wave. If found, treat as a file conflict.
 
-4. **Verification suite:** Run verification commands specified in the plan (tests, build, lint). **CRITICAL:** Always run tests, builds, linters, and package manager commands (such as npm, pnpm, pnpm build, or yarn) via the truncated wrapper script to prevent context bloat: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`.
+4. **Verification suite:** Run verification commands specified in the plan (tests, build, lint). If the project defines a `preflight` script in `package.json`, also run `npm run preflight` as part of the verification gate. **CRITICAL:** Always run tests, builds, linters, preflight, and package manager commands (such as npm, pnpm, pnpm build, or yarn) via the truncated wrapper script to prevent context bloat: `node "<PLUGIN_ROOT>/scripts/util/run-truncated.js" "<command>"`.
 
 5. **Task status handling** (from `WAVE_SUMMARY.tasks[].status`):
    - STATUS: DONE → proceed normally
@@ -705,6 +709,17 @@ Format:
 ## YYYY-MM-DD — execute-plan-sdlc: <brief summary>
 <what happened, what was learned>
 ```
+
+**Structured Learning Capture (via `capture-learning.js`):**
+In addition to the human-readable log entry, if the observation represents a generalizable rule, missing boundary check, or anti-pattern that recurred during task execution, recovery, or post-wave guardrail checks:
+1. Prepare a JSON payload:
+   `{"signature": "<kebab-case-id>", "rationale": "<text>", "evidence": "<text>", "impact": "<low|medium|high>", "sourceSkill": "execute-plan-sdlc"}`
+2. Write the JSON payload to an OS temp file (under `os.tmpdir()`), invoke `capture-learning.js`, and delete the temp file:
+   ```bash
+   node "<PLUGIN_ROOT>/scripts/util/capture-learning.js" --file "<temp-file>" 2>/dev/null || true
+   rm -f "<temp-file>"
+   ```
+3. Invocations must use `2>/dev/null || true` — capturing is non-blocking and must never fail or halt execution.
 
 This sub-step must run **before** Step 9 emits its summary so the log.md write is part of the working tree when execute-plan-sdlc returns control. ship-sdlc's staging window runs between execute and commit; if Learning Capture happened after Step 9, the log write would land outside that window and the file would stay dirty post-pipeline.
 

@@ -151,8 +151,7 @@ Rationale:      {RESULT.classificationRationale}
 ```
 
 If `RESULT.proposals` is empty, report `No actionable hardening proposals — the
-failure signal does not point at any of the loaded surfaces.` and exit cleanly
-(the trap from Step 1 cleans up the manifest).
+failure signal does not point at any of the loaded surfaces.` and capture the candidate signature into `.sdlc/learnings/pending/` for recurrence tracking via `node "<PLUGIN_ROOT>/scripts/util/capture-learning.js" --file <temp-file> 2>/dev/null || true`, then exit cleanly (the trap from Step 1 cleans up the manifest).
 
 ---
 
@@ -181,7 +180,17 @@ user. Then use `ask_question`:
 Options: **apply** | **skip** | **cancel**
 
 - **apply** — proceed to validation and write (5a)
-- **skip** — record the proposal as skipped, continue to the next
+- **skip** — record the proposal as skipped, continue to the next.
+  **Recurrence Tracking for Skipped Proposals:**
+  When a proposal is skipped, or when an issue cannot be immediately converted into a guardrail, capture the candidate signature into `.sdlc/learnings/pending/` for long-term recurrence tracking:
+  1. Prepare JSON payload:
+     `{"signature": "<kebab-case-id>", "rationale": "<text>", "evidence": "<text>", "impact": "<low|medium|high>", "sourceSkill": "harden-sdlc"}`
+  2. Write to an OS temp file (in `os.tmpdir()`), invoke `capture-learning.js`, and delete the temp file:
+     ```bash
+     node "<PLUGIN_ROOT>/scripts/util/capture-learning.js" --file "<temp-file>" 2>/dev/null || true
+     rm -f "<temp-file>"
+     ```
+  3. Invocations must use `2>/dev/null || true` so capture failure never blocks the skill.
 - **cancel** — abort the entire skill (no further proposals processed); the
   trap cleans up the manifest
 
