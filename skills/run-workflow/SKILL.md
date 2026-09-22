@@ -121,7 +121,7 @@ If `step.status === "conditional"`:
    Dispatch via `invoke_subagent` with:
    - `TypeName: "self"`
    - `Role: step.name + " executor"`
-   - `Model: step.model`
+   - `Model`: `step.model` mapped to platform enum (contains 'pro' → 'pro', 'flash-low' or 'flash_lite' → 'flash_lite', 'flash' → 'flash', otherwise → 'inherit')
    - `Workspace: step.isolation === "worktree" || step.isolation === "branch" ? "branch" : "inherit"`
    - `Prompt`:
      ```text

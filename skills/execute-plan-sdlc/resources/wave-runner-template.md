@@ -66,7 +66,7 @@ Send all Agent dispatches in one message:
 - One per-task Agent per Standard/Complex task, using `perTaskTemplate`. Fill the template placeholders with `task.id`, `task.complexity`, `task.risk`, `task.factSheetPath`, `task.verifyToken`, and prior-wave context. Do NOT inline the full task body — the per-task Agent reads the fact sheet at `factSheetPath`.
 - One batch Agent for the trivial group (if 2+ Trivials), using `batchedTrivialTemplate`. Pass the `factSheetPath` for each trivial task; include ordering constraints if any trivials touch the same file.
 - A single Trivial task (no batch) is dispatched as an individual per-task Agent using `perTaskTemplate`, same as a Standard task.
-- Pass `mode: bypassPermissions` and `model: <task.assignedModel>` on every sub-Agent dispatch. **`model:` is required on every dispatch — no exceptions.**
+- Pass `mode: bypassPermissions` and `Model: ...` on every sub-Agent dispatch (map `task.assignedModel` to platform enum: contains "pro" → "pro", "flash-low" → "flash_lite", "flash" → "flash"). Keep the 5-level `task.assignedModel` for tracking in `attempts` and `WAVE_SUMMARY`. **`Model:` is required on every dispatch — no exceptions.**
 - **DO NOT pass `isolation: "worktree"` (or any other `isolation` value) on any sub-Agent dispatch.** The SDLC `--workspace worktree` flag controls a separate concept (a sibling git worktree created via `util/worktree-create.js`). Adding `isolation` here creates ephemeral `.sdlc/worktrees/agent-<id>` paths that are not the intended SDLC worktree. (Mirrors ship-sdlc/SKILL.md anti-pattern section.)
 
 ### 3. Collect per-task results

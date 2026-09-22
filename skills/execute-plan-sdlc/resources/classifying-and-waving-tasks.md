@@ -47,6 +47,8 @@ Model assignment derives from the complexity class. The three presets in Step 4 
 
 ### Override signals
 
+Assign `gemini-3.1-pro-low` to any task with `Risk: High` (e.g., authentication, authorization, session management, cryptography, database migrations, credentials, destructive file/functionality removal, shared mutable state), regardless of its complexity class.
+
 Assign `gemini-3.1-pro-low` to a Standard task when:
 - The task involves unfamiliar or poorly documented code
 - The task requires nuanced judgment (choosing between multiple valid approaches)
@@ -62,8 +64,8 @@ Always present 3 presets in Step 4, regardless of plan size. The actual subagent
 
 | Preset | Trivial | Standard | Complex | Best when |
 |---|---|---|---|---|
-| **Speed** | gemini-3.8-flash-low | gemini-3.8-flash-medium | gemini-3.8-flash-high | Plan is well-specified, changes are mechanical |
-| **Balanced** | gemini-3.8-flash-low | gemini-3.8-flash-medium | gemini-3.8-flash-high* | Default (hybrid) — fast Flash execution, Pro escalation on retry |
+| **Speed** | gemini-3.8-flash-medium | gemini-3.8-flash-medium | gemini-3.8-flash-high | Plan is well-specified, changes are mechanical |
+| **Balanced** | gemini-3.8-flash-medium | gemini-3.8-flash-medium | gemini-3.8-flash-high* | Default (hybrid) — fast Flash execution, Pro escalation on retry |
 | **Quality** | gemini-3.8-flash-medium | gemini-3.1-pro-low | gemini-3.1-pro-high | Codebase is unfamiliar, high-stakes tasks requiring deep Pro reasoning |
 
 \* In Balanced tier, Complex tasks start on `gemini-3.8-flash-high` for maximum execution speed and low latency. If a task fails verification, it automatically escalates to `gemini-3.1-pro-low` on Retry 1 and `gemini-3.1-pro-high` on Retry 2.
@@ -71,7 +73,13 @@ Always present 3 presets in Step 4, regardless of plan size. The actual subagent
 ### Model Dispatch Enforcement
 
 The `Model:` parameter is REQUIRED on every `invoke_subagent` dispatch — no exception. Omitting it causes the agent to inherit the parent context model, defeating the preset system's cost optimization.
-When dispatching a wave-runner Agent, permanently lock the orchestrator to `gemini-3.8-flash-low` regardless of the preset. The presets above apply strictly to the *per-task worker subagents* that the wave-runner spawns.
+
+**Platform Enum Mapping**: The `invoke_subagent` tool accepts only `inherit`, `flash_lite`, `flash`, or `pro`. Map the assigned task model before calling the tool:
+- `gemini-3.1-pro-*` → `"pro"`
+- `gemini-3.8-flash-low` → `"flash_lite"`
+- `gemini-3.8-flash-medium` / `gemini-3.8-flash-high` → `"flash"`
+
+When dispatching a wave-runner Agent, lock the orchestrator to `"Model": "flash_lite"`. The presets above apply strictly to the *per-task worker subagents* that the wave-runner spawns.
 
 ## Wave-Building Algorithm
 

@@ -1,145 +1,193 @@
 # Model Usage & References in Lift-SDLC
 
-This document outlines how models are utilized across Lift-SDLC, how the dynamic quality presets behave, and provides a reference map to simplify future model upgrades.
-
-## Overview
-
-Lift-SDLC uses a **quality-tier model routing system** to assign different models based on the complexity, risk, and size of the task. Instead of using a single global model for every action, orchestrators dispatch sub-agents dynamically. 
-
-- **Trivial/Standard Tasks:** Routed to `gemini-3.8-flash-low` or `gemini-3.8-flash-medium` to prioritize speed, low latency, and cost-efficiency.
-- **Complex Tasks:** In Balanced mode, executed on `gemini-3.8-flash-high` for fast execution and low latency, with automatic escalation to `gemini-3.1-pro-low` upon verification failure. In Full mode, routed directly to `gemini-3.1-pro-high`.
-- **Architectural Planning & Auditing:** The plan generation orchestrator uses `gemini-3.1-pro-high`, while core security, data integrity, and concurrency review dimensions use `gemini-3.1-pro-low` (with API contracts and architecture using `gemini-3.8-flash-high`) to provide true model diversity.
-
-## Quality Presets
-
-The SDLC execution and ship skills expose a `--quality` flag that adjusts the model selection dynamically:
-
-- **`--quality minimal` (Speed):** Forces `gemini-3.8-flash` for all tasks, allocating budgets dynamically: `-low` (Trivial), `-medium` (Standard), and `-high` (Complex). Perfect for rapid prototyping where throughput is prioritized (100% Flash).
-- **`--quality balanced` (Default — Hybrid):** Uses hybrid routing (*Flash Hands, Pro Brain & Eyes*). Assigns `gemini-3.8-flash-low` (Trivial), `gemini-3.8-flash-medium` (Standard), and `gemini-3.8-flash-high` (Complex). If a complex task fails verification, it automatically escalates to `gemini-3.1-pro-low` on Retry 1. Critical security and concurrency review dimensions run on `gemini-3.1-pro-low`, while structural and contract dimensions run on `gemini-3.8-flash-high`.
-- **`--quality full` (Quality):** Forces `gemini-3.1-pro` for non-trivial tasks (`-low` for Standard, `-high` for Complex) and routes Trivial to `gemini-3.8-flash-medium`. Runs a spec-compliance review.
-
-## Frontmatter `model:` Values vs. the Official Spec
-
-The official [Subagents](https://antigravity.google/docs/subagents/) page documents the agent
-frontmatter `model` field as accepting only the tiers `inherit` (default), `flash`, and `pro`.
-This plugin instead writes full reasoning-budget IDs (`gemini-3.8-flash-low`,
-`gemini-3.8-flash-medium`, `gemini-3.8-flash-high`, `gemini-3.1-pro-low`, `gemini-3.1-pro-high`)
-into `agents/*.md` and `skills/*/SKILL.md`, because the low/medium/high budget split is the whole
-point of the quality-tier routing above and the tier words cannot express it.
-
-Status of this choice (as of 2026-09-15):
-
-- **Undocumented, not rejected.** The `agy` 1.2.0 binary contains every one of these IDs as
-  string literals, together with `"unknown model"` / `"Invalid model"` diagnostics, and the CLI
-  logs on this repository show no such diagnostic for any plugin agent. `agy plugin validate` does
-  not check the field at all (it is a discovery counter).
-- **Not runtime-verified.** No test has yet confirmed that a subagent declared with
-  `model: gemini-3.8-flash-low` actually runs on that budget rather than on `inherit`. Until that
-  check exists, treat the per-agent budgets as *intended*, not *proven*.
-- **Fallback if the runtime ever rejects full IDs:** map `*-flash-*` → `flash` and `*-pro-*` →
-  `pro` in the frontmatter and keep the budget suffixes only in the programmatic dispatch paths
-  (`scripts/skill/ship.js`, `plan.js`, `review.js`), which pass the model per `invoke_subagent`
-  call rather than via frontmatter.
-
-## Future Model Upgrades
-
-To upgrade to a new generation of models in the future, you must update the following four areas of the plugin:
-
-1. **Agent & Skill Frontmatters:** Update the `model:` definition at the top of the Markdown files in `agents/` and `skills/`.
-2. **Execution Scripts:** Update the programmatic model routing in `scripts/skill/ship.js`, `scripts/skill/plan.js`, and `scripts/skill/review.js`.
-3. **Budget Configurations:** Update the token limitations in `scripts/lib/dispatch-budget.js` to match the new models' max input bytes.
-4. **Documentation:** Update references in guides (e.g., `classifying-and-waving-tasks.md`) to reflect the new escalation paths.
+This document serves as the canonical reference for how models and reasoning budgets are assigned and dynamically routed across Lift-SDLC skills, agents, pipeline steps, review dimensions, and scripts.
 
 ---
 
-### Inventory Mapping Table
+## 1. Overview & Core Philosophy
 
-The following table summarizes the explicit model mappings across Lift-SDLC skills, agents, and prompts, including the reasoning for their reasoning budget allocations.
+Lift-SDLC employs a **quality-tier model routing system** (*«Flash Hands, Pro Brain & Eyes»*). Rather than using a single global model for every action, orchestrators dynamically dispatch subagents using reasoning budgets tailored to task complexity, risk, and cognitive demand:
 
-| File Type | Component | Target Model | Reason |
-|-----------|-----------|--------------|--------|
-| Skill | `harden-sdlc` | `gemini-3.8-flash-high` | High cognitive context for error analysis |
-| Skill | `error-report-sdlc` | `gemini-3.8-flash-medium` | Standard routing, formats error reports |
-| Skill | `commit-sdlc` | `gemini-3.8-flash-medium` | Standard routine parsing and generation |
-| Skill | `ship-sdlc` (Explicit dispatch) | `gemini-3.8-flash-medium` / `-high`| Uses static suffixes assigned in ship.js |
-| Skill | `ship-sdlc` (Default pipeline) | `gemini-3.8-flash-medium` | State-machine orchestrator |
-| Skill | `plan-sdlc` | `gemini-3.8-flash-medium` | Orchestrator routing and check logic |
-| Agent | `error-report-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
-| Agent | `harden-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
-| Agent | `commit-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
-| Agent | `plan-explore-orchestrator`| `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
-| Agent | `review-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
-| Agent | `received-review-orchestrator` | `gemini-3.8-flash-low` | Enforce fast reasoning bounds natively in frontmatter |
-| Agent | `plan-execution-validator` | `gemini-3.8-flash-high` | Fast deterministic graph circularity & collision check |
-| Agent | `plan-generation-orchestrator` | `gemini-3.1-pro-high` | Deep multi-wave architectural plan drafting |
-| Prompt | `lane-static-structural` | `gemini-3.8-flash-low` | Simple file structure check |
-| Prompt | `lens-requirements` | `gemini-3.8-flash-medium` | Needs reasoning buffer for planning |
-| Prompt | `lane-guardrail-compliance`| `gemini-3.8-flash-medium` | Needs reasoning buffer for planning |
-| Prompt | `lens-risk` | `gemini-3.8-flash-medium` | Needs reasoning buffer for planning |
-| Prompt | `lens-architecture` | `gemini-3.8-flash-medium` | Needs reasoning buffer for planning |
-| Prompt | `g17-dimension-coverage` | `gemini-3.8-flash-medium` | Needs reasoning buffer for planning |
-| Prompt | `lane-file-existence` | `gemini-3.8-flash-low` | Simple check |
-| Prompt | `lane-content-coverage` | `gemini-3.8-flash-medium` | Needs reasoning buffer for planning |
+- **Flash (low / medium)**: Optimized for throughput, deterministic checks, and low latency. Used by primary orchestrators, file discovery, routine code edits, unit test authoring, and documentation reviews.
+- **Flash (high)**: Used for high-speed cross-file pattern analysis, complex PR descriptions, graph circularity/wave validation, and API/pipeline contracts.
+- **Pro (low / high)**: Reserved for deep architectural planning, critical review dimensions (security, data integrity, concurrency), and automated failure recovery escalation.
 
 ---
 
-## File Reference Map
+## 2. Quality Presets (`--quality`)
 
-The following tables map exactly where specific models are hardcoded or referenced in the plugin source code.
+The SDLC execution and ship skills expose a `--quality` flag (configurable via CLI or `.sdlc/config.json`) controlling task worker routing during plan execution:
 
-### Agents
-*Orchestrators that manage the lifecycle of sub-agents.*
+| Preset | Flag Value | Trivial Tasks | Standard Tasks | Complex Tasks | Typical Use Case |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Speed** | `--quality minimal` | `gemini-3.8-flash-medium` | `gemini-3.8-flash-medium` | `gemini-3.8-flash-high` | Rapid prototyping, mechanical refactoring, 100% Flash throughput |
+| **Balanced** *(Default)* | `--quality balanced` | `gemini-3.8-flash-medium` | `gemini-3.8-flash-medium` | `gemini-3.8-flash-high`* | Daily development; fast Flash execution with automatic Pro escalation on retry |
+| **Quality** | `--quality full` | `gemini-3.8-flash-medium` | `gemini-3.1-pro-low` | `gemini-3.1-pro-high` | High-stakes architectural tasks, critical infrastructure, deep reasoning |
 
-| Agent Name | File Path | Models Referenced |
-|------------|-----------|-------------------|
-| `commit-orchestrator` | [agents/commit-orchestrator.md](../agents/commit-orchestrator.md) | `gemini-3.8-flash-low` |
-| `error-report-orchestrator` | [agents/error-report-orchestrator.md](../agents/error-report-orchestrator.md) | `gemini-3.8-flash-low` |
-| `harden-orchestrator` | [agents/harden-orchestrator.md](../agents/harden-orchestrator.md) | `gemini-3.8-flash-low` |
-| `plan-execution-validator` | [agents/plan-execution-validator.md](../agents/plan-execution-validator.md) | `gemini-3.8-flash-high` |
-| `plan-explore-orchestrator` | [agents/plan-explore-orchestrator.md](../agents/plan-explore-orchestrator.md) | `gemini-3.8-flash-low` |
-| `plan-generation-orchestrator` | [agents/plan-generation-orchestrator.md](../agents/plan-generation-orchestrator.md) | `gemini-3.1-pro-high` |
-| `received-review-orchestrator` | [agents/received-review-orchestrator.md](../agents/received-review-orchestrator.md) | `gemini-3.8-flash-low` |
-| `review-orchestrator` | [agents/review-orchestrator.md](../agents/review-orchestrator.md) | `gemini-3.8-flash-low` |
+*\* In Balanced mode, Complex tasks start on `gemini-3.8-flash-high`. If verification fails, Retry 1 automatically escalates to `gemini-3.1-pro-low`, and Retry 2 escalates to `gemini-3.1-pro-high`.*
 
-### Skills
-*User-facing skills and their associated Markdown templates/documentation.*
+### High-Risk Task Override
+Any task with `Risk: High` (authentication, authorization, session management, cryptography, database migrations, credentials, destructive file/functionality removal, shared mutable state) automatically escalates to `gemini-3.1-pro-low` (`pro`), regardless of its complexity class.
 
-| Skill Name | File Path | Models Referenced |
-|------------|-----------|-------------------|
-| `commit-sdlc` | [skills/commit-sdlc/SKILL.md](../skills/commit-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `error-report-sdlc` | [skills/error-report-sdlc/SKILL.md](../skills/error-report-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/SKILL.md](../skills/execute-plan-sdlc/SKILL.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/resources/classifying-and-waving-tasks.md](../skills/execute-plan-sdlc/resources/classifying-and-waving-tasks.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/resources/recovering-from-failures.md](../skills/execute-plan-sdlc/resources/recovering-from-failures.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/resources/spec-compliance-reviewer.md](../skills/execute-plan-sdlc/resources/spec-compliance-reviewer.md) | `gemini-3.8-flash-medium` |
-| `execute-plan-sdlc` | [skills/execute-plan-sdlc/resources/wave-runner-template.md](../skills/execute-plan-sdlc/resources/wave-runner-template.md) | `gemini-3.1-pro-low`, `gemini-3.1-pro-high`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `github-sdlc` | [skills/github-sdlc/SKILL.md](../skills/github-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `harden-sdlc` | [skills/harden-sdlc/SKILL.md](../skills/harden-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
-| `jira-sdlc` | [skills/jira-sdlc/SKILL.md](../skills/jira-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `plan-sdlc` | [skills/plan-sdlc/SKILL.md](../skills/plan-sdlc/SKILL.md) | `gemini-3.8-flash-medium`, `gemini-3.1-pro-low` |
-| `pr-sdlc` | [skills/pr-sdlc/SKILL.md](../skills/pr-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `received-review-sdlc` | [skills/received-review-sdlc/SKILL.md](../skills/received-review-sdlc/SKILL.md) | `gemini-3.8-flash-high` |
-| `review-sdlc` | [skills/review-sdlc/resources/EXAMPLES.md](../skills/review-sdlc/resources/EXAMPLES.md) | `gemini-3.8-flash-medium` |
-| `review-sdlc` | [skills/review-sdlc/resources/REFERENCE.md](../skills/review-sdlc/resources/REFERENCE.md) | `gemini-3.1-pro-low`, `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `review-sdlc` | [skills/review-sdlc/SKILL.md](../skills/review-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `run-workflow` | [skills/run-workflow/SKILL.md](../skills/run-workflow/SKILL.md) | `gemini-3.8-flash-medium` |
-| `setup-sdlc` | [skills/setup-sdlc/SKILL.md](../skills/setup-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `ship-sdlc` | [skills/ship-sdlc/SKILL.md](../skills/ship-sdlc/SKILL.md) | `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
-| `verify-pipeline-sdlc` | [skills/verify-pipeline-sdlc/SKILL.md](../skills/verify-pipeline-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-| `version-sdlc` | [skills/version-sdlc/SKILL.md](../skills/version-sdlc/SKILL.md) | `gemini-3.8-flash-medium` |
-
-### Scripts & Libraries
-*JavaScript utility files that handle budget allocation and dynamic model routing.*
-
-| Script Name | File Path | Models Referenced |
-|-------------|-----------|-------------------|
-| `dispatch-budget.js` | [scripts/lib/dispatch-budget.js](../scripts/lib/dispatch-budget.js) | `gemini-3.1-pro`, `gemini-3.8-flash` variants (suffixes stripped at runtime) |
-| `plan.js` | [scripts/skill/plan.js](../scripts/skill/plan.js) | `gemini-3.8-flash-low`, `gemini-3.8-flash-medium` |
-| `review.js` | [scripts/skill/review.js](../scripts/skill/review.js) | `gemini-3.8-flash-medium` |
-| `ship.js` | [scripts/skill/ship.js](../scripts/skill/ship.js) | `gemini-3.8-flash-medium`, `gemini-3.8-flash-high` |
+### Task Recovery Escalation Ladder
+When a task fails verification in `execute-plan-sdlc`, the retry mechanism advances the assigned model exactly one step along the ladder:
+```
+gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high → User Escalation
+```
 
 ---
 
-## See Also
+## 3. User-Facing Skills (`skills/*/SKILL.md`)
 
-*   **Architecture & Agent Relations**: For a deeper dive into how models map to specific agent layers, see the [SDLC Plugin Architecture Report](./sdlc-plugin-architecture-report.md).
+Each skill defines its base orchestrator model in its frontmatter:
+
+| Skill Name | Location | Frontmatter Model | Purpose & Execution Context |
+| :--- | :--- | :--- | :--- |
+| **`commit-sdlc`** | [skills/commit-sdlc/SKILL.md](../skills/commit-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Analyzes staged diffs and drafts conventional commit messages |
+| **`error-report-sdlc`** | [skills/error-report-sdlc/SKILL.md](../skills/error-report-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Prepares and formats sanitized bug reports |
+| **`execute-plan-sdlc`** | [skills/execute-plan-sdlc/SKILL.md](../skills/execute-plan-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Coordinates wave-based plan execution with adaptive budgeting |
+| **`github-sdlc`** | [skills/github-sdlc/SKILL.md](../skills/github-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | GitHub CLI operations, issue and PR interaction |
+| **`harden-sdlc`** | [skills/harden-sdlc/SKILL.md](../skills/harden-sdlc/SKILL.md) | `gemini-3.8-flash-high` | Deep error analysis and guardrail synthesis following pipeline failure |
+| **`jira-sdlc`** | [skills/jira-sdlc/SKILL.md](../skills/jira-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Jira issue lifecycle management via MCP tools |
+| **`learn-sdlc`** | [skills/learn-sdlc/SKILL.md](../skills/learn-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Self-learning loop: assimilates recurrent patterns into guardrails |
+| **`plan-sdlc`** | [skills/plan-sdlc/SKILL.md](../skills/plan-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Manages discovery, plan generation, gates, and critique |
+| **`pr-sdlc`** | [skills/pr-sdlc/SKILL.md](../skills/pr-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Generates structured PR descriptions and labels |
+| **`received-review-sdlc`** | [skills/received-review-sdlc/SKILL.md](../skills/received-review-sdlc/SKILL.md) | `gemini-3.8-flash-high` | Evaluates, verifies, and fixes incoming PR review feedback |
+| **`review-sdlc`** | [skills/review-sdlc/SKILL.md](../skills/review-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Multi-dimension code review orchestrator |
+| **`run-workflow`** | [skills/run-workflow/SKILL.md](../skills/run-workflow/SKILL.md) | `gemini-3.8-flash-medium` | Generic pipeline engine executing declarative workflow manifests |
+| **`setup-sdlc`** | [skills/setup-sdlc/SKILL.md](../skills/setup-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Interactive project setup and configuration wizard |
+| **`ship-sdlc`** | [skills/ship-sdlc/SKILL.md](../skills/ship-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | State-machine driving end-to-end execution through PR creation |
+| **`verify-pipeline-sdlc`** | [skills/verify-pipeline-sdlc/SKILL.md](../skills/verify-pipeline-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Investigates failed CI workflows and proposes/applies fixes |
+| **`version-sdlc`** | [skills/version-sdlc/SKILL.md](../skills/version-sdlc/SKILL.md) | `gemini-3.8-flash-medium` | Semantic versioning, changelog generation, and tag creation |
+
+---
+
+## 4. Orchestrator Subagents (`agents/*.md`)
+
+Orchestrator subagents run in isolated contexts via `invoke_subagent` to keep the main user conversation compact. The `Dispatch Model` column shows the 4-level platform enum passed to `invoke_subagent`:
+
+| Agent Name | File Path | Frontmatter Model | Dispatch Model (`invoke_subagent`) | Primary Role |
+| :--- | :--- | :--- | :--- | :--- |
+| **`commit-orchestrator`** | [agents/commit-orchestrator.md](../agents/commit-orchestrator.md) | `gemini-3.8-flash-low` | `flash_lite` | Generates conventional commit subject and body from staged diff |
+| **`error-report-orchestrator`** | [agents/error-report-orchestrator.md](../agents/error-report-orchestrator.md) | `gemini-3.8-flash-low` | `flash_lite` | Assembles formatted defect report |
+| **`harden-orchestrator`** | [agents/harden-orchestrator.md](../agents/harden-orchestrator.md) | `gemini-3.8-flash-low` | `flash_lite` | Classifies failure causes and proposes guardrail strengthenings |
+| **`learn-review-only`** | [agents/learn-review-only.md](../agents/learn-review-only.md) | `gemini-3.8-flash-low` | `flash_lite` | Pre-screen assessment of synthesized guardrails against regressions |
+| **`learn-synthesis-orchestrator`** | [agents/learn-synthesis-orchestrator.md](../agents/learn-synthesis-orchestrator.md) | `gemini-3.8-flash-low` | `flash_lite` | Synthesizes candidate guardrails from recurring learning signatures |
+| **`plan-execution-validator`** | [agents/plan-execution-validator.md](../agents/plan-execution-validator.md) | `gemini-3.8-flash-high` | `flash` | Validates plan integrity (DAG cycles, vague tasks, file conflicts) |
+| **`plan-explore-orchestrator`** | [agents/plan-explore-orchestrator.md](../agents/plan-explore-orchestrator.md) | `gemini-3.8-flash-low` | `flash` | Derives 3–7 dynamic discovery dimensions and fans out research |
+| **`plan-generation-orchestrator`** | [agents/plan-generation-orchestrator.md](../agents/plan-generation-orchestrator.md) | `gemini-3.1-pro-high` | `pro` | **Deep multi-wave architectural plan generation** |
+| **`received-review-orchestrator`** | [agents/received-review-orchestrator.md](../agents/received-review-orchestrator.md) | `gemini-3.8-flash-low` | `flash_lite` | Clusters PR comments and coordinates thread verifiers |
+| **`review-orchestrator`** | [agents/review-orchestrator.md](../agents/review-orchestrator.md) | `gemini-3.8-flash-low` | `flash_lite` | Coordinates parallel review dimension subagents |
+
+---
+
+## 5. SDLC End-to-End Pipeline Steps (`ship-sdlc` / `pipeline.json`)
+
+When `ship-sdlc` runs, steps are dispatched according to [pipeline.json](../skills/ship-sdlc/pipeline.json) and [ship.js](../scripts/skill/ship.js):
+
+| Pipeline Step ID | Dispatched Skill / Handler | Mode | Default Model | Notes / Escalation |
+| :--- | :--- | :--- | :--- | :--- |
+| **`execute`** | `execute-plan-sdlc` | `agent` | `gemini-3.8-flash-medium` | Forwards `--quality` flag to wave execution |
+| **`commit`** | `commit-sdlc` | `agent` | `gemini-3.8-flash-medium` | Creates isolated commit for implemented plan |
+| **`review`** | `review-sdlc` | `agent` | `gemini-3.8-flash-medium` | Dispatches active review dimensions |
+| **`received-review`** | `received-review-sdlc` | `agent` | `gemini-3.8-flash-high` | Conditional: triggered if review findings ≥ threshold |
+| **`commit-fixes`** | `commit-sdlc` | `agent` | `gemini-3.8-flash-medium` | Conditional: commits fixes applied during review |
+| **`version`** | `version-sdlc` | `agent` | `gemini-3.8-flash-medium` | Calculates semver bump and tags release |
+| **`archive-openspec`** | `inlineHandler: openspec-archive` | `inline` | `gemini-3.8-flash-medium` | Archives completed OpenSpec change specs |
+| **`pr`** | `pr-sdlc` | `agent` | `gemini-3.8-flash-high` | Higher-tier model ensures comprehensive PR description |
+| **`verify-pipeline`** | `inlineHandler: ci-polling` | `inline loop` | — | Polls remote CI checks |
+| ↳ *subDispatch 1* | `verify-pipeline-sdlc` | `agent` | `gemini-3.8-flash-high` | Analyzes CI logs upon failure |
+| ↳ *subDispatch 2* | `commit-sdlc` | `agent` | `gemini-3.8-flash-medium` | Commits CI fix patch |
+| **`await-remote-review`** | `inlineHandler: remote-review-polling` | `inline loop` | — | Polls for remote bot reviews (e.g. Copilot) |
+| ↳ *subDispatch 1* | `received-review-sdlc` | `agent` | `gemini-3.8-flash-high` | Processes bot comments |
+| ↳ *subDispatch 2* | `commit-sdlc` | `agent` | `gemini-3.8-flash-medium` | Commits bot review fixes |
+| **`learnings-commit`** | `inlineHandler: learnings` | `inline` | `gemini-3.8-flash-medium` | Appends learnings log and commits |
+| **`cleanup`** | `inlineHandler: cleanup` | `inline` | `gemini-3.8-flash-medium` | Terminal state cleanup and worktree prune |
+
+---
+
+## 6. Planning Sub-Agents, Gates & Lenses (`plan-sdlc`)
+
+### A. Dynamic Discovery Fan-Out (`plan-explore-orchestrator`)
+When deriving dynamic discovery dimensions, models are assigned based on task nature:
+- **Surface scan (`code`)**: `gemini-3.8-flash-medium` (file enumeration, regex/pattern matching, caller locations)
+- **Standard analysis (`code` / `web`)**: `gemini-3.8-flash-medium` (API usage, cross-file reasoning, docs lookup)
+- **Complex tracing (`hybrid` / architecture)**: `gemini-3.1-pro-high` (deep architectural integration, multi-hop dependency tracing)
+
+### B. Quality Gate Lanes (Parallel Fan-Out via `lanes[]`)
+Plan validation gates G1–G17 are partitioned across 5 parallel lanes:
+- `static-structural` (G1–G3, G7, G12): `gemini-3.8-flash-low`
+- `file-existence` (G4, G10): `gemini-3.8-flash-low`
+- `content-coverage` (G5, G6, G8, G9, G11, G13, G15, G16): `gemini-3.8-flash-medium`
+- `guardrail-compliance` (G14): `gemini-3.8-flash-medium`
+- `dimension-coverage` (G17): `gemini-3.8-flash-medium`
+
+### C. Multi-Lens Critique Reviewers (`lensReviewers[]`)
+Evaluates plan quality across 3 lenses: `architecture`, `requirements`, and `risk`:
+- **Plans < 5 tasks**: Single reviewer using `gemini-3.8-flash-medium`.
+- **Plans ≥ 5 tasks**: Parallel 3-lens fan-out with **Cross-Model Override**:
+  - If plan was authored by Flash (`gemini-3.8-flash-medium`) → review with **`gemini-3.1-pro-low`**
+  - If plan was authored by Pro (`gemini-3.1-pro-*`) → review with **`gemini-3.8-flash-high`**
+
+---
+
+## 7. Review Dimensions Catalog Model Mappings
+
+As defined in [skills/setup-sdlc/resources/dimension-catalog.md](../skills/setup-sdlc/resources/dimension-catalog.md) and checked by `scripts/lib/dimensions.js`:
+
+| Dimension Category | Dimension Name | Default Severity | Target Model |
+| :--- | :--- | :--- | :--- |
+| **Core High-Risk** | `security-review` | high | `gemini-3.1-pro-low` |
+| | `data-integrity-review` | high | `gemini-3.1-pro-low` |
+| | `concurrency-review` | high | `gemini-3.1-pro-low` |
+| | `database-migrations-review` | high | `gemini-3.1-pro-low` |
+| | `spec-compliance-review` | high | `gemini-3.1-pro-low` |
+| **Architectural & Contracts** | `api-contract-review` | high | `gemini-3.8-flash-high` |
+| | `plugin-architecture-review` | medium | `gemini-3.8-flash-high` |
+| | `sdk-library-design-review` | high | `gemini-3.8-flash-high` |
+| | `data-pipeline-review` | high | `gemini-3.8-flash-high` |
+| | `microservices-review` | medium | `gemini-3.8-flash-high` |
+| **Component & Engineering** | `code-quality-review` | medium | `gemini-3.8-flash-medium` |
+| | `api-review` | high | `gemini-3.8-flash-medium` |
+| | `test-coverage-review` | medium | `gemini-3.8-flash-medium` |
+| | `performance-review` | medium | `gemini-3.8-flash-medium` |
+| | `type-safety-review` | medium | `gemini-3.8-flash-medium` |
+| | `dependency-management-review` | medium | `gemini-3.8-flash-medium` |
+| | `error-handling-review` | medium | `gemini-3.8-flash-medium` |
+| | `ui-review` | medium | `gemini-3.8-flash-medium` |
+| | `state-management-review` | medium | `gemini-3.8-flash-medium` |
+| | `infrastructure-review` | medium | `gemini-3.8-flash-medium` |
+| | `ci-cd-pipeline-review` | medium | `gemini-3.8-flash-medium` |
+| | `configuration-management-review`| medium | `gemini-3.8-flash-medium` |
+| | `accessibility-review` | medium | `gemini-3.8-flash-medium` |
+| | `logging-observability-review` | medium | `gemini-3.8-flash-medium` |
+| | `cli-ux-review` | medium | `gemini-3.8-flash-medium` |
+| | `monorepo-governance-review` | medium | `gemini-3.8-flash-medium` |
+| | `mobile-app-review` | medium | `gemini-3.8-flash-medium` |
+| | `ml-ai-review` | medium | `gemini-3.8-flash-medium` |
+| **Low-Risk & Documentation** | `documentation-review` | low | `gemini-3.8-flash-medium` |
+| | `naming-conventions-review` | low | `gemini-3.8-flash-medium` |
+| | `documentation-quality-review` | low | `gemini-3.8-flash-medium` |
+| | `internationalization-review` | low | `gemini-3.8-flash-medium` |
+
+---
+
+## 8. Received Review Thread Verifiers (`received-review-sdlc`)
+
+When verifying outstanding review threads via [received-review-orchestrator.md](../agents/received-review-orchestrator.md):
+- Any thread in the group has `severity: "critical"` → Dispatched to **`pro`** (`gemini-3.1-pro-*`)
+- Otherwise → Dispatched to **`flash`** (`gemini-3.8-flash-*`)
+
+---
+
+## 9. Scripts & Runtime Implementation References
+
+| Script / Library | Path | Role in Model Routing |
+| :--- | :--- | :--- |
+| **`dispatch-budget.js`** | [scripts/lib/dispatch-budget.js](../scripts/lib/dispatch-budget.js) | Strips budget suffixes (`-low`, `-medium`, `-high`) to base models (`gemini-3.8-flash`, `gemini-3.1-pro`) and calculates adaptive wave concurrency limits based on 1M token input windows (75% reserve). |
+| **`dimensions.js`** | [scripts/lib/dimensions.js](../scripts/lib/dimensions.js) | Canonical validator maintaining `VALID_MODELS`: `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high`, `gemini-3.1-pro-low`, `gemini-3.1-pro-high`. |
+| **`ship.js`** | [scripts/skill/ship.js](../scripts/skill/ship.js) | Emits structured step manifests assigning target models to pipeline stages (`execute`, `pr`, `received-review`, etc.). |
+| **`plan.js`** | [scripts/skill/plan.js](../scripts/skill/plan.js) | Prepares `lanes[]` and `lensReviewers[]` metadata with their respective model configurations. |
+| **`review.js`** | [scripts/skill/review.js](../scripts/skill/review.js) | Ingests frontmatter `model` from active dimensions, falling back to `subagent_model` (`gemini-3.8-flash-medium`). |
+| **`run-workflow.js`** | [scripts/skill/run-workflow.js](../scripts/skill/run-workflow.js) | Dispatches pipeline steps as subagents honoring `step.model`. |
+| **`validate-cost-tiers.js`**| [scripts/ci/validate-cost-tiers.js](../scripts/ci/validate-cost-tiers.js) | CI verification script checking frontmatter model drift against documentation. |

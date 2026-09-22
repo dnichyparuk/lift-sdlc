@@ -153,7 +153,7 @@ fi
 
 - **Full pipeline** (`explorePack.manifestPath` is non-null AND scope is 4+ files / unclear scope):
 
-  1. Spawn `sdlc:plan-explore-orchestrator` via `invoke_subagent` exactly once with inputs:
+  1. Spawn `sdlc:plan-explore-orchestrator` via `invoke_subagent` exactly once with `Model: "flash"` and inputs:
      ```
      MANIFEST_FILE: <explorePack.manifestPath>
      PROJECT_ROOT: <cwd>
@@ -208,7 +208,7 @@ Identify constraints: language, framework, existing conventions, testing approac
 Wait for answer.
 
 **Orchestrator dispatch:**
-Dispatch the `sdlc:plan-generation-orchestrator` via `invoke_subagent` exactly once with inputs:
+Dispatch the `sdlc:plan-generation-orchestrator` via `invoke_subagent` exactly once with `Model: "pro"` and inputs:
 ```
 USER_PROMPT: <verbatim user request>
 PLAN_FILE_PATH: <absolute path to plan file>
@@ -240,7 +240,7 @@ For each `lanes[i]` entry (i = 0..4) in `Subagents`:
 
 - `TypeName`: `lanes[i].subagentType`
 - `Role`: `lanes[i].name + " gate evaluator"`
-- `Model`: `lanes[i].model`
+- `Model`: `lanes[i].model` mapped to platform enum (contains 'pro' → 'pro', 'flash-low' or 'flash_lite' → 'flash_lite', 'flash' → 'flash', otherwise → 'inherit')
 - prompt body: Read `lanes[i].promptTemplatePath` and fill template variables:
   - All lanes: `{PLAN_FILE_PATH}` (absolute path to plan file), `{PROJECT_ROOT}` (cwd)
   - Lanes 0–3 non-G17: `{REQUIREMENTS_SUMMARY}` (the numbered requirements list from Step 1 CONSUME — same content as `{REQUIREMENTS_CHECKLIST}` in Step 5; retained in memory from Step 1), `{ACTIVE_GUARDRAILS}` (from `guardrails[]` P7), `{OPENSPEC_TASKS}` (from `openspecContext.tasks` P13, null when not OpenSpec-sourced), `{BRIEF_FINDING_IDS}` (from `explorePack.manifestPath` context, null when no brief)
@@ -329,7 +329,7 @@ Skip for lightweight plans (2–3 file scope from Step 0 routing).
 For each `lensReviewers[i]` entry (i = 0..2):
 - `TypeName`: `lensReviewers[i].subagentType`
 - `Role`: `"Plan Reviewer - " + lensReviewers[i].lens`
-- `Model`: override with the **opposite-of-plan-author model** at dispatch time (cross-model property — plan written by gemini-3.8-flash-medium → dispatch reviewer as gemini-3.1-pro-low; plan written by gemini-3.1-pro-low → dispatch reviewer as gemini-3.8-flash-medium). This overrides the default `lensReviewers[i].model` value from the prepare output for ≥5-task plans.
+- `Model`: override with the **opposite-of-plan-author model** at dispatch time, mapped to platform enum (cross-model property — plan written by Flash → dispatch reviewer with `Model: "pro"`; plan written by Pro → dispatch reviewer with `Model: "flash"`). This overrides the default `lensReviewers[i].model` value from the prepare output for ≥5-task plans.
 - `Workspace`: `"inherit"`
 - `Prompt`: Read `lensReviewers[i].promptTemplatePath` and fill template variables:
   - `{PLAN_FILE_PATH}` — absolute path to the plan file
