@@ -1,0 +1,596 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-10-05T07:40:00Z",
+  "projects": [
+    {
+      "id": "trade-robot-alpha",
+      "name": "Trade Robot Alpha",
+      "repoPath": "/home/dzmitry/projects/trade-robot-alpha",
+      "plans": [
+        {
+          "id": "paper-live-batch4-part1b-unification",
+          "title": "Batch 4 Part 1b: One Decision Code Path (Unification & Live Equity)",
+          "filePath": "docs/plans/2026-10-03-paper-live-batch4-part1b-unification.md",
+          "status": "in_progress",
+          "version": "v2",
+          "goal": "Make robot decisions come from ONE code path across live, paper and historical runs so adapters differ only in I/O",
+          "architectureSummary": "IDesign layer purity unchanged. Shared rules in src/core and src/engines. Characterization tests first with bit-for-bit goldens.",
+          "waves": [
+            {
+              "id": "wave-0",
+              "title": "Wave 0: Permanent Anti-Drift Instruments",
+              "order": 1,
+              "status": "completed",
+              "dependsOn": []
+            },
+            {
+              "id": "wave-b",
+              "title": "Wave B: Slippage Rule Unification",
+              "order": 2,
+              "status": "in_progress",
+              "dependsOn": [
+                "wave-0"
+              ]
+            },
+            {
+              "id": "wave-e",
+              "title": "Wave E: Partial-Exit Booking Atomicity",
+              "order": 3,
+              "status": "todo",
+              "dependsOn": [
+                "wave-b"
+              ]
+            },
+            {
+              "id": "wave-l",
+              "title": "Wave L: Live Equity Unrealised PnL Fix",
+              "order": 4,
+              "status": "todo",
+              "dependsOn": [
+                "wave-e"
+              ]
+            },
+            {
+              "id": "wave-a",
+              "title": "Wave A: Kill-Switch Single State Machine",
+              "order": 5,
+              "status": "todo",
+              "dependsOn": [
+                "wave-l"
+              ]
+            }
+          ],
+          "tasks": [
+            {
+              "id": "T0",
+              "globalId": "trade-robot-alpha:part1b:T0",
+              "title": "Divergence audit with evidence -> parity matrix finalised",
+              "waveId": "wave-0",
+              "complexity": "Complex",
+              "risk": "Low",
+              "status": "done",
+              "dependsOn": [],
+              "statusEvidence": {
+                "commit": "8ad4a81",
+                "pr": "#26"
+              },
+              "files": {
+                "create": [
+                  ".sdlc/execution/part1b-context/t0-matrix-rows.json"
+                ],
+                "modify": [
+                  "docs/plans/2026-10-03-paper-live-batch4-part1b-unification.md"
+                ],
+                "test": []
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "Parity matrix contains all 38 divergence rows with code citations",
+                  "checked": true
+                },
+                {
+                  "text": "Machine-readable t0-matrix-rows.json generated",
+                  "checked": true
+                }
+              ],
+              "markdownAnchor": "#### Task T0: Divergence audit with evidence",
+              "markdownSource": "Audit all 38 execution-mode divergence rows. Evidence collected at HEAD. Machine-readable matrix exported to .sdlc/execution/part1b-context/t0-matrix-rows.json."
+            },
+            {
+              "id": "P0",
+              "globalId": "trade-robot-alpha:part1b:P0",
+              "title": "Controllable paper-broker clock (set_simulation_time honoured)",
+              "waveId": "wave-0",
+              "complexity": "Standard",
+              "risk": "Medium",
+              "status": "done",
+              "dependsOn": [
+                "T0"
+              ],
+              "statusEvidence": {
+                "commit": "a14fc20",
+                "pr": "#27"
+              },
+              "files": {
+                "create": [
+                  "tests/unit/access/broker/test_paper_clock.py"
+                ],
+                "modify": [
+                  "src/access/broker/paper.py",
+                  "src/access/broker/paper_trading/accounting.py"
+                ],
+                "test": [
+                  "tests/unit/access/broker/test_paper_clock.py"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "set_simulation_time updates paper broker clock",
+                  "checked": true
+                },
+                {
+                  "text": "Zero un-mocked datetime.now calls outside _now() helper",
+                  "checked": true
+                }
+              ],
+              "markdownAnchor": "#### Task P0: Controllable paper-broker clock",
+              "markdownSource": "Enable set_simulation_time on PaperBroker. Ratchet test asserts 0 raw wall-clock calls in paper broker."
+            },
+            {
+              "id": "FV0",
+              "globalId": "trade-robot-alpha:part1b:FV0",
+              "title": "Stateful FakeVenue for the L path (ccxt execution simulation)",
+              "waveId": "wave-0",
+              "complexity": "Standard",
+              "risk": "Medium",
+              "status": "done",
+              "dependsOn": [
+                "P0"
+              ],
+              "statusEvidence": {
+                "commit": "b29de11"
+              },
+              "files": {
+                "create": [
+                  "tests/parity/fake_venue.py",
+                  "tests/parity/test_fake_venue.py"
+                ],
+                "modify": [],
+                "test": [
+                  "tests/parity/test_fake_venue.py"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "FakeVenue mirrors CCXT REST and WebSocket responses",
+                  "checked": true
+                },
+                {
+                  "text": "Used by H0 harness for 3-way differential testing",
+                  "checked": true
+                }
+              ],
+              "markdownAnchor": "#### Task FV0: Stateful FakeVenue",
+              "markdownSource": "Implement FakeVenue for deterministic mock testing of CCXT live execution paths."
+            },
+            {
+              "id": "H0a",
+              "globalId": "trade-robot-alpha:part1b:H0a",
+              "title": "Parity harness part 1: infrastructure & 3-way differential runner",
+              "waveId": "wave-0",
+              "complexity": "Complex",
+              "risk": "Medium",
+              "status": "done",
+              "dependsOn": [
+                "FV0"
+              ],
+              "statusEvidence": {
+                "commit": "c33fe88"
+              },
+              "files": {
+                "create": [
+                  "tests/parity/conftest.py",
+                  "tests/parity/trace.py",
+                  "tests/parity/scenarios.py"
+                ],
+                "modify": [
+                  "tests/unit/managers/trading/conftest.py"
+                ],
+                "test": [
+                  "tests/parity/test_parity_harness_self_test.py"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "TraceEvent normalisation handles timestamp alignment",
+                  "checked": true
+                },
+                {
+                  "text": "Self-test catches 4 injected synthetic divergences",
+                  "checked": true
+                }
+              ],
+              "markdownAnchor": "#### Task H0a: Parity harness infrastructure",
+              "markdownSource": "Build differential testing harness comparing Live, Paper and Backtest trade executions."
+            },
+            {
+              "id": "B0",
+              "globalId": "trade-robot-alpha:part1b:B0",
+              "title": "Slippage characterization test suite",
+              "waveId": "wave-b",
+              "complexity": "Standard",
+              "risk": "Low",
+              "status": "in_progress",
+              "dependsOn": [
+                "H0a"
+              ],
+              "statusEvidence": {
+                "commit": "e5512bc (WIP)"
+              },
+              "files": {
+                "create": [
+                  "tests/unit/core/test_fill_model_slippage.py"
+                ],
+                "modify": [],
+                "test": [
+                  "tests/unit/core/test_fill_model_slippage.py"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "Pins current behavior across all 9 slippage sites",
+                  "checked": true
+                },
+                {
+                  "text": "Characterization is green before refactor starts",
+                  "checked": false
+                }
+              ],
+              "markdownAnchor": "#### Task B0: Slippage characterization suite",
+              "markdownSource": "Capture characterization suite for 9 separate slippage calculation sites across paper and simulated brokers."
+            },
+            {
+              "id": "B1",
+              "globalId": "trade-robot-alpha:part1b:B1",
+              "title": "Single pure slippage helper in src/core/fill_model.py",
+              "waveId": "wave-b",
+              "complexity": "Standard",
+              "risk": "Low",
+              "status": "todo",
+              "dependsOn": [
+                "B0"
+              ],
+              "statusEvidence": {},
+              "files": {
+                "create": [],
+                "modify": [
+                  "src/core/fill_model.py"
+                ],
+                "test": [
+                  "tests/unit/core/test_fill_model_slippage.py"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "Pure apply_slippage function exported from core",
+                  "checked": false
+                },
+                {
+                  "text": "Zero dependencies on broker or manager modules",
+                  "checked": false
+                }
+              ],
+              "markdownAnchor": "#### Task B1: Pure slippage helper",
+              "markdownSource": "Extract unified apply_slippage function into core fill_model."
+            },
+            {
+              "id": "E1a",
+              "globalId": "trade-robot-alpha:part1b:E1a",
+              "title": "Atomic two-leg partial exit storage method in SQLite",
+              "waveId": "wave-e",
+              "complexity": "Standard",
+              "risk": "Medium",
+              "status": "todo",
+              "dependsOn": [
+                "B1"
+              ],
+              "statusEvidence": {},
+              "files": {
+                "create": [
+                  "tests/unit/access/storage/test_sqlite_partial_exit.py"
+                ],
+                "modify": [
+                  "src/access/storage/sqlite/trades.py"
+                ],
+                "test": [
+                  "tests/unit/access/storage/test_sqlite_partial_exit.py"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "Leg record and residual position update committed in single transaction",
+                  "checked": false
+                }
+              ],
+              "markdownAnchor": "#### Task E1a: Atomic partial exit storage",
+              "markdownSource": "Fix non-atomic two-step partial exit booking in SQLite repository."
+            },
+            {
+              "id": "L1",
+              "globalId": "trade-robot-alpha:part1b:L1",
+              "title": "Live equity definition includes unrealised P&L (TODO 022)",
+              "waveId": "wave-l",
+              "complexity": "Complex",
+              "risk": "High",
+              "status": "blocked",
+              "dependsOn": [
+                "E1a"
+              ],
+              "statusEvidence": {},
+              "files": {
+                "create": [
+                  "tests/unit/access/broker/test_ccxt_balance_equity.py"
+                ],
+                "modify": [
+                  "src/access/broker/ccxt/gateway.py"
+                ],
+                "test": [
+                  "tests/unit/access/broker/test_ccxt_balance_equity.py"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "CCXT total_equity_usdt includes unrealised PnL from Bybit unified API",
+                  "checked": false
+                },
+                {
+                  "text": "Live Kill-Switch trips on floating drawdowns",
+                  "checked": false
+                }
+              ],
+              "markdownAnchor": "#### Task L1: Live equity unrealised PnL",
+              "markdownSource": "Resolve live equity bug where unrealised PnL was excluded from kill switch equity baseline."
+            }
+          ]
+        }
+      ],
+      "todos": [
+        {
+          "id": "021-execute-part1b-unification-plan",
+          "title": "Track execution of Part 1b Unification Plan",
+          "status": "in_progress",
+          "priority": "P0",
+          "blocks": "Part 1b completion and release",
+          "relatedPlan": "paper-live-batch4-part1b-unification",
+          "filePath": "docs/TODO/021-execute-part1b-unification-plan.md"
+        },
+        {
+          "id": "022-live-equity-excludes-unrealised-pnl",
+          "title": "Live equity excludes unrealised P&L",
+          "status": "in_progress",
+          "priority": "P0",
+          "blocks": "Task L1 / Wave L",
+          "relatedPlan": "paper-live-batch4-part1b-unification",
+          "filePath": "docs/TODO/022-live-equity-excludes-unrealised-pnl.md"
+        },
+        {
+          "id": "034-tests-must-not-depend-on-time",
+          "title": "Tests must not depend on wall-clock time",
+          "status": "open",
+          "priority": "P1",
+          "blocks": "CI stability",
+          "relatedPlan": "paper-live-batch4-part1b-unification",
+          "filePath": "docs/TODO/034-tests-must-not-depend-on-time.md"
+        }
+      ]
+    },
+    {
+      "id": "lift-fixed-price",
+      "name": "Lift Fixed Price Simulator",
+      "repoPath": "/home/dzmitry/projects/lift-fixed-price",
+      "plans": [
+        {
+          "id": "mvp-phase-1a",
+          "title": "MVP Implementation Plan: Phase 1a (Lean Public MVP)",
+          "filePath": "docs/webapp-concept/mvp/05-mvp-implementation-plan.md",
+          "status": "in_progress",
+          "version": "v1.2",
+          "goal": "Deliver defensible fixed-price estimate in under 5 minutes from cold start with zero login friction",
+          "architectureSummary": "Zero-dependency calculation engine @lift/engine on Piscina workers; React 19 + TanStack Web SPA; Fastify IDesign API.",
+          "waves": [
+            {
+              "id": "wave-0",
+              "title": "Wave 0: Shared Contracts & Tooling",
+              "order": 1,
+              "status": "completed",
+              "dependsOn": []
+            },
+            {
+              "id": "wave-1",
+              "title": "Wave 1: Backend API & Worker Host",
+              "order": 2,
+              "status": "completed",
+              "dependsOn": [
+                "wave-0"
+              ]
+            },
+            {
+              "id": "wave-2",
+              "title": "Wave 2: Web SPA Shell & Smart Paste Grid",
+              "order": 3,
+              "status": "completed",
+              "dependsOn": [
+                "wave-1"
+              ]
+            },
+            {
+              "id": "wave-3",
+              "title": "Wave 3: Results Dashboard & Defensibility",
+              "order": 4,
+              "status": "todo",
+              "dependsOn": [
+                "wave-2"
+              ]
+            },
+            {
+              "id": "wave-4",
+              "title": "Wave 4: Public Share Links, XLSX & Projects Home",
+              "order": 5,
+              "status": "todo",
+              "dependsOn": [
+                "wave-3"
+              ]
+            },
+            {
+              "id": "wave-5",
+              "title": "Wave 5: Integration, TTFV Verification & Quality Gate",
+              "order": 6,
+              "status": "todo",
+              "dependsOn": [
+                "wave-4"
+              ]
+            }
+          ],
+          "tasks": [
+            {
+              "id": "Task 0.1",
+              "globalId": "lift-fixed-price:mvp:0.1",
+              "title": "Extract Phase 1a Minimal OpenAPI Subset",
+              "waveId": "wave-0",
+              "complexity": "Standard",
+              "risk": "Low",
+              "status": "done",
+              "dependsOn": [],
+              "statusEvidence": {
+                "commit": "21c10e3",
+                "pr": "#7"
+              },
+              "files": {
+                "create": [
+                  "packages/contracts/openapi.yaml"
+                ],
+                "modify": [],
+                "test": [
+                  "packages/contracts/tests/contracts.test.js"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "All 7 MVP endpoints specified in OpenAPI",
+                  "checked": true
+                }
+              ],
+              "markdownAnchor": "* **Task 0.1: Extract Phase 1a Minimal OpenAPI Subset**",
+              "markdownSource": "Specify all 7 MVP endpoints with typed DTOs and UUID runId return values."
+            },
+            {
+              "id": "Task 1.1",
+              "globalId": "lift-fixed-price:mvp:1.1",
+              "title": "Piscina Worker Pool & WorkerHost",
+              "waveId": "wave-1",
+              "complexity": "Standard",
+              "risk": "Medium",
+              "status": "done",
+              "dependsOn": [
+                "Task 0.1"
+              ],
+              "statusEvidence": {
+                "commit": "21c10e3",
+                "pr": "#7"
+              },
+              "files": {
+                "create": [
+                  "apps/api/src/utilities/hosting/worker-host.ts"
+                ],
+                "modify": [],
+                "test": [
+                  "apps/api/tests/unit/worker-host.test.ts"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "Monte Carlo executed in isolated worker threads",
+                  "checked": true
+                }
+              ],
+              "markdownAnchor": "* **Task 1.1: Piscina Worker Pool & WorkerHost**",
+              "markdownSource": "Implement WorkerHost over Piscina thread pool with 30s timeout guard."
+            },
+            {
+              "id": "Task 2.1",
+              "globalId": "lift-fixed-price:mvp:2.1",
+              "title": "SmartPasteGrid & TanStack Virtual Data Grid",
+              "waveId": "wave-2",
+              "complexity": "Complex",
+              "risk": "Medium",
+              "status": "done",
+              "dependsOn": [
+                "Task 1.1"
+              ],
+              "statusEvidence": {
+                "commit": "b92a2c4",
+                "pr": "#8"
+              },
+              "files": {
+                "create": [
+                  "apps/web/src/widgets/paste/SmartPasteGrid.tsx"
+                ],
+                "modify": [],
+                "test": [
+                  "apps/web/tests/smart-paste.test.tsx"
+                ]
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "Paste from Excel with auto-spread SC-1",
+                  "checked": true
+                }
+              ],
+              "markdownAnchor": "* **Task 2.1: SmartPasteGrid**",
+              "markdownSource": "Build high-performance spreadsheet paste widget with instant client-side validation."
+            },
+            {
+              "id": "Task 3.1",
+              "globalId": "lift-fixed-price:mvp:3.1",
+              "title": "Results Dashboard & Sensitivity Drivers UI",
+              "waveId": "wave-3",
+              "complexity": "Complex",
+              "risk": "Medium",
+              "status": "todo",
+              "dependsOn": [
+                "Task 2.1"
+              ],
+              "statusEvidence": {},
+              "files": {
+                "create": [
+                  "apps/web/src/features/results/Dashboard.tsx"
+                ],
+                "modify": [],
+                "test": []
+              },
+              "acceptanceCriteria": [
+                {
+                  "text": "Render duration P10/P50/P90 and cost curve",
+                  "checked": false
+                }
+              ],
+              "markdownAnchor": "* **Task 3.1: Results Dashboard**",
+              "markdownSource": "Implement primary simulation results screen with interactive ECharts visualizations."
+            }
+          ]
+        }
+      ],
+      "todos": [
+        {
+          "id": "2026-10-03-id-format-contract-and-test-data",
+          "title": "Id format contract and id test data",
+          "status": "open",
+          "priority": "P2",
+          "blocks": "Engine typing Stage 1+",
+          "relatedPlan": "mvp-phase-1a",
+          "filePath": "docs/TODO/2026-10-03-id-format-contract-and-test-data.md"
+        }
+      ]
+    }
+  ]
+}
