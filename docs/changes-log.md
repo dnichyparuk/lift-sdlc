@@ -3,6 +3,7 @@
 ## ship-sdlc: explicit plan path only (#16)
 
 **Date:** 2026-10-07
+**Version:** 0.25.2
 
 ### Overview
 `/ship-sdlc` now executes only the plan the user names with `--plan <path>`. It no longer takes the newest `*.md` by modification time from `plansDirectory` or `~/.gemini/plans/`; that folder is shared by every repository, so the newest file could be a plan for another repository, and the `execute` step would have implemented it here. The behaviour matches the Claude Code `sdlc` plugin (#505 there).
