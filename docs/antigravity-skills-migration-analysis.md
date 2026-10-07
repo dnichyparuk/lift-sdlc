@@ -1,71 +1,71 @@
-# Анализ формата Skills и план миграции на чистый Antigravity-формат
+# Analysis of the Skills Format and a Migration Plan to the Pure Antigravity Format
 
-> **⚠️ СТАТУС: ЧАСТИЧНО УСТАРЕЛО / ЗАМЕНЕНО — не выполнять как написано.**
-> Проверено против рабочего дерева 10.09.2026 (Wave 7 плана `learn-sdlc`). Итог: **Этап 2 (Action 2)** —
-> единственная часть, которая была реально нужна и уже выполнена. Остальное отклонено:
+> **⚠️ STATUS: PARTIALLY OBSOLETE / SUPERSEDED — do not execute as written.**
+> Checked against the working tree on 10.09.2026 (Wave 7 of the `learn-sdlc` plan). Outcome: **Stage 2 (Action 2)** is
+> the only part that was really needed, and it is already done. The rest is rejected:
 >
-> - **Этап 1 (удалить `user-invocable` / `argument-hint` из всех SKILL.md) — ОТКЛОНЕНО.** Это не требование
->   спецификации: `agy plugin validate .` возвращает 0 с этими полями, а `docs/plugin-api-specs.md:198-199`
->   прямо называет их "additive, not load-bearing". Более того, удаление `user-invocable: false` из
->   `skills/error-report-sdlc/SKILL.md:4` сделало бы внутренний скилл вызываемым пользователем в Claude Code —
->   это регресс поведения, а не выравнивание.
-> - **Этап 2, Action 1 (префикс `resources/` для `REFERENCE.md`) — УЖЕ СДЕЛАНО** во всех трёх скиллах.
->   Ошибку давал сам валидатор; исправлено в `scripts/lib/discovery.js` (Task 14) + `npm run check:discovery`.
-> - **Этап 3 (offloading / сокращение размера) — ВНЕ ОБЛАСТИ.** Это инициатива по токенам, а не по
->   выравниванию с Antigravity; ведётся отдельно в `docs/optimizations/skill-optimization-plan.md`.
-> - **Этап 4 (добавить `agy` в `.github/workflows/ci.yml`) — ССЫЛАЕТСЯ НА НЕСУЩЕСТВУЮЩИЙ ФАЙЛ.**
->   В репозитории нет `.github/workflows/` и нет GitHub Actions CI вообще.
+> - **Stage 1 (remove `user-invocable` / `argument-hint` from all SKILL.md files) — REJECTED.** This is not a
+>   requirement of the specification: `agy plugin validate .` returns 0 with these fields, and `docs/plugin-api-specs.md:198-199`
+>   explicitly calls them "additive, not load-bearing". Moreover, removing `user-invocable: false` from
+>   `skills/error-report-sdlc/SKILL.md:4` would make an internal skill user-invocable in Claude Code —
+>   that is a behaviour regression, not an alignment.
+> - **Stage 2, Action 1 (the `resources/` prefix for `REFERENCE.md`) — ALREADY DONE** in all three skills.
+>   The error came from the validator itself; fixed in `scripts/lib/discovery.js` (Task 14) + `npm run check:discovery`.
+> - **Stage 3 (offloading / size reduction) — OUT OF SCOPE.** This is a token initiative, not an
+>   alignment with Antigravity; it is tracked separately in `docs/optimizations/skill-optimization-plan.md`.
+> - **Stage 4 (add `agy` to `.github/workflows/ci.yml`) — REFERS TO A NON-EXISTENT FILE.**
+>   The repository has no `.github/workflows/` and no GitHub Actions CI at all.
 >
-> **Важно (проверено эмпирически):** `agy plugin validate` — это **счётчик обнаружения, а не валидатор схемы**.
-> Плагин с фиктивным полем frontmatter и агентом с `tools: Read, Write, Bash` / `model: gpt-4` тоже даёт exit 0.
-> Зелёный `check:plugin` доказывает только, что файлы разбираются и находятся.
+> **Important (verified empirically):** `agy plugin validate` is a **discovery counter, not a schema validator**.
+> A plugin with a bogus frontmatter field and an agent with `tools: Read, Write, Bash` / `model: gpt-4` also gives exit 0.
+> A green `check:plugin` only proves that the files parse and are found.
 >
-> Что действительно оставалось и было сделано в Wave 7: 7 мест в prose с Claude-именами инструментов
-> (Task 13) + баг разрешения пути PD5 (Task 14). Подробности — в разделе "Wave 7" плана
+> What actually remained and was done in Wave 7: 7 places in prose with Claude tool names
+> (Task 13) + the PD5 path-resolution bug (Task 14). Details are in the "Wave 7" section of the plan
 > `2026-09-10-learn-sdlc-self-learning-loop.md`.
 
-> **Статус:** Аналитический отчет и план миграции  
-> **Дата:** 10 сентября 2026 г.  
-> **Целевая платформа:** Google Antigravity CLI (Gemini 3.8 / Gemini SDK)  
-> **Исходная кодовая база:** `lift-sdlc` v0.21.0  
+> **Status:** Analytical report and migration plan  
+> **Date:** 10 September 2026  
+> **Target platform:** Google Antigravity CLI (Gemini 3.8 / Gemini SDK)  
+> **Source codebase:** `lift-sdlc` v0.21.0  
 
 ---
 
 ## 1. Executive Summary
 
-Плагин `lift-sdlc` исторически развивался как решение с **dual-host архитектурой**: базовая структура плагина, соглашения по именованию файлов и форматы YAML frontmatter были унаследованы от конвенции **Claude Code (Anthropic)**, но целевой рантайм, инструменты (`tools`) и модели выполнения были адаптированы под **Google Antigravity CLI** (`gemini-3.8-flash-*`).
+The `lift-sdlc` plugin historically evolved as a solution with a **dual-host architecture**: the base plugin structure, the file naming conventions and the YAML frontmatter formats were inherited from the **Claude Code (Anthropic)** convention, while the target runtime, the tools (`tools`) and the execution models were adapted to the **Google Antigravity CLI** (`gemini-3.8-flash-*`).
 
-Хотя текущая реализация функциональна (тестовый набор 843/843 проходит успешно), наличие артефактов Claude Code приводит к:
-1. **Информационному шуму в контексте:** поля `user-invocable`, `argument-hint` и перегруженные блоки `Triggers on: ...` не используются ядром Antigravity и раздувают размер системных инструкций.
-2. **Ошибкам валидации discovery:** чекер `validate-discovery.js` фиксирует сбой `PD5` из-за расхождения путей к `resources/REFERENCE.md`.
-3. **Завышенному TTFT (Time To First Token):** оркестраторы `execute-plan-sdlc` (~75 KB) и `ship-sdlc` (~64 KB) перегружены shell-инструкциями, которые в экосистеме Antigravity эффективнее делегировать детерминированным CLI-скриптам.
+Although the current implementation is functional (the test suite passes 843/843), the presence of Claude Code artifacts leads to:
+1. **Informational noise in the context:** the `user-invocable` and `argument-hint` fields and the overloaded `Triggers on: ...` blocks are not used by the Antigravity core and inflate the size of the system instructions.
+2. **Discovery validation errors:** the `validate-discovery.js` checker reports a `PD5` failure because of mismatched paths to `resources/REFERENCE.md`.
+3. **Inflated TTFT (Time To First Token):** the `execute-plan-sdlc` (~75 KB) and `ship-sdlc` (~64 KB) orchestrators are overloaded with shell instructions, which in the Antigravity ecosystem are more efficiently delegated to deterministic CLI scripts.
 
-Переход на **чистый Antigravity-формат** стандартизирует кодовую базу под официальную спецификацию Antigravity Customization System, снизит затраты токенов и упростит поддержку плагина.
+Moving to the **pure Antigravity format** will standardize the codebase on the official Antigravity Customization System specification, reduce token costs and simplify plugin maintenance.
 
 ---
 
-## 2. Анализ расхождений: Текущий гибрид vs Чистый Antigravity
+## 2. Gap Analysis: Current Hybrid vs Pure Antigravity
 
-| Аспект | Текущее состояние (Гибрид) | Чистый Antigravity-формат | Влияние / Риски |
+| Aspect | Current State (Hybrid) | Pure Antigravity Format | Impact / Risks |
 |---|---|---|---|
-| **Схема плагина (`plugin.json`)** | Содержит `$schema`, `name`, `description`, `version`, `author` | Спецификация Antigravity формально требует `name`, опционально `description` и `$schema` | Поля `version` и `author` не валидируются схемой Antigravity, но безвредны |
-| **Frontmatter: `user-invocable`** | Присутствует во всех навыках (`true`/`false`) | **Отсутствует**. В Antigravity все навыки в `skills/` становятся slash-командами по факту обнаружения | Игнорируется рантаймом Antigravity, тратит токены |
-| **Frontmatter: `argument-hint`** | Присутствует строка аргументов для CLI автокомплита | **Отсутствует**. Antigravity выводит сигнатуру команды на основе описания и контекста | Игнорируется рантаймом Antigravity |
-| **Frontmatter: `description`** | Содержит длинный список ключевых фраз `Triggers on: ...` | Строгое описание от 3-го лица: *"Use this skill when the user wants to..."* | Antigravity Progressive Disclosure загружает только `description` для маршрутизации |
-| **Frontmatter: `model`** | `gemini-3.8-flash-low/medium/high` | Поддерживается Antigravity, рекомендуется явное сопоставление с профилями задач | Соответствует требованиям, сохраняется |
-| **Frontmatter: `disable-model-invocation`** | Используется в `error-report-sdlc` | Поддерживается Antigravity (запрет автономного вызова моделью) | Соответствует требованиям, сохраняется |
-| **Топология ресурсов** | Смешанная: часть ссылок на `REFERENCE.md` ищет файл в корне навыка, а он лежит в `resources/` | Строгая структура Antigravity: `skills/<name>/resources/`, `skills/<name>/references/` | Вызывает сбой проверки `PD5` в `validate-discovery.js` |
-| **Логика шагов (`SKILL.md`)** | Многословные shell-пайплайны отката git, разрешения конфликтов rebase | Детерминированный Script Offloading: скрипт выполняет git-операции, модель читает JSON-результат | Сокращает размер промпта на 40–60%, устраняет галлюцинации bash |
+| **Plugin schema (`plugin.json`)** | Contains `$schema`, `name`, `description`, `version`, `author` | The Antigravity specification formally requires `name`, with `description` and `$schema` optional | The `version` and `author` fields are not validated by the Antigravity schema but are harmless |
+| **Frontmatter: `user-invocable`** | Present in all skills (`true`/`false`) | **Absent**. In Antigravity, all skills in `skills/` become slash commands upon discovery | Ignored by the Antigravity runtime, wastes tokens |
+| **Frontmatter: `argument-hint`** | An argument string for CLI autocomplete is present | **Absent**. Antigravity infers the command signature from the description and context | Ignored by the Antigravity runtime |
+| **Frontmatter: `description`** | Contains a long list of `Triggers on: ...` key phrases | A strict third-person description: *"Use this skill when the user wants to..."* | Antigravity Progressive Disclosure loads only the `description` for routing |
+| **Frontmatter: `model`** | `gemini-3.8-flash-low/medium/high` | Supported by Antigravity; an explicit mapping to task profiles is recommended | Meets the requirements, kept |
+| **Frontmatter: `disable-model-invocation`** | Used in `error-report-sdlc` | Supported by Antigravity (forbids autonomous invocation by the model) | Meets the requirements, kept |
+| **Resource topology** | Mixed: some references to `REFERENCE.md` look for the file in the skill root, while it lives in `resources/` | Strict Antigravity structure: `skills/<name>/resources/`, `skills/<name>/references/` | Causes the `PD5` check failure in `validate-discovery.js` |
+| **Step logic (`SKILL.md`)** | Verbose shell pipelines for git rollback and rebase conflict resolution | Deterministic Script Offloading: a script performs the git operations, the model reads the JSON result | Reduces prompt size by 40–60%, eliminates bash hallucinations |
 
 ---
 
-## 3. Детальные рекомендации по миграции
+## 3. Detailed Migration Recommendations
 
-### Этап 1: Очистка YAML Frontmatter во всех 15 навыках
+### Stage 1: Clean Up the YAML Frontmatter in All 15 Skills
 
-В соответствии со спецификацией Antigravity (`agy-customizations/docs/skills.md`), frontmatter навыка должен содержать только релевантные поля:
+According to the Antigravity specification (`agy-customizations/docs/skills.md`), a skill's frontmatter should contain only the relevant fields:
 
-#### Было (гибридный формат `commit-sdlc`):
+#### Before (hybrid `commit-sdlc` format):
 ```yaml
 ---
 name: commit-sdlc
@@ -76,7 +76,7 @@ model: gemini-3.8-flash-medium
 ---
 ```
 
-#### Стало (чистый Antigravity-формат):
+#### After (pure Antigravity format):
 ```yaml
 ---
 name: commit-sdlc
@@ -89,73 +89,73 @@ model: gemini-3.8-flash-medium
 ---
 ```
 
-**Действия:**
-1. Удалить строку `user-invocable: ...` из всех 15 файлов `skills/*/SKILL.md`.
-2. Удалить строку `argument-hint: ...` из всех файлов.
-3. Очистить `description` от избыточного хвоста `Triggers on: ...`, интегрировав ключевые сценарии естественным языком в повествовательную форму.
+**Actions:**
+1. Remove the `user-invocable: ...` line from all 15 `skills/*/SKILL.md` files.
+2. Remove the `argument-hint: ...` line from all files.
+3. Strip the redundant `Triggers on: ...` tail from `description`, working the key scenarios into the narrative in natural language.
 
 ---
 
-### Этап 2: Нормализация путей к вспомогательным ресурсам (`PD5 Fix`)
+### Stage 2: Normalize Paths to Auxiliary Resources (`PD5 Fix`)
 
-В скиллах `error-report-sdlc`, `jira-sdlc` и `review-sdlc` файлы документации находятся в подкаталоге `resources/` (например, `resources/REFERENCE.md`), но в текстах инструкций и регулярных выражениях валидатора происходят коллизии.
+In the `error-report-sdlc`, `jira-sdlc` and `review-sdlc` skills, the documentation files live in the `resources/` subdirectory (for example, `resources/REFERENCE.md`), but collisions occur in the instruction texts and in the validator's regular expressions.
 
-**Действия:**
-1. В `skills/error-report-sdlc/SKILL.md`, `skills/jira-sdlc/SKILL.md`, `skills/review-sdlc/SKILL.md` заменить все вхождения относительных ссылок вида `` `REFERENCE.md` `` на явные относительные пути вида `` `resources/REFERENCE.md` `` или Markdown-ссылки `[REFERENCE.md](./resources/REFERENCE.md)`.
-2. Обновить парсер ссылок в `scripts/lib/discovery.js` (функцию `checkPD5`):
+**Actions:**
+1. In `skills/error-report-sdlc/SKILL.md`, `skills/jira-sdlc/SKILL.md`, `skills/review-sdlc/SKILL.md`, replace all relative references of the form `` `REFERENCE.md` `` with explicit relative paths of the form `` `resources/REFERENCE.md` `` or Markdown links `[REFERENCE.md](./resources/REFERENCE.md)`.
+2. Update the reference parser in `scripts/lib/discovery.js` (the `checkPD5` function):
    ```javascript
-   // Поддержка как прямого корня навыка, так и подпапки resources/
+   // Support both the skill root and the resources/ subfolder
    const siblingPath = fs.existsSync(path.join(skillsDir, d, ref))
      ? path.join(skillsDir, d, ref)
      : path.join(skillsDir, d, 'resources', ref);
    ```
-3. Проверить успешное прохождение `node scripts/ci/validate-discovery.js` (все 9 проверок должны быть `PASS`).
+3. Verify that `node scripts/ci/validate-discovery.js` passes (all 9 checks must be `PASS`).
 
 ---
 
-### Этап 3: Реализация Script Offloading (разгрузка промптов)
+### Stage 3: Implement Script Offloading (Prompt Offloading)
 
-Сократить размер тяжелых навыков (`execute-plan-sdlc` — 75 KB, `ship-sdlc` — 64 KB) согласно ранее утвержденному `skill-optimization-plan.md`:
+Reduce the size of the heavy skills (`execute-plan-sdlc` — 75 KB, `ship-sdlc` — 64 KB) according to the previously approved `skill-optimization-plan.md`:
 
-1. **Инкапсуляция сложных git-команд:**
-   - Перенести циклы проверки веток, git rebase abort/continue, удаление и откат тегов из Markdown-промптов в скрипты `scripts/util/ship-git-ops.js` и `scripts/util/retag-helper.js`.
-   - В `SKILL.md` оставить только выполнение одной команды Node.js с чтением JSON-манифеста.
-2. **Ликвидация "Defensive Repetition":**
-   - Удалить дублирующие списки запретов ("DO NOT", "Gotchas", "Trailing checklist"), если эти правила уже проверяются скриптами или валидаторами в шагах 0–2.
-3. **Устранение устаревших ссылок на внутренние issue:**
-   - Удалить исторические комментарии вида `Fixes #418`, `Requirement R1`, не несущие ценности для runtime-агента Antigravity.
-
----
-
-### Этап 4: Настройка валидации и CI для Antigravity
-
-1. **Добавление валидатора Antigravity в CI пайплайн:**
-   - Включить запуск `agy plugin validate .` в GitHub Actions (`.github/workflows/ci.yml`).
-   - Добавить проверку отсутствия legacy-полей Claude Code в скрипт `scripts/ci/validate-discovery.js` (новый чек `PD10: no-claude-legacy-fields`).
-2. **Документирование формата для контрибьюторов:**
-   - Обновить `README.md` и `docs/plugin-api-specs.md`, явно указав, что первичным стандартом репозитория является Antigravity Customization Specification.
+1. **Encapsulating complex git commands:**
+   - Move the branch-check loops, git rebase abort/continue, and tag deletion and rollback from the Markdown prompts into the scripts `scripts/util/ship-git-ops.js` and `scripts/util/retag-helper.js`.
+   - In `SKILL.md`, keep only the execution of a single Node.js command that reads a JSON manifest.
+2. **Eliminating "Defensive Repetition":**
+   - Remove duplicated lists of prohibitions ("DO NOT", "Gotchas", "Trailing checklist") if these rules are already checked by scripts or validators in steps 0–2.
+3. **Removing obsolete references to internal issues:**
+   - Remove historical comments such as `Fixes #418`, `Requirement R1` that carry no value for the Antigravity runtime agent.
 
 ---
 
-## 4. План реализации по шагам (Roadmap)
+### Stage 4: Set Up Validation and CI for Antigravity
+
+1. **Adding the Antigravity validator to the CI pipeline:**
+   - Enable running `agy plugin validate .` in GitHub Actions (`.github/workflows/ci.yml`).
+   - Add a check for the absence of legacy Claude Code fields to the `scripts/ci/validate-discovery.js` script (a new check `PD10: no-claude-legacy-fields`).
+2. **Documenting the format for contributors:**
+   - Update `README.md` and `docs/plugin-api-specs.md`, explicitly stating that the repository's primary standard is the Antigravity Customization Specification.
+
+---
+
+## 4. Step-by-Step Implementation Plan (Roadmap)
 
 ```mermaid
 flowchart TD
-    A[Старт: Аудит текущего состояния] --> B[Фаза 1: Очистка Frontmatter]
-    B --> C[Фаза 2: Исправление ссылок resources/ и PD5]
-    C --> D[Фаза 3: Script Offloading в execute-plan и ship]
-    D --> E[Фаза 4: Обновление CI и validate-discovery.js]
-    E --> F[Финиш: Чистый Antigravity плагин]
+    A[Start: Audit of the current state] --> B[Phase 1: Frontmatter cleanup]
+    B --> C[Phase 2: Fix resources/ references and PD5]
+    C --> D[Phase 3: Script Offloading in execute-plan and ship]
+    D --> E[Phase 4: Update CI and validate-discovery.js]
+    E --> F[Finish: Pure Antigravity plugin]
 ```
 
-### Задачи:
-- [ ] **Task 1 (Frontmatter):** Удалить `user-invocable` и `argument-hint` из 15 файлов `skills/*/SKILL.md`. Переформатировать `description`.
-- [ ] **Task 2 (Resources):** Исправить пути к `resources/REFERENCE.md` и обновить `scripts/lib/discovery.js`. Добиться статуса `PASS` по `validate-discovery.js`.
-- [ ] **Task 3 (Script Offloading):** Оптимизировать `skills/execute-plan-sdlc/SKILL.md` и `skills/ship-sdlc/SKILL.md`, вынеся shell-цепочки в скрипты.
-- [ ] **Task 4 (CI/CD):** Добавить проверку `validate-discovery.js` в `npm test` и закрепить стандарт в документации разработчика.
+### Tasks:
+- [ ] **Task 1 (Frontmatter):** Remove `user-invocable` and `argument-hint` from the 15 `skills/*/SKILL.md` files. Reformat `description`.
+- [ ] **Task 2 (Resources):** Fix the paths to `resources/REFERENCE.md` and update `scripts/lib/discovery.js`. Reach `PASS` status for `validate-discovery.js`.
+- [ ] **Task 3 (Script Offloading):** Optimize `skills/execute-plan-sdlc/SKILL.md` and `skills/ship-sdlc/SKILL.md` by moving the shell chains into scripts.
+- [ ] **Task 4 (CI/CD):** Add the `validate-discovery.js` check to `npm test` and establish the standard in the developer documentation.
 
 ---
 
-## 5. Заключение
+## 5. Conclusion
 
-Миграция на чистый Antigravity-формат не нарушает существующие сценарии использования, так как Antigravity CLI уже является основной целевой средой для плагина. Удаление рудиментов Claude Code и оптимизация промптов сделают выполнение команд быстрее, дешевле по токенам и полностью совместимым со строгими валидаторами Google Antigravity SDK.
+Migrating to the pure Antigravity format does not break existing usage scenarios, since the Antigravity CLI is already the primary target environment for the plugin. Removing the Claude Code leftovers and optimizing the prompts will make commands run faster, cheaper in tokens and fully compatible with the strict Google Antigravity SDK validators.
