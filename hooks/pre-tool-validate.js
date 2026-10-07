@@ -21,7 +21,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { execSync } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
 const os = require('node:os');
 
 // 1. Read stdin
@@ -88,34 +88,43 @@ if (isDimension) {
   validatorScript = path.join(scriptsDir, 'ci', 'validate-plan-format.js');
 }
 
-// 4. Run validator on a temporary file
+// 4. Run validator on a temporary file.
+// The proposed content is not on disk yet, so it is written to a private temporary directory (unique
+// name, removed in `finally` on every path, including a denial) and validated from there. The validator
+// prints the path it was given, so the temporary path is replaced by the real target path in the
+// findings, which keeps `<file>:<line>: <problem>` lines usable.
+let decision;
+let tempDir = null;
 try {
-  const tempFile = path.join(os.tmpdir(), `validate-${Date.now()}-${path.basename(targetFile)}`);
-  fs.writeFileSync(tempFile, proposedContent, 'utf8');
-
-  // Currently, validate-dimensions.js only supports project-root validation, not single files.
-  // We handle validate-plan-format which supports --file
-  let cmd;
   if (isPlan) {
-    cmd = `node "${validatorScript}" --file "${tempFile}" --markdown`;
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'validate-'));
+    const tempFile = path.join(tempDir, path.basename(targetFile));
+    fs.writeFileSync(tempFile, proposedContent, 'utf8');
+    try {
+      execFileSync(process.execPath, [validatorScript, '--file', tempFile, '--markdown'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      decision = { decision: 'allow' };
+    } catch (err) {
+      const stdout = (err.stdout || '').trim();
+      const stderr = (err.stderr || '').trim();
+      const findings = (stdout || stderr || err.message).split(tempFile).join(targetFile);
+      decision = { decision: 'deny', reason: `Validation Failed:\n${findings}` };
+    }
   } else {
-    // For dimensions and pr-template, we fallback to allow since they require project-root scanning
-    // This is a known limitation of the Shift-Left port.
-    fs.unlinkSync(tempFile);
-    process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
-    process.exit(0);
+    // validate-dimensions.js and validate-pr-template.js only support project-root validation, not
+    // single files. For dimensions and pr-template we fall back to allow. This is a known limitation
+    // of the Shift-Left port.
+    decision = { decision: 'allow' };
   }
-
-  execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  fs.unlinkSync(tempFile);
-  
-  process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
-  process.exit(0);
 } catch (err) {
-  const stdout = (err.stdout || '').trim();
-  const stderr = (err.stderr || '').trim();
-  const findings = stdout || stderr || err.message;
-
-  process.stdout.write(JSON.stringify({ decision: 'deny', reason: `Validation Failed:\n${findings}` }) + '\n');
-  process.exit(0);
+  decision = { decision: 'deny', reason: `Validation Failed:\n${err.message}` };
+} finally {
+  if (tempDir) {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+  }
 }
+
+process.stdout.write(JSON.stringify(decision) + '\n');
+process.exit(0);

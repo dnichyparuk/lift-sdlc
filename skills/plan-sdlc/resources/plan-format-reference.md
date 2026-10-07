@@ -92,6 +92,29 @@ Complete enough that an agent with no codebase context can execute it.]
 - title: <verbatim-task-title-at-plan-time>
 ```
 
+### Acceptance criteria boxes
+
+| Box | Meaning | Set by |
+|---|---|---|
+| `- [ ]` | Open | `plan-sdlc` — every generated criterion starts open |
+| `- [x]` | Done (closed) | A person, after verifying it |
+| `- [~]` | Skipped on purpose (closed) | A person, or an agent at a person's request — never `plan-sdlc` or `execute-plan-sdlc` on their own |
+
+A `- [~]` needs a comment on the item's continuation line(s), indented deeper than the list
+marker with no blank line between: `*Skipped on YYYY-MM-DD: <reason>*` (a real calendar date, a
+reason of at least 15 characters once markup is stripped). Do not use it for work still meant to
+be done; that box stays `- [ ]`.
+
+```markdown
+- [~] The GATE passes.
+  *Skipped on 2026-10-06: the next task's GATE covers it and the branch is merged.*
+```
+
+`scripts/ci/validate-plan-format.js` checks a plan before execution: PF5 needs at least one open
+`- [ ]` per task (`[x]` and `[~]` are closed, so a finished task fails PF5 by design), and PF6 —
+reported only when the plan has a `- [~]` outside fenced code — fails every `- [~]` without a
+valid comment, naming `<file>:<line>`.
+
 ---
 
 ## Out-of-scope OpenSpec tasks (optional)

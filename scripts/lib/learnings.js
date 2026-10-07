@@ -214,7 +214,7 @@ const EVALUATIONS_REL_PATH = path.join('.sdlc', 'learnings', 'evaluations.json')
 let resolveSdlcRoot = null;
 try {
   ({ resolveSdlcRoot } = require('./config.js'));
-} catch (_) {}
+} catch (_) { /* optional dependency: config.js may be absent; resolveSdlcRoot stays null */ }
 
 /**
  * Record evaluation timestamps for one or more guardrail IDs in .sdlc/learnings/evaluations.json.
@@ -262,7 +262,7 @@ function recordGuardrailEvaluation(projectRoot, guardrailIds, timestamp = new Da
     return true;
   } catch {
     if (tmp && fs.existsSync(tmp)) {
-      try { fs.unlinkSync(tmp); } catch (_) {}
+      try { fs.unlinkSync(tmp); } catch (_) { /* best-effort cleanup of the temporary file */ }
     }
     return false;
   }
