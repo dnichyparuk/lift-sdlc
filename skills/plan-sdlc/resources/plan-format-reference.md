@@ -115,6 +115,14 @@ be done; that box stays `- [ ]`.
 reported only when the plan has a `- [~]` outside fenced code — fails every `- [~]` without a
 valid comment, naming `<file>:<line>`.
 
+The PreToolUse hook (`hooks/pre-tool-validate.js`) runs the same validator on a whole-file
+`write_to_file` to a `*/plans/*.md` path, with two differences: it validates only content that
+declares itself an executable plan (a `**Goal:**` line and at least one `### Task N:` heading
+outside fenced code, so a README, plan guidelines, a brief or the Step 0 skeleton are not
+checked), skips files under an `archive/` or `archived/` directory, and passes
+`--allow-closed-criteria`, so PF5 accepts `[x]` and `[~]` boxes and a finished plan can be
+rewritten. The strict PF5 check runs in `plan-sdlc` Step 6.6.
+
 ---
 
 ## Out-of-scope OpenSpec tasks (optional)

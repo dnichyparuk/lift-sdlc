@@ -15,6 +15,11 @@
  * input and `hookSpecificOutput` output — are intentionally NOT supported
  * here; adding a second input shape would risk a half-ported guard that fails
  * open on one host.
+ *
+ * Plan scope (#17): a whole-file write to a `.md` directly in a `plans` folder is validated only when the
+ * content declares itself an executable plan (`**Goal:**` + a `### Task N:` heading
+ * outside fenced code) and the path is not under `archive/` or `archived/`. PF5 runs
+ * with `--allow-closed-criteria`, so a ticked or `[~]`-closed plan can be rewritten.
  */
 
 'use strict';
@@ -77,8 +82,29 @@ if (!isDimension && !isPrTemplate && !isPlan) {
   process.exit(0);
 }
 
-// 3. Locate validator scripts
+// 3. Scope of plan validation (#17).
+// A `*/plans/*.md` path alone does not make a file an executable plan: plans folders also hold
+// READMEs, plan guidelines, briefs and the skeleton plan-sdlc writes before the tasks exist. Only
+// content that declares itself an executable plan — a `**Goal:**` line and at least one
+// `### Task N:` heading outside fenced code — is validated. Files under an `archive/` or `archived/`
+// directory are history and are not validated either.
 const scriptsDir = path.resolve(__dirname, '..', 'scripts');
+const ARCHIVE_RE = /[/\\]archived?[/\\]/i;
+if (isPlan) {
+  let outOfScope = ARCHIVE_RE.test(targetFile);
+  if (!outOfScope) {
+    try {
+      const { isExecutablePlan } = require(path.join(scriptsDir, 'ci', 'validate-plan-format.js'));
+      outOfScope = !isExecutablePlan(proposedContent);
+    } catch { /* detector unavailable: validate the file as before rather than skip it */ }
+  }
+  if (outOfScope) {
+    process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
+    process.exit(0);
+  }
+}
+
+// 4. Locate validator scripts
 let validatorScript;
 if (isDimension) {
   validatorScript = path.join(scriptsDir, 'ci', 'validate-dimensions.js');
@@ -88,7 +114,7 @@ if (isDimension) {
   validatorScript = path.join(scriptsDir, 'ci', 'validate-plan-format.js');
 }
 
-// 4. Run validator on a temporary file.
+// 5. Run validator on a temporary file.
 // The proposed content is not on disk yet, so it is written to a private temporary directory (unique
 // name, removed in `finally` on every path, including a denial) and validated from there. The validator
 // prints the path it was given, so the temporary path is replaced by the real target path in the
@@ -101,7 +127,10 @@ try {
     const tempFile = path.join(tempDir, path.basename(targetFile));
     fs.writeFileSync(tempFile, proposedContent, 'utf8');
     try {
-      execFileSync(process.execPath, [validatorScript, '--file', tempFile, '--markdown'], {
+      // --allow-closed-criteria: a plan whose boxes are all ticked ("- [x]") or skipped ("- [~]")
+      // is a finished plan being rewritten, not a malformed one; PF5's "open box" rule is for a
+      // plan before execution and is checked there by plan-sdlc's final format step.
+      execFileSync(process.execPath, [validatorScript, '--file', tempFile, '--markdown', '--allow-closed-criteria'], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
       });

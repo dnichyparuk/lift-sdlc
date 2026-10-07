@@ -116,13 +116,56 @@ test('pre-tool-validate: a denied plan write names the real target path, not the
   assert.deepStrictEqual(leftovers, [], 'the temporary directory must be removed after a denial');
 });
 
-test('pre-tool-validate: a denied plan write still denies when the plan has a skipped box with a valid comment but another task fails', () => {
-  const content = planWith('- [~] skipped', '  *Skipped on 2026-10-06: the next task covers it and the branch is merged.*');
-  const { output, leftovers } = runPlanHook('/proj/plans/demo.md', content);
-  // PF5 fails (no open box) but PF6 passes: the denial must come from PF5 and not mention the temporary path.
-  assert.strictEqual(output.decision, 'deny');
-  assert.ok(!output.reason.includes('validate-'));
+test('pre-tool-validate: a finished plan (all boxes ticked or skipped with a comment) is allowed (#17)', () => {
+  const content = planWith(
+    '- [x] done',
+    '- [~] skipped',
+    '  *Skipped on 2026-10-06: the next task covers it and the branch is merged.*',
+  );
+  const { output, leftovers } = runPlanHook('/proj/docs/plans/demo.md', content);
+  assert.strictEqual(output.decision, 'allow', output.reason);
   assert.deepStrictEqual(leftovers, []);
+});
+
+test('pre-tool-validate: an executable plan with a structural error is still denied (#17)', () => {
+  const content = planWith('- [ ] a').replace('**Risk:** Low\n', '');
+  const { output, leftovers } = runPlanHook('/proj/docs/plans/demo.md', content);
+  assert.strictEqual(output.decision, 'deny');
+  assert.match(output.reason, /PF3/);
+  assert.deepStrictEqual(leftovers, []);
+});
+
+test('pre-tool-validate: Markdown in a plans folder that is not an executable plan is allowed (#17)', () => {
+  const cases = {
+    'README.md': '# Plans\n\nOne file per unit. See PLAN_GUIDELINES.md.\n',
+    'PLAN_GUIDELINES.md': [
+      '# Plan guidelines',
+      '',
+      'A plan looks like this:',
+      '',
+      '```markdown',
+      '**Goal:** <one sentence>',
+      '',
+      '### Task 1: <title>',
+      '```',
+      '',
+    ].join('\n'),
+    'skeleton.md': '# Feature Implementation Plan\n\n**Goal:** [TBD]\n**Architecture:** [TBD]\n**Source:** [TBD]\n**Verification:** [TBD]\n',
+    'brief.md': '# Brief\n\n### Task 1: only a heading, no Goal header\n\n- [x] handed over\n',
+  };
+  for (const [name, content] of Object.entries(cases)) {
+    const { output, leftovers } = runPlanHook(`/proj/docs/plans/${name}`, content);
+    assert.strictEqual(output.decision, 'allow', `${name}: ${output.reason}`);
+    assert.deepStrictEqual(leftovers, [], name);
+  }
+});
+
+test('pre-tool-validate: plans under an archive directory are not validated (#17)', () => {
+  const broken = planWith('- [ ] a').replace('**Risk:** Low\n', '');
+  for (const target of ['/proj/docs/archived/plans/old.md', '/proj/docs/plans/archive/old.md']) {
+    const { output } = runPlanHook(target, broken);
+    assert.strictEqual(output.decision, 'allow', `${target}: ${output.reason}`);
+  }
 });
 
 test('pre-tool-validate: a dimension file write still allows without leaving temporary files', () => {

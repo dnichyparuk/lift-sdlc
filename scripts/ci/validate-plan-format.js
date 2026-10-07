@@ -11,6 +11,7 @@
  *   --file <path>           Plan file to validate (required)
  *   --json                  JSON output to stdout (default)
  *   --markdown              Formatted markdown output to stdout
+ *   --allow-closed-criteria PF5 accepts done "- [x]" and skipped "- [~]" boxes, not only open ones
  *
  * Exit codes: 0 = all pass, 1 = issues found, 2 = script error
  *
@@ -19,7 +20,8 @@
  *   PF2 — Task numbering (contiguous from 0 or 1)
  *   PF3 — Required metadata (Complexity, Risk, Depends on, Verify)
  *   PF4 — Dependency validity (valid refs, no cycles)
- *   PF5 — Task body (Description, Acceptance criteria with at least one open "- [ ]")
+ *   PF5 — Task body (Description, Acceptance criteria with at least one open "- [ ]";
+ *         with --allow-closed-criteria any box counts, so ticked and "- [~]" plans pass)
  *   PF6 — Skipped boxes: every "- [~]" carries a "*Skipped on YYYY-MM-DD: <reason>*" comment
  *         (reported only when the plan has at least one "- [~]" outside fenced code)
  *
@@ -32,7 +34,7 @@ const fs   = require('node:fs');
 const path = require('node:path');
 
 const { resolveSdlcRoot } = require(path.join(__dirname, '..', 'lib', 'config'));
-const { countCheckboxes } = require(path.join(__dirname, '..', 'lib', 'plan-checkboxes'));
+const { countCheckboxes, markFences } = require(path.join(__dirname, '..', 'lib', 'plan-checkboxes'));
 
 // ---------------------------------------------------------------------------
 // CLI parsing
@@ -45,6 +47,7 @@ function parseArgs(argv) {
   let filePath     = null;
   let fileArg      = null;
   let outputFormat = 'json';
+  let allowClosedCriteria = false;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -55,12 +58,14 @@ function parseArgs(argv) {
       filePath = path.resolve(fileArg);
     } else if (a === '--json') {
       outputFormat = 'json';
+    } else if (a === '--allow-closed-criteria') {
+      allowClosedCriteria = true;
     } else if (a === '--markdown') {
       outputFormat = 'markdown';
     }
   }
 
-  return { projectRoot, filePath, fileArg, outputFormat };
+  return { projectRoot, filePath, fileArg, outputFormat, allowClosedCriteria };
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +77,8 @@ function parseArgs(argv) {
  * Returns the trimmed value or null if not found.
  */
 function extractField(content, fieldName) {
-  const re = new RegExp(`\\*\\*${fieldName}:\\*\\*\\s*(.+?)(?:\\n|$)`);
+  // `[ \t]*`, not `\s*`: an empty field must not take the next line as its value.
+  const re = new RegExp(`\\*\\*${fieldName}:\\*\\*[ \\t]*(.+?)(?:\\r?\\n|$)`);
   const match = content.match(re);
   return match ? match[1].trim() : null;
 }
@@ -275,7 +281,14 @@ function checkPF4(tasks) {
   return { id: 'PF4', status: 'pass', message: 'All dependencies valid, no cycles' };
 }
 
-function checkPF5(tasks) {
+/**
+ * PF5 — every task has a Description and Acceptance criteria with checkbox items. By default at
+ * least one box must be open ("- [ ]"): the check runs on a plan before execution. With
+ * `allowClosedCriteria`, done ("- [x]") and skipped ("- [~]") boxes count too, so a plan that is
+ * fully ticked or closed on purpose passes (used by the PreToolUse hook, which also sees plans
+ * being rewritten or archived after execution).
+ */
+function checkPF5(tasks, { allowClosedCriteria = false } = {}) {
   const issues = [];
 
   for (const task of tasks) {
@@ -292,8 +305,12 @@ function checkPF5(tasks) {
     if (!acMatch) {
       issues.push(`${prefix}: missing **Acceptance criteria:**`);
     } else {
-      const checkboxCount = (acMatch[1].match(/- \[ \]/g) || []).length;
-      if (checkboxCount === 0) {
+      const checkboxCount = allowClosedCriteria
+        ? countCheckboxes(acMatch[1]).total
+        : (acMatch[1].match(/- \[ \]/g) || []).length;
+      if (checkboxCount === 0 && allowClosedCriteria) {
+        issues.push(`${prefix}: **Acceptance criteria:** has no checkbox items (expected at least one "- [ ]", "- [x]" or "- [~]")`);
+      } else if (checkboxCount === 0) {
         // A skipped "- [~]" box is closed, like "- [x]": PF5 checks a plan before execution.
         const hint = countCheckboxes(acMatch[1]).skipped > 0 ? ', and a skipped "- [~]" is closed' : '';
         issues.push(`${prefix}: **Acceptance criteria:** has no checkbox items (expected at least one "- [ ]"${hint})`);
@@ -351,8 +368,28 @@ function formatMarkdown(report) {
 // Entry point
 // ---------------------------------------------------------------------------
 
-/** Runs every check on a plan text; `fileLabel` names the file in PF6 messages. */
-function validatePlan(content, fileLabel = 'plan') {
+/**
+ * `true` when the text declares itself an executable plan: a `**Goal:**` header line and at least
+ * one `### Task N:` heading, both outside fenced code. Other Markdown in a plans folder (a README,
+ * plan guidelines, a brief, the skeleton plan-sdlc writes before the tasks exist) is not a plan.
+ */
+function isExecutablePlan(content) {
+  let goal = false;
+  let task = false;
+  for (const { text, fenced } of markFences(content)) {
+    if (fenced) continue;
+    if (/^\*\*Goal:\*\*/.test(text)) goal = true;
+    if (/^### Task \d+:/.test(text)) task = true;
+    if (goal && task) return true;
+  }
+  return false;
+}
+
+/**
+ * Runs every check on a plan text; `fileLabel` names the file in PF6 messages.
+ * `options.allowClosedCriteria` relaxes PF5 (see checkPF5).
+ */
+function validatePlan(content, fileLabel = 'plan', options = {}) {
   const tasks = extractTasks(content);
 
   const checks = [
@@ -360,7 +397,7 @@ function validatePlan(content, fileLabel = 'plan') {
     checkPF2(tasks),
     checkPF3(tasks),
     checkPF4(tasks),
-    checkPF5(tasks),
+    checkPF5(tasks, options),
   ];
   const pf6 = checkPF6(content, fileLabel);
   if (pf6) checks.push(pf6);
@@ -379,7 +416,7 @@ function validatePlan(content, fileLabel = 'plan') {
 
 function main() {
   try {
-    const { filePath, fileArg, outputFormat } = parseArgs(process.argv);
+    const { filePath, fileArg, outputFormat, allowClosedCriteria } = parseArgs(process.argv);
 
     if (!filePath) {
       process.stderr.write('validate-plan-format.js error: --file <path> is required\n');
@@ -392,7 +429,7 @@ function main() {
     }
 
     const content = fs.readFileSync(filePath, 'utf8');
-    const report  = validatePlan(content, fileArg);
+    const report  = validatePlan(content, fileArg, { allowClosedCriteria });
 
     if (outputFormat === 'markdown') {
       process.stdout.write(formatMarkdown(report) + '\n');
@@ -416,6 +453,7 @@ module.exports = {
   checkPF4,
   checkPF5,
   checkPF6,
+  isExecutablePlan,
   validatePlan,
   formatJson,
   formatMarkdown,

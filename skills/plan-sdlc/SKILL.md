@@ -383,7 +383,26 @@ On non-zero exit (`LINK_EXIT != 0`):
 - Surface the violation list verbatim to the user.
 - Stop. Do not retry. Do not edit URLs without user input. Do not bypass.
 
-On zero exit, proceed to Step 7. `SDLC_LINKS_OFFLINE=1` skips network reachability while keeping context-aware checks (GitHub identity match, Atlassian host match) — use in sandboxed CI.
+On zero exit, proceed to Step 6.6. `SDLC_LINKS_OFFLINE=1` skips network reachability while keeping context-aware checks (GitHub identity match, Atlassian host match) — use in sandboxed CI.
+
+## Step 6.6 (FORMAT VALIDATION): Validate plan structure — HARD GATE
+
+After link verification passes, run the deterministic plan format validator on the finalized plan file. The PreToolUse hook only sees whole-file writes, so a plan finished with `replace_file_content` edits is checked here (strict PF5: every task needs an open `- [ ]`).
+
+```shell
+node "<PLUGIN_ROOT>/scripts/ci/validate-plan-format.js" --file "<resolved-plan-path>" --markdown
+```
+> **Contract (Input/Output):**
+> - **Input**: `--file <path>` (the plan file written in this run), `--markdown`.
+> - **Output**: Prints the PF1–PF5 report (plus PF6 when the plan has a `- [~]` box) to stdout. Exit 0 = all checks pass, 1 = format issues, 2 = script error.
+
+On non-zero exit:
+- The script has already printed the violation report to stdout.
+- Do NOT proceed to Step 7 (Handoff). The plan is not ready.
+- Surface the violation report verbatim to the user.
+- Stop. Do not retry. Do not auto-edit. Do not bypass.
+
+On zero exit, proceed to Step 7.
 
 ## Step 7: Handoff
 
