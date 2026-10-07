@@ -172,17 +172,30 @@ For agent dispatches, computational reasoning limits are assigned statically via
 | **Skill** | `harden-sdlc` | `gemini-3.8-flash-high` | High cognitive context for error analysis |
 | **Skill** | `error-report-sdlc` | `gemini-3.8-flash-medium` | Standard routing, formats error reports |
 | **Skill** | `commit-sdlc` | `gemini-3.8-flash-medium` | Standard routine parsing and generation |
+| **Skill** | `execute-plan-sdlc` | `gemini-3.8-flash-medium` | Orchestrates wave execution; forwards quality preset |
+| **Skill** | `github-sdlc` | `gemini-3.8-flash-medium` | GitHub issue and PR interaction |
+| **Skill** | `jira-sdlc` | `gemini-3.8-flash-medium` | Jira issue lifecycle management |
+| **Skill** | `learn-sdlc` | `gemini-3.8-flash-medium` | Self-learning loop: assimilates recurrent patterns into guardrails |
+| **Skill** | `plan-sdlc` | `gemini-3.8-flash-medium` | Orchestrator routing and check logic |
+| **Skill** | `pr-sdlc` | `gemini-3.8-flash-medium` | Generates structured PR description |
+| **Skill** | `received-review-sdlc` | `gemini-3.8-flash-high` | Evaluates, verifies, and fixes review feedback |
+| **Skill** | `review-sdlc` | `gemini-3.8-flash-medium` | Multi-dimension code review orchestrator |
+| **Skill** | `run-workflow` | `gemini-3.8-flash-medium` | Generic workflow engine for declarative pipelines |
+| **Skill** | `setup-sdlc` | `gemini-3.8-flash-medium` | Interactive project setup and configuration wizard |
 | **Skill** | `ship-sdlc` (Explicit dispatch) | `gemini-3.8-flash-medium` / `-high` | Uses static suffixes assigned in ship.js |
 | **Skill** | `ship-sdlc` (Default pipeline) | `gemini-3.8-flash-medium` | State-machine orchestrator |
-| **Skill** | `plan-sdlc` | `gemini-3.8-flash-medium` | Orchestrator routing and check logic |
+| **Skill** | `verify-pipeline-sdlc` | `gemini-3.8-flash-medium` | CI failure classification and remediation |
+| **Skill** | `version-sdlc` | `gemini-3.8-flash-medium` | Semver bumping, changelog, release tagging |
+| **Agent** | `commit-orchestrator` | `gemini-3.8-flash-low` | Subject & body construction under 72 chars. |
 | **Agent** | `error-report-orchestrator` | `gemini-3.8-flash-low` | Structured markdown parser. |
 | **Agent** | `harden-orchestrator` | `gemini-3.8-flash-low` | Structured JSON classification output. |
-| **Agent** | `commit-orchestrator` | `gemini-3.8-flash-low` | Subject & body construction under 72 chars. |
+| **Agent** | `learn-review-only` | `gemini-3.8-flash-low` | Pre-screen assessment of synthesized guardrails. |
+| **Agent** | `learn-synthesis-orchestrator` | `gemini-3.8-flash-low` | Synthesizes candidate guardrails from recurring learnings. |
 | **Agent** | `plan-explore-orchestrator` | `gemini-3.8-flash-low` | Initial scoping agent. |
 | **Agent** | `plan-execution-validator` | `gemini-3.8-flash-high` | Fast deterministic graph circularity & collision check. |
 | **Agent** | `plan-generation-orchestrator` | `gemini-3.1-pro-high` | Deep multi-wave architectural plan drafting. |
-| **Agent** | `review-orchestrator` | `gemini-3.8-flash-low` | Diff-gathering coordination. |
 | **Agent** | `received-review-orchestrator` | `gemini-3.8-flash-low` | Fans out per-file verifier sub-agents and bounds the summary token. |
+| **Agent** | `review-orchestrator` | `gemini-3.8-flash-low` | Diff-gathering coordination. |
 | **Agent** | `wave-runner` | `gemini-3.8-flash-low` | Strict string parser & orchestrator loop. |
 | **Prompt** | `lane-static-structural` | `gemini-3.8-flash-low` | Basic structural verification checks. |
 | **Prompt** | `lens-requirements` | `gemini-3.8-flash-medium` | Balanced reasoning for deep requirements analysis. |

@@ -98,7 +98,7 @@ Complete enough that an agent with no codebase context can execute it.]
 |---|---|---|
 | `- [ ]` | Open | `plan-sdlc` — every generated criterion starts open |
 | `- [x]` | Done (closed) | A person, after verifying it |
-| `- [~]` | Skipped on purpose (closed) | A person only — never `plan-sdlc` or `execute-plan-sdlc` |
+| `- [~]` | Skipped on purpose (closed) | A person, or an agent at a person's request — never `plan-sdlc` or `execute-plan-sdlc` on their own |
 
 A `- [~]` needs a comment on the item's continuation line(s), indented deeper than the list
 marker with no blank line between: `*Skipped on YYYY-MM-DD: <reason>*` (a real calendar date, a

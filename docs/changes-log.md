@@ -104,9 +104,10 @@ Hardened the plugin's CLI scripts against two drift risks: scripts that read std
 ## Skipped plan checkboxes (`- [~]`)
 
 **Date:** 2026-10-06
+**Version:** 0.25.0
 
 ### Overview
-Plans can mark an acceptance criterion as skipped on purpose with `- [~]`. A skipped box is closed, like `- [x]`, and must carry a `*Skipped on YYYY-MM-DD: <reason>*` comment on its continuation lines. Only a person sets it; `plan-sdlc` keeps generating open `- [ ]` boxes and `execute-plan-sdlc` never writes boxes into the plan.
+Plans can mark an acceptance criterion as skipped on purpose with `- [~]`. A skipped box is closed, like `- [x]`, and must carry a `*Skipped on YYYY-MM-DD: <reason>*` comment on its continuation lines. A person (or an agent at a person's request) sets it; `plan-sdlc` keeps generating open `- [ ]` boxes and `execute-plan-sdlc` never writes boxes into the plan.
 
 ### Changes Made
 

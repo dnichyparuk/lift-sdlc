@@ -1,0 +1,330 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/dnichyparuk/lift-sdlc/main/schemas/delivery-graph.schema.json",
+  "title": "DeliveryGraph",
+  "description": "Canonical schema for machine-readable delivery plans, waves, tasks, and status reconciliation across repositories",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version (e.g. 1.0.0)"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when this delivery graph snapshot was generated"
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Project"
+      }
+    }
+  },
+  "required": ["version", "generatedAt", "projects"],
+  "additionalProperties": false,
+  "definitions": {
+    "Project": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique project identifier (e.g. trade-robot-alpha, lift-fixed-price)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable project name"
+        },
+        "repoPath": {
+          "type": "string",
+          "description": "Absolute or workspace-relative path to the project root"
+        },
+        "plans": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Plan"
+          }
+        },
+        "todos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TodoItem"
+          }
+        }
+      },
+      "required": ["id", "name", "repoPath", "plans"],
+      "additionalProperties": false
+    },
+    "Plan": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique plan slug within the project (e.g. paper-live-batch4-part1b-unification, mvp-phase-1a)"
+        },
+        "title": {
+          "type": "string",
+          "description": "Full title of the plan"
+        },
+        "filePath": {
+          "type": "string",
+          "description": "Path to the markdown file relative to the project root"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "proposed", "in_progress", "done", "partly", "blocked", "superseded", "archived"],
+          "description": "Reconciled status of the delivery plan"
+        },
+        "version": {
+          "type": "string",
+          "description": "Optional plan version (e.g. v1, v2)"
+        },
+        "goal": {
+          "type": "string",
+          "description": "One-line high-level goal statement from the plan header"
+        },
+        "architectureSummary": {
+          "type": "string",
+          "description": "Architecture summary from the plan header"
+        },
+        "verificationCommand": {
+          "type": "string",
+          "description": "Top-level verification command (e.g. pytest, npm test)"
+        },
+        "sourcePlanPath": {
+          "type": "string",
+          "description": "Path to the preliminary/strategic plan if this is an executable task plan"
+        },
+        "executionRuns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExecutionRun"
+          }
+        },
+        "waves": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Wave"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Task"
+          }
+        }
+      },
+      "required": ["id", "title", "filePath", "status", "waves", "tasks"],
+      "additionalProperties": false
+    },
+    "ExecutionRun": {
+      "type": "object",
+      "properties": {
+        "runFile": {
+          "type": "string",
+          "description": "Relative path to .sdlc/execution/execute-*.json"
+        },
+        "branch": {
+          "type": "string",
+          "description": "Git branch on which execution occurred"
+        },
+        "planHash": {
+          "type": "string",
+          "description": "SHA-256 hash of the plan markdown at execution time"
+        },
+        "driftStatus": {
+          "type": "string",
+          "enum": ["pristine", "drifted"],
+          "description": "Whether plan hash matches current file hash"
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "quality": {
+          "type": "string"
+        }
+      },
+      "required": ["runFile", "branch", "planHash"],
+      "additionalProperties": false
+    },
+    "Wave": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Wave identifier (e.g. wave-0, wave-b, wave-1)"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title and description of the wave"
+        },
+        "order": {
+          "type": "integer",
+          "description": "Sequence order index (1-based)"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["planned", "in_progress", "completed", "blocked", "todo"],
+          "description": "Wave completion status"
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Wave IDs that must be completed before this wave begins"
+        }
+      },
+      "required": ["id", "title", "order", "status", "dependsOn"],
+      "additionalProperties": false
+    },
+    "Task": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Task local ID (e.g. T0, P0, Task 1.1, X1, W2)"
+        },
+        "slug": {
+          "type": "string",
+          "description": "DOM and URL safe slug of task id"
+        },
+        "globalId": {
+          "type": "string",
+          "description": "Unique canonical global ID across workspace (urn:sdlc:${projectId}:${planId}:${taskId})"
+        },
+        "title": {
+          "type": "string",
+          "description": "Task name / headline"
+        },
+        "waveId": {
+          "type": "string",
+          "description": "ID of the wave this task belongs to"
+        },
+        "complexity": {
+          "type": "string",
+          "enum": ["Trivial", "Standard", "Complex"]
+        },
+        "risk": {
+          "type": "string",
+          "enum": ["Low", "Medium", "High"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["todo", "in_progress", "done", "partly", "blocked", "skipped"]
+        },
+        "statusEvidence": {
+          "type": "object",
+          "properties": {
+            "commit": { "type": "string" },
+            "pr": { "type": "string" },
+            "executionLog": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Array of canonical global task URNs (or task local IDs) this task depends on"
+        },
+        "files": {
+          "type": "object",
+          "properties": {
+            "create": { "type": "array", "items": { "type": "string" } },
+            "modify": { "type": "array", "items": { "type": "string" } },
+            "delete": { "type": "array", "items": { "type": "string" } },
+            "test": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["create", "modify", "test"],
+          "additionalProperties": false
+        },
+        "acceptanceCriteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "checked": { "type": "boolean" }
+            },
+            "required": ["text", "checked"],
+            "additionalProperties": false
+          }
+        },
+        "markdownAnchor": {
+          "type": "string",
+          "description": "Markdown header or anchor text in the source plan"
+        },
+        "markdownSource": {
+          "type": "string",
+          "description": "Raw markdown chunk of this task for zero-disk preview in the UI"
+        },
+        "blockedByTodoIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Array of TODO IDs that block this task"
+        },
+        "isReadyToDispatch": {
+          "type": "boolean",
+          "description": "True if task status is todo, all dependencies are done, and no active blocking P0 TODOs"
+        }
+      },
+      "required": ["id", "globalId", "title", "waveId", "status", "dependsOn", "files", "acceptanceCriteria"],
+      "additionalProperties": false
+    },
+    "TodoItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "TODO file slug or ID (e.g. 021-execute-part1b-unification-plan)"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the TODO / follow-up item"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "blocked", "in_progress", "done", "wont_do", "promoted"]
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["P0", "P1", "P2"]
+        },
+        "blocks": {
+          "type": "string",
+          "description": "What this task blocks (e.g. Part 1b completion)"
+        },
+        "relatedPlan": {
+          "type": "string",
+          "description": "Plan ID or file path this TODO relates to"
+        },
+        "filePath": {
+          "type": "string",
+          "description": "Path to the TODO markdown file relative to the project root"
+        },
+        "trigger": {
+          "type": "string",
+          "description": "Event or condition that should prompt taking this task into work"
+        },
+        "area": {
+          "type": "string",
+          "description": "Subsystem area (e.g. engine, api, web, access, managers)"
+        },
+        "markdownSource": {
+          "type": "string",
+          "description": "Full markdown content of this TODO file"
+        },
+        "blockedTaskGlobalIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Canonical global IDs of tasks blocked by this TODO"
+        }
+      },
+      "required": ["id", "title", "status", "filePath"],
+      "additionalProperties": false
+    }
+  }
+}

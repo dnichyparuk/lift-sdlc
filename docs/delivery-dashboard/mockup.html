@@ -1,0 +1,1898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unified Delivery & Task Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0b0f19;
+      --bg-surface: #111827;
+      --bg-surface-elevated: #1a2234;
+      --bg-surface-hover: #222d44;
+      --border-subtle: #243048;
+      --border-strong: #374665;
+      --border-focus: #3b82f6;
+
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+
+      --status-done: #10b981;
+      --status-done-bg: rgba(16, 185, 129, 0.12);
+      --status-done-border: rgba(16, 185, 129, 0.35);
+
+      --status-progress: #3b82f6;
+      --status-progress-bg: rgba(59, 130, 246, 0.12);
+      --status-progress-border: rgba(59, 130, 246, 0.35);
+
+      --status-blocked: #f43f5e;
+      --status-blocked-bg: rgba(244, 63, 94, 0.12);
+      --status-blocked-border: rgba(244, 63, 94, 0.35);
+
+      --status-todo: #64748b;
+      --status-todo-bg: rgba(100, 116, 139, 0.12);
+      --status-todo-border: rgba(100, 116, 139, 0.3);
+
+      --status-partly: #f59e0b;
+      --status-partly-bg: rgba(245, 158, 11, 0.12);
+      --status-partly-border: rgba(245, 158, 11, 0.35);
+
+      --accent-cyan: #06b6d4;
+      --accent-purple: #8b5cf6;
+      --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+      --shadow-drawer: -12px 0 36px rgba(0, 0, 0, 0.65);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    code, pre, .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Top App Header */
+    header {
+      background: rgba(17, 24, 39, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-subtle);
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1rem;
+      color: #fff;
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.4);
+    }
+
+    .brand-text h1 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge-universal {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      background: rgba(139, 92, 246, 0.2);
+      border: 1px solid rgba(139, 92, 246, 0.4);
+      color: #c4b5fd;
+      font-weight: 600;
+    }
+
+    .project-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .select-styled {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-strong);
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+
+    .select-styled:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    /* KPI Summary Row */
+    .kpi-bar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.85rem 1.5rem;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+      gap: 1.25rem;
+      align-items: center;
+    }
+
+    .kpi-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .kpi-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    .kpi-value-row {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+
+    .kpi-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .kpi-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Progress Multi-Bar */
+    .progress-track {
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      display: flex;
+      width: 100%;
+      margin-top: 0.35rem;
+    }
+
+    .progress-segment {
+      height: 100%;
+      transition: width 0.3s ease;
+    }
+    .segment-done { background: var(--status-done); }
+    .segment-prog { background: var(--status-progress); }
+    .segment-partly { background: var(--status-partly); }
+    .segment-todo { background: var(--status-todo); }
+
+    /* Action & Search Bar */
+    .action-bar {
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      background: var(--bg-base);
+    }
+
+    .filters-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .pill-filter {
+      font-size: 0.75rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 20px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+    }
+
+    .pill-filter:hover {
+      background: var(--bg-surface-hover);
+      color: var(--text-main);
+    }
+
+    .pill-filter.active {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--border-focus);
+      color: #60a5fa;
+      font-weight: 600;
+    }
+
+    .pill-filter.filter-ready.active {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: var(--status-done);
+      color: #34d399;
+    }
+
+    .search-box {
+      position: relative;
+      width: 320px;
+    }
+
+    .search-box input {
+      width: 100%;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0.4rem 0.75rem 0.4rem 2rem;
+      font-size: 0.8rem;
+      color: var(--text-main);
+      outline: none;
+      transition: all 0.15s;
+    }
+
+    .search-box input:focus {
+      border-color: var(--border-focus);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 0.65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      pointer-events: none;
+    }
+
+    /* Tabs Bar */
+    .tabs-bar {
+      display: flex;
+      gap: 0.25rem;
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 1.5rem;
+      background: var(--bg-base);
+    }
+
+    .tab-btn {
+      padding: 0.65rem 1.1rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-muted);
+    }
+
+    .tab-btn.active {
+      color: #fff;
+      border-bottom-color: #3b82f6;
+    }
+
+    /* Views Layout */
+    main {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .view-container {
+      display: none;
+      flex: 1;
+      height: 100%;
+    }
+
+    .view-container.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* View: DAG Flow Canvas */
+    #view-graph {
+      position: relative;
+      overflow-x: auto;
+      overflow-y: auto;
+      padding: 2rem;
+      min-height: calc(100vh - 220px);
+    }
+
+    .dag-stage {
+      display: flex;
+      gap: 3.5rem;
+      position: relative;
+      width: max-content;
+      min-width: 100%;
+      padding-bottom: 4rem;
+    }
+
+    .dag-svg-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .edge-line {
+      fill: none;
+      stroke: #243048;
+      stroke-width: 1.5;
+      stroke-dasharray: 4, 3;
+      transition: stroke 0.2s, stroke-width 0.2s;
+    }
+
+    .edge-line.active-upstream {
+      stroke: #f59e0b;
+      stroke-width: 2.5;
+      stroke-dasharray: none;
+    }
+
+    .edge-line.active-downstream {
+      stroke: #06b6d4;
+      stroke-width: 2.5;
+      stroke-dasharray: none;
+    }
+
+    /* Wave Column */
+    .wave-column {
+      width: 320px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      z-index: 20;
+    }
+
+    .wave-header {
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .wave-header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .wave-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .wave-order {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-dim);
+    }
+
+    .wave-desc {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+
+    .wave-tasks-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+
+    /* Task Card */
+    .task-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .task-card:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-card);
+    }
+
+    .task-card.selected {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4), var(--shadow-card);
+      background: var(--bg-surface-hover);
+    }
+
+    .task-card.highlight-upstream {
+      border-color: #f59e0b;
+      box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+    }
+
+    .task-card.highlight-downstream {
+      border-color: #06b6d4;
+      box-shadow: 0 0 14px rgba(6, 182, 212, 0.35);
+    }
+
+    .task-card.ready-pulse {
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35);
+    }
+
+    .task-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .task-id-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .status-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .status-badge::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+    }
+
+    .status-badge.done {
+      background: var(--status-done-bg);
+      color: var(--status-done);
+      border: 1px solid var(--status-done-border);
+    }
+    .status-badge.done::before { background: var(--status-done); }
+
+    .status-badge.in_progress {
+      background: var(--status-progress-bg);
+      color: var(--status-progress);
+      border: 1px solid var(--status-progress-border);
+    }
+    .status-badge.in_progress::before { background: var(--status-progress); }
+
+    .status-badge.blocked {
+      background: var(--status-blocked-bg);
+      color: var(--status-blocked);
+      border: 1px solid var(--status-blocked-border);
+    }
+    .status-badge.blocked::before { background: var(--status-blocked); }
+
+    .status-badge.todo {
+      background: var(--status-todo-bg);
+      color: var(--status-todo);
+      border: 1px solid var(--status-todo-border);
+    }
+    .status-badge.todo::before { background: var(--status-todo); }
+
+    .status-badge.partly {
+      background: var(--status-partly-bg);
+      color: var(--status-partly);
+      border: 1px solid var(--status-partly-border);
+    }
+    .status-badge.partly::before { background: var(--status-partly); }
+
+    .task-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-main);
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .task-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 0.4rem;
+      margin-top: 0.2rem;
+    }
+
+    .task-tags {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .tag-meta {
+      font-size: 0.65rem;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 0.1rem 0.3rem;
+      border-radius: 3px;
+      color: var(--text-muted);
+    }
+
+    .task-deps-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+
+    /* List Table View */
+    #view-table {
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    #view-table table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    #view-table th {
+      background: var(--bg-surface-elevated);
+      padding: 0.75rem 1rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 700;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    #view-table td {
+      padding: 0.85rem 1rem;
+      font-size: 0.8rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      vertical-align: middle;
+    }
+
+    #view-table tr:hover td {
+      background: var(--bg-surface-hover);
+      cursor: pointer;
+    }
+
+    /* TODOs View */
+    #view-todos {
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    .todo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 1rem;
+    }
+
+    .todo-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .todo-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .todo-prio-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+    }
+    .prio-p0 { background: rgba(244, 63, 94, 0.2); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.4); }
+    .prio-p1 { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .prio-p2 { background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.4); }
+
+    .todo-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      line-height: 1.4;
+      color: #fff;
+    }
+
+    .todo-block-text {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      background: var(--bg-surface-elevated);
+      padding: 0.5rem;
+      border-radius: 4px;
+      border-left: 3px solid #f43f5e;
+    }
+
+    /* JSON Viewer View */
+    #view-json {
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    .json-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 1.25rem;
+      font-size: 0.78rem;
+      color: #cbd5e1;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    /* Non-modal Task Drawer */
+    .drawer-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: transparent;
+      z-index: 90;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .task-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 580px;
+      max-width: 90vw;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border-strong);
+      z-index: 100;
+      box-shadow: var(--shadow-drawer);
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .task-drawer.open {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      padding: 1.25rem;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      background: var(--bg-surface-elevated);
+    }
+
+    .drawer-header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .drawer-breadcrumb {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .drawer-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.3;
+    }
+
+    .drawer-close-btn {
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.1rem;
+      transition: all 0.15s;
+    }
+
+    .drawer-close-btn:hover {
+      background: var(--border-subtle);
+      color: #fff;
+    }
+
+    .drawer-body {
+      padding: 1.25rem;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .drawer-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .drawer-section-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--text-dim);
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+      background: var(--bg-surface-elevated);
+      padding: 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .meta-label {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .meta-val {
+      font-size: 0.8rem;
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .ac-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .ac-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      background: var(--bg-surface-elevated);
+      padding: 0.6rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .ac-item.checked {
+      color: var(--text-main);
+      border-color: rgba(16, 185, 129, 0.25);
+      background: rgba(16, 185, 129, 0.03);
+    }
+
+    .ac-checkbox {
+      margin-top: 0.15rem;
+      accent-color: var(--status-done);
+    }
+
+    .files-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .file-badge-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      background: var(--bg-surface-elevated);
+      padding: 0.4rem 0.6rem;
+      border-radius: 4px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .file-op-pill {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+    }
+    .op-create { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .op-modify { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+    .op-delete { background: rgba(244, 63, 94, 0.2); color: #f43f5e; }
+    .op-test { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+
+    .markdown-box {
+      background: var(--bg-base);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      white-space: pre-wrap;
+      line-height: 1.5;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .drawer-footer {
+      padding: 1rem 1.25rem;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-surface-elevated);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+
+    .btn-action {
+      padding: 0.45rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-surface);
+      color: var(--text-main);
+      transition: all 0.15s;
+    }
+
+    .btn-action:hover {
+      background: var(--bg-surface-hover);
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+
+    /* Floating Toast Notification */
+    .toast-container {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid #3b82f6;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: auto;
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top App Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">L</div>
+      <div class="brand-text">
+        <h1>
+          Universal Delivery Dashboard
+          <span class="badge-universal">SDLC Engine</span>
+        </h1>
+      </div>
+    </div>
+
+    <div class="project-controls">
+      <select id="select-project" class="select-styled" title="Select Project"></select>
+      <select id="select-plan" class="select-styled" title="Select Plan"></select>
+    </div>
+  </header>
+
+  <!-- KPI Summary Banner -->
+  <div class="kpi-bar">
+    <div class="kpi-item">
+      <div class="kpi-label">Scope Completion</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" id="kpi-done-tasks">0</span>
+        <span class="kpi-sub">of <span id="kpi-total-tasks">0</span> tasks done (<span id="kpi-done-pct">0%</span>)</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-segment segment-done" id="bar-done" style="width: 0%"></div>
+        <div class="progress-segment segment-prog" id="bar-prog" style="width: 0%"></div>
+        <div class="progress-segment segment-partly" id="bar-partly" style="width: 0%"></div>
+        <div class="progress-segment segment-todo" id="bar-todo" style="width: 100%"></div>
+      </div>
+    </div>
+
+    <div class="kpi-item">
+      <div class="kpi-label">In Progress</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" style="color: var(--status-progress);" id="kpi-prog-tasks">0</span>
+      </div>
+    </div>
+
+    <div class="kpi-item">
+      <div class="kpi-label">Blocked</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" style="color: var(--status-blocked);" id="kpi-block-tasks">0</span>
+      </div>
+    </div>
+
+    <div class="kpi-item">
+      <div class="kpi-label">Ready to Execute</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" style="color: #34d399;" id="kpi-ready-tasks">0</span>
+      </div>
+    </div>
+
+    <div class="kpi-item">
+      <div class="kpi-label">Waves Completed</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" id="kpi-waves-completed">0</span>
+        <span class="kpi-sub">of <span id="kpi-waves-total">0</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action & Filter Bar -->
+  <div class="action-bar">
+    <div class="filters-group">
+      <div class="pill-filter active" data-filter-status="all">All Tasks</div>
+      <div class="pill-filter filter-ready" data-filter-status="ready">Ready to Execute</div>
+      <div class="pill-filter" data-filter-status="in_progress">In Progress</div>
+      <div class="pill-filter" data-filter-status="blocked">Blocked</div>
+      <div class="pill-filter" data-filter-status="done">Completed</div>
+      <div class="pill-filter" data-filter-status="todo">Backlog</div>
+    </div>
+
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Search tasks, IDs, files to create/modify/test...">
+    </div>
+  </div>
+
+  <!-- Navigation Tabs -->
+  <div class="tabs-bar">
+    <div class="tab-btn active" data-view="graph">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v12M18 9v3M6 15h12"/></svg>
+      DAG Dependency Graph
+    </div>
+    <div class="tab-btn" data-view="table">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Task Matrix
+    </div>
+    <div class="tab-btn" data-view="todos">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      TODOs & Blockers
+    </div>
+    <div class="tab-btn" data-view="json">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      Raw JSON
+    </div>
+  </div>
+
+  <!-- Main Viewports -->
+  <main>
+    <!-- View 1: DAG Graph Canvas -->
+    <div class="view-container active" id="view-graph">
+      <div class="dag-stage" id="dag-stage">
+        <svg id="dag-svg" class="dag-svg-layer">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#374665"></path>
+            </marker>
+            <marker id="arrow-upstream" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f59e0b"></path>
+            </marker>
+            <marker id="arrow-downstream" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#06b6d4"></path>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+    </div>
+
+    <!-- View 2: Task Matrix Table -->
+    <div class="view-container" id="view-table">
+      <table id="table-tasks">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Wave</th>
+            <th>Status</th>
+            <th>Complexity</th>
+            <th>Risk</th>
+            <th>Depends On</th>
+            <th>Acceptance</th>
+          </tr>
+        </thead>
+        <tbody id="table-tasks-body"></tbody>
+      </table>
+    </div>
+
+    <!-- View 3: TODOs & Blockers Grid -->
+    <div class="view-container" id="view-todos">
+      <div class="todo-grid" id="todo-grid"></div>
+    </div>
+
+    <!-- View 4: Raw JSON Viewer -->
+    <div class="view-container" id="view-json">
+      <div style="margin-bottom: 0.75rem; display: flex; justify-content: flex-end;">
+        <button class="btn-action" id="btn-copy-json">Copy JSON</button>
+      </div>
+      <pre class="json-box mono" id="json-viewer-content"></pre>
+    </div>
+  </main>
+
+  <!-- Non-modal Task Inspector Drawer -->
+  <div class="drawer-overlay" id="drawer-overlay"></div>
+  <aside class="task-drawer" id="task-drawer">
+    <div class="drawer-header">
+      <div class="drawer-header-left">
+        <div class="drawer-breadcrumb mono">
+          <span id="drawer-project">project</span> &gt;
+          <span id="drawer-wave">wave</span> &gt;
+          <span id="drawer-id">id</span>
+        </div>
+        <div class="drawer-title" id="drawer-title">Task Title</div>
+      </div>
+      <button class="drawer-close-btn" id="drawer-close" title="Close (Esc)">&times;</button>
+    </div>
+
+    <div class="drawer-body">
+      <!-- Section: Meta attributes -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Attributes</div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">Status</span>
+            <span class="status-badge" id="drawer-status">todo</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Complexity</span>
+            <span class="meta-val mono" id="drawer-complexity">Standard</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Risk Rating</span>
+            <span class="meta-val mono" id="drawer-risk">Low</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Depends On</span>
+            <span class="meta-val mono" id="drawer-depends">none</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Blockers & Dependencies -->
+      <div class="drawer-section" id="drawer-blockers-section">
+        <div class="drawer-section-title">Blockers &amp; Open Issues</div>
+        <div id="drawer-blockers-list" class="ac-list"></div>
+      </div>
+
+      <!-- Section: Acceptance Criteria Checklist -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">
+          <span>Acceptance Criteria</span>
+          <span class="mono" style="font-size:0.65rem; color:var(--text-muted);" id="drawer-ac-count"></span>
+        </div>
+        <div class="ac-list" id="drawer-ac-list"></div>
+      </div>
+
+      <!-- Section: File Perimeter -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Affected Files Perimeter</div>
+        <div class="files-list" id="drawer-files-list"></div>
+      </div>
+
+      <!-- Section: Markdown Source Excerpt -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Markdown Source Excerpt (SSOT)</div>
+        <pre class="markdown-box mono" id="drawer-markdown"></pre>
+      </div>
+
+      <!-- Section: Execution Proof -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">Execution &amp; Verification Trace</div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">Git Commit / PR</span>
+            <span class="meta-val mono" id="drawer-commit">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Execution Log</span>
+            <span class="meta-val mono" id="drawer-exec-log">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-footer">
+      <button class="btn-action" id="btn-copy-prompt">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Copy Agent Prompt
+      </button>
+      <button class="btn-action" id="btn-copy-anchor">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        Copy Anchor
+      </button>
+      <button class="btn-action btn-primary" id="btn-open-ide">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Open in Editor
+      </button>
+    </div>
+  </aside>
+
+  <!-- Embedded Canonical delivery-graph.json -->
+  <script id="delivery-data" type="application/json">{{DELIVERY_DATA_JSON}}</script>
+
+  <!-- Headless DeliveryGraphModel definition -->
+  <script>
+    class DeliveryGraphModel {
+      constructor(graphData) {
+        this.data = graphData || { version: '1.0.0', generatedAt: new Date().toISOString(), projects: [] };
+        this._index();
+      }
+
+      _index() {
+        this.tasksByGlobalId = new Map();
+        this.todosById = new Map();
+        for (const project of this.data.projects || []) {
+          for (const todo of project.todos || []) {
+            this.todosById.set(todo.id, todo);
+          }
+          for (const plan of project.plans || []) {
+            for (const task of plan.tasks || []) {
+              this.tasksByGlobalId.set(task.globalId, task);
+            }
+          }
+        }
+      }
+
+      getProjects() { return this.data.projects || []; }
+      getProject(projectId) { return (this.data.projects || []).find(p => p.id === projectId) || null; }
+      getPlans(projectId) { const p = this.getProject(projectId); return p ? p.plans || [] : []; }
+      getPlan(projectId, planId) { return this.getPlans(projectId).find(p => p.id === planId) || null; }
+      getTasks(projectId, planId) { const p = this.getPlan(projectId, planId); return p ? p.tasks || [] : []; }
+      getTask(projectId, planId, idOrSlugOrGlobal) {
+        return this.getTasks(projectId, planId).find(t =>
+          t.id === idOrSlugOrGlobal || t.slug === idOrSlugOrGlobal || t.globalId === idOrSlugOrGlobal
+        ) || null;
+      }
+
+      getDependencies(taskGlobalId) {
+        const target = this.tasksByGlobalId.get(taskGlobalId);
+        if (!target) return { upstream: [], downstream: [] };
+        const upstream = [];
+        for (const depId of target.dependsOn || []) {
+          const depTask = this.tasksByGlobalId.get(depId);
+          if (depTask) upstream.push(depTask);
+        }
+        const downstream = [];
+        for (const task of this.tasksByGlobalId.values()) {
+          if (Array.isArray(task.dependsOn) && (task.dependsOn.includes(target.globalId) || task.dependsOn.includes(target.id))) {
+            downstream.push(task);
+          }
+        }
+        return { upstream, downstream };
+      }
+
+      filterTasks(tasks, options = {}) {
+        const { query = '', status = 'all' } = options;
+        const q = query.trim().toLowerCase();
+        return tasks.filter(task => {
+          if (status === 'ready') {
+            if (!task.isReadyToDispatch) return false;
+          } else if (status !== 'all') {
+            if (task.status !== status) return false;
+          }
+          if (!q) return true;
+          if (task.id.toLowerCase().includes(q)) return true;
+          if (task.title && task.title.toLowerCase().includes(q)) return true;
+          if (task.globalId && task.globalId.toLowerCase().includes(q)) return true;
+          if (task.markdownSource && task.markdownSource.toLowerCase().includes(q)) return true;
+          const files = task.files || {};
+          for (const op of ['create', 'modify', 'delete', 'test']) {
+            for (const f of (files[op] || [])) {
+              if (f.toLowerCase().includes(q)) return true;
+            }
+          }
+          return false;
+        });
+      }
+
+      calculateMetrics(projectId, planId) {
+        const plan = this.getPlan(projectId, planId);
+        if (!plan) return { total: 0, done: 0, donePct: 0, inProgress: 0, blocked: 0, todo: 0, partly: 0, readyToDispatch: 0, wavesCount: 0, wavesCompleted: 0 };
+        const tasks = plan.tasks || [];
+        const total = tasks.length;
+        const done = tasks.filter(t => t.status === 'done').length;
+        const inProgress = tasks.filter(t => t.status === 'in_progress').length;
+        const blocked = tasks.filter(t => t.status === 'blocked').length;
+        const partly = tasks.filter(t => t.status === 'partly').length;
+        const todo = tasks.filter(t => t.status === 'todo').length;
+        const readyToDispatch = tasks.filter(t => t.isReadyToDispatch === true).length;
+        const donePct = total > 0 ? Math.round((done / total) * 100) : 0;
+        const waves = plan.waves || [];
+        const wavesCount = waves.length;
+        const wavesCompleted = waves.filter(w => w.status === 'completed').length;
+        return { total, done, donePct, inProgress, blocked, todo, partly, readyToDispatch, wavesCount, wavesCompleted };
+      }
+    }
+  </script>
+
+  <!-- Interactive Dashboard Controller -->
+  <script>
+    (function() {
+      // 1. Load Data
+      const rawData = document.getElementById('delivery-data').textContent;
+      let graphData = { version: '1.0.0', generatedAt: new Date().toISOString(), projects: [] };
+      try {
+        graphData = JSON.parse(rawData);
+      } catch (err) {
+        console.error('Failed to parse delivery-graph.json:', err);
+      }
+
+      const model = new DeliveryGraphModel(graphData);
+
+      // State
+      let currentProjectId = graphData.projects[0] ? graphData.projects[0].id : '';
+      let currentPlanId = '';
+      let currentFilterStatus = 'all';
+      let searchQuery = '';
+      let selectedTask = null;
+
+      // DOM Elements
+      const projectSelect = document.getElementById('select-project');
+      const planSelect = document.getElementById('select-plan');
+      const searchInput = document.getElementById('search-input');
+      const tabBtns = document.querySelectorAll('.tab-btn');
+      const viewContainers = document.querySelectorAll('.view-container');
+      const filterPills = document.querySelectorAll('.pill-filter');
+
+      // KPIs
+      const kpiTotal = document.getElementById('kpi-total-tasks');
+      const kpiDone = document.getElementById('kpi-done-tasks');
+      const kpiDonePct = document.getElementById('kpi-done-pct');
+      const kpiProg = document.getElementById('kpi-prog-tasks');
+      const kpiBlock = document.getElementById('kpi-block-tasks');
+      const kpiReady = document.getElementById('kpi-ready-tasks');
+      const kpiWavesComp = document.getElementById('kpi-waves-completed');
+      const kpiWavesTot = document.getElementById('kpi-waves-total');
+      const barDone = document.getElementById('bar-done');
+      const barProg = document.getElementById('bar-prog');
+      const barPartly = document.getElementById('bar-partly');
+      const barTodo = document.getElementById('bar-todo');
+
+      // Drawer Elements
+      const drawer = document.getElementById('task-drawer');
+      const drawerClose = document.getElementById('drawer-close');
+
+      function init() {
+        populateProjectOptions();
+        setupEventListeners();
+        renderActiveProjectAndPlan();
+        renderJsonView();
+      }
+
+      function populateProjectOptions() {
+        projectSelect.innerHTML = '';
+        const projects = model.getProjects();
+        projects.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = `${p.name} (${p.id})`;
+          if (p.id === currentProjectId) opt.selected = true;
+          projectSelect.appendChild(opt);
+        });
+      }
+
+      function updatePlanOptions() {
+        planSelect.innerHTML = '';
+        const plans = model.getPlans(currentProjectId);
+        if (!plans.length) return;
+
+        plans.forEach((plan, idx) => {
+          const opt = document.createElement('option');
+          opt.value = plan.id;
+          opt.textContent = plan.title;
+          if (idx === 0) {
+            opt.selected = true;
+            currentPlanId = plan.id;
+          }
+          planSelect.appendChild(opt);
+        });
+      }
+
+      function setupEventListeners() {
+        projectSelect.addEventListener('change', (e) => {
+          currentProjectId = e.target.value;
+          updatePlanOptions();
+          renderActiveProjectAndPlan();
+        });
+
+        planSelect.addEventListener('change', (e) => {
+          currentPlanId = e.target.value;
+          renderActiveProjectAndPlan();
+        });
+
+        searchInput.addEventListener('input', (e) => {
+          searchQuery = e.target.value;
+          renderViews();
+        });
+
+        filterPills.forEach(pill => {
+          pill.addEventListener('click', () => {
+            filterPills.forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            currentFilterStatus = pill.getAttribute('data-filter-status');
+            renderViews();
+          });
+        });
+
+        tabBtns.forEach(btn => {
+          btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const viewName = btn.getAttribute('data-view');
+            viewContainers.forEach(vc => vc.classList.remove('active'));
+            document.getElementById(`view-${viewName}`).classList.add('active');
+
+            if (viewName === 'graph') {
+              setTimeout(drawDagEdges, 50);
+            }
+          });
+        });
+
+        drawerClose.addEventListener('click', closeDrawer);
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closeDrawer();
+        });
+
+        document.getElementById('btn-copy-json').addEventListener('click', () => {
+          navigator.clipboard.writeText(JSON.stringify(graphData, null, 2)).then(() => {
+            showToast('delivery-graph.json copied to clipboard!');
+          });
+        });
+
+        window.addEventListener('resize', () => {
+          if (document.getElementById('view-graph').classList.contains('active')) {
+            drawDagEdges();
+          }
+        });
+      }
+
+      function renderActiveProjectAndPlan() {
+        if (!currentPlanId) updatePlanOptions();
+        renderKPIs();
+        renderViews();
+      }
+
+      function renderKPIs() {
+        const m = model.calculateMetrics(currentProjectId, currentPlanId);
+        kpiTotal.textContent = m.total;
+        kpiDone.textContent = m.done;
+        kpiDonePct.textContent = `${m.donePct}%`;
+        kpiProg.textContent = m.inProgress;
+        kpiBlock.textContent = m.blocked;
+        kpiReady.textContent = m.readyToDispatch;
+        kpiWavesComp.textContent = m.wavesCompleted;
+        kpiWavesTot.textContent = m.wavesCount;
+
+        if (m.total > 0) {
+          barDone.style.width = `${(m.done / m.total) * 100}%`;
+          barProg.style.width = `${(m.inProgress / m.total) * 100}%`;
+          barPartly.style.width = `${(m.partly / m.total) * 100}%`;
+          barTodo.style.width = `${(m.todo / m.total) * 100}%`;
+        } else {
+          barDone.style.width = '0%';
+          barProg.style.width = '0%';
+          barPartly.style.width = '0%';
+          barTodo.style.width = '100%';
+        }
+      }
+
+      function renderViews() {
+        renderDagView();
+        renderTableView();
+        renderTodosView();
+      }
+
+      function renderDagView() {
+        const plan = model.getPlan(currentProjectId, currentPlanId);
+        const stage = document.getElementById('dag-stage');
+        const svg = document.getElementById('dag-svg');
+
+        stage.innerHTML = '';
+        stage.appendChild(svg);
+
+        if (!plan) return;
+
+        const allTasks = plan.tasks || [];
+        const filteredTasks = model.filterTasks(allTasks, { query: searchQuery, status: currentFilterStatus });
+
+        plan.waves.forEach((wave) => {
+          const waveTasks = filteredTasks.filter(t => t.waveId === wave.id);
+          if (waveTasks.length === 0 && currentFilterStatus !== 'all') return;
+
+          const col = document.createElement('div');
+          col.className = 'wave-column';
+          col.id = `col-${wave.id}`;
+
+          col.innerHTML = `
+            <div class="wave-header">
+              <div class="wave-header-top">
+                <span class="wave-title">${wave.title.split(':')[0]}</span>
+                <span class="wave-order mono">Wave ${wave.order}</span>
+              </div>
+              <span class="wave-desc">${wave.title.includes(':') ? wave.title.split(':')[1] : ''}</span>
+            </div>
+            <div class="wave-tasks-container" id="tasks-container-${wave.id}"></div>
+          `;
+
+          const container = col.querySelector(`#tasks-container-${wave.id}`);
+
+          waveTasks.forEach(task => {
+            const card = document.createElement('div');
+            const isSelected = selectedTask && selectedTask.id === task.id;
+            card.className = `task-card ${isSelected ? 'selected' : ''} ${task.isReadyToDispatch ? 'ready-pulse' : ''}`;
+            const taskSlug = task.slug || task.id.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+            card.id = `node-${taskSlug}`;
+            card.setAttribute('data-task-id', task.id);
+            card.setAttribute('data-task-slug', taskSlug);
+
+            card.innerHTML = `
+              <div class="task-card-header">
+                <span class="task-id-badge mono">${task.id}</span>
+                <span class="status-badge ${task.status}">${formatStatus(task.status)}</span>
+              </div>
+              <div class="task-title">${task.title}</div>
+              <div class="task-footer">
+                <div class="task-tags">
+                  <span class="tag-meta mono">${task.complexity || 'Standard'}</span>
+                  <span class="tag-meta mono">${task.risk || 'Low'} Risk</span>
+                </div>
+                <div class="task-deps-indicator mono">
+                  ${task.dependsOn && task.dependsOn.length ? `← ${task.dependsOn.length} dep` : 'start'}
+                </div>
+              </div>
+            `;
+
+            card.addEventListener('click', (e) => {
+              e.stopPropagation();
+              openDrawer(task, plan);
+              highlightConnections(task, plan);
+            });
+
+            container.appendChild(card);
+          });
+
+          stage.appendChild(col);
+        });
+
+        setTimeout(drawDagEdges, 40);
+      }
+
+      function drawDagEdges() {
+        const svg = document.getElementById('dag-svg');
+        const plan = model.getPlan(currentProjectId, currentPlanId);
+        if (!plan) return;
+
+        // Keep defs
+        const defs = svg.querySelector('defs');
+        svg.innerHTML = '';
+        if (defs) svg.appendChild(defs);
+
+        const stage = document.getElementById('dag-stage');
+        const stageRect = stage.getBoundingClientRect();
+        svg.style.width = `${stage.scrollWidth}px`;
+        svg.style.height = `${stage.scrollHeight}px`;
+
+        const allTasks = plan.tasks || [];
+        const taskMap = new Map();
+        allTasks.forEach(t => {
+          taskMap.set(t.id, t);
+          taskMap.set(t.globalId, t);
+        });
+
+        allTasks.forEach(task => {
+          const taskSlug = task.slug || task.id.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+          const toEl = document.getElementById(`node-${taskSlug}`);
+          if (!toEl) return;
+
+          const toRect = toEl.getBoundingClientRect();
+          const toX = toRect.left - stageRect.left;
+          const toY = toRect.top - stageRect.top + (toRect.height / 2);
+
+          (task.dependsOn || []).forEach(depGlobalOrLocalId => {
+            const depTask = taskMap.get(depGlobalOrLocalId);
+            if (!depTask) return;
+
+            const depSlug = depTask.slug || depTask.id.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+            const fromEl = document.getElementById(`node-${depSlug}`);
+            if (!fromEl) return;
+
+            const fromRect = fromEl.getBoundingClientRect();
+            const fromX = fromRect.right - stageRect.left;
+            const fromY = fromRect.top - stageRect.top + (fromRect.height / 2);
+
+            const dx = Math.max(40, (toX - fromX) * 0.45);
+            const pathData = `M ${fromX} ${fromY} C ${fromX + dx} ${fromY}, ${toX - dx} ${toY}, ${toX} ${toY}`;
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', pathData);
+            path.setAttribute('class', 'edge-line');
+            path.setAttribute('id', `edge-${depSlug}-${taskSlug}`);
+            path.setAttribute('data-from', depSlug);
+            path.setAttribute('data-to', taskSlug);
+            path.setAttribute('marker-end', 'url(#arrow)');
+
+            svg.appendChild(path);
+          });
+        });
+      }
+
+      function highlightConnections(task, plan) {
+        document.querySelectorAll('.task-card').forEach(el => {
+          el.classList.remove('selected', 'highlight-upstream', 'highlight-downstream');
+        });
+        document.querySelectorAll('.edge-line').forEach(el => {
+          el.classList.remove('active-upstream', 'active-downstream');
+          el.setAttribute('marker-end', 'url(#arrow)');
+        });
+
+        const taskSlug = task.slug || task.id.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+        const activeCard = document.getElementById(`node-${taskSlug}`);
+        if (activeCard) activeCard.classList.add('selected');
+
+        const deps = model.getDependencies(task.globalId);
+
+        deps.upstream.forEach(depTask => {
+          const depSlug = depTask.slug || depTask.id.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+          const depEl = document.getElementById(`node-${depSlug}`);
+          if (depEl) depEl.classList.add('highlight-upstream');
+
+          const edge = document.getElementById(`edge-${depSlug}-${taskSlug}`);
+          if (edge) {
+            edge.classList.add('active-upstream');
+            edge.setAttribute('marker-end', 'url(#arrow-upstream)');
+          }
+        });
+
+        deps.downstream.forEach(dtTask => {
+          const dtSlug = dtTask.slug || dtTask.id.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+          const dtEl = document.getElementById(`node-${dtSlug}`);
+          if (dtEl) dtEl.classList.add('highlight-downstream');
+
+          const edge = document.getElementById(`edge-${taskSlug}-${dtSlug}`);
+          if (edge) {
+            edge.classList.add('active-downstream');
+            edge.setAttribute('marker-end', 'url(#arrow-downstream)');
+          }
+        });
+      }
+
+      function renderTableView() {
+        const tbody = document.getElementById('table-tasks-body');
+        tbody.innerHTML = '';
+        const plan = model.getPlan(currentProjectId, currentPlanId);
+        if (!plan) return;
+
+        const filtered = model.filterTasks(plan.tasks, { query: searchQuery, status: currentFilterStatus });
+        filtered.forEach(task => {
+          const tr = document.createElement('tr');
+          const acDone = (task.acceptanceCriteria || []).filter(a => a.checked).length;
+          const acTot = (task.acceptanceCriteria || []).length;
+
+          tr.innerHTML = `
+            <td class="mono font-bold">${task.id}</td>
+            <td>${task.title}</td>
+            <td><span class="mono">${task.waveId}</span></td>
+            <td><span class="status-badge ${task.status}">${formatStatus(task.status)}</span></td>
+            <td><span class="mono">${task.complexity || 'Standard'}</span></td>
+            <td><span class="mono">${task.risk || 'Low'}</span></td>
+            <td class="mono">${task.dependsOn && task.dependsOn.length ? task.dependsOn.map(d => d.split(':').pop()).join(', ') : 'none'}</td>
+            <td class="mono">${acTot > 0 ? `${acDone}/${acTot}` : '—'}</td>
+          `;
+
+          tr.addEventListener('click', () => openDrawer(task, plan));
+          tbody.appendChild(tr);
+        });
+      }
+
+      function renderTodosView() {
+        const grid = document.getElementById('todo-grid');
+        grid.innerHTML = '';
+        const project = model.getProject(currentProjectId);
+        if (!project || !project.todos) return;
+
+        project.todos.forEach(todo => {
+          const card = document.createElement('div');
+          card.className = 'todo-card';
+          const prio = (todo.priority || 'P1').toUpperCase();
+          const prioClass = prio === 'P0' ? 'prio-p0' : (prio === 'P1' ? 'prio-p1' : 'prio-p2');
+
+          card.innerHTML = `
+            <div class="todo-card-header">
+              <span class="todo-prio-badge mono ${prioClass}">${prio}</span>
+              <span class="status-badge ${todo.status}">${formatStatus(todo.status)}</span>
+            </div>
+            <div class="todo-title">${todo.title}</div>
+            ${todo.blocks ? `<div class="todo-block-text"><strong>Blocks:</strong> ${todo.blocks}</div>` : ''}
+            <div style="font-size:0.7rem; color:var(--text-dim);" class="mono">
+              ${todo.filePath}
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+      }
+
+      function renderJsonView() {
+        document.getElementById('json-viewer-content').textContent = JSON.stringify(graphData, null, 2);
+      }
+
+      function openDrawer(task, plan) {
+        selectedTask = task;
+        const waveObj = plan.waves.find(w => w.id === task.waveId);
+
+        document.getElementById('drawer-project').textContent = currentProjectId;
+        document.getElementById('drawer-wave').textContent = waveObj ? waveObj.title.split(':')[0] : task.waveId;
+        document.getElementById('drawer-id').textContent = task.id;
+        document.getElementById('drawer-title').textContent = task.title;
+
+        const statusEl = document.getElementById('drawer-status');
+        statusEl.className = `status-badge ${task.status}`;
+        statusEl.textContent = formatStatus(task.status);
+
+        document.getElementById('drawer-complexity').textContent = task.complexity || 'Standard';
+        document.getElementById('drawer-risk').textContent = task.risk || 'Low';
+        document.getElementById('drawer-depends').textContent = (task.dependsOn && task.dependsOn.length) ? task.dependsOn.map(d => d.split(':').pop()).join(', ') : 'none (root)';
+
+        // Blockers card
+        const blockersList = document.getElementById('drawer-blockers-list');
+        blockersList.innerHTML = '';
+        const blockedBy = task.blockedByTodoIds || [];
+        if (blockedBy.length === 0) {
+          blockersList.innerHTML = '<span style="font-size:0.75rem; color:var(--text-dim);">No active blockers registered for this task.</span>';
+        } else {
+          blockedBy.forEach(todoId => {
+            const item = document.createElement('div');
+            item.className = 'ac-item';
+            item.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+            item.innerHTML = `<span class="mono font-bold" style="color:#f43f5e;">⚠️ ${todoId}</span>`;
+            blockersList.appendChild(item);
+          });
+        }
+
+        // AC List
+        const acList = document.getElementById('drawer-ac-list');
+        acList.innerHTML = '';
+        const acs = task.acceptanceCriteria || [];
+        const checkedCount = acs.filter(a => a.checked).length;
+        document.getElementById('drawer-ac-count').textContent = `${checkedCount}/${acs.length} verified`;
+
+        acs.forEach(ac => {
+          const row = document.createElement('div');
+          row.className = `ac-item ${ac.checked ? 'checked' : ''}`;
+          row.innerHTML = `
+            <input type="checkbox" class="ac-checkbox" ${ac.checked ? 'checked' : ''} disabled>
+            <span>${ac.text}</span>
+          `;
+          acList.appendChild(row);
+        });
+
+        // Files List
+        const filesList = document.getElementById('drawer-files-list');
+        filesList.innerHTML = '';
+        const files = task.files || { create: [], modify: [], delete: [], test: [] };
+
+        (files.create || []).forEach(f => filesList.appendChild(createFileRow('create', f)));
+        (files.modify || []).forEach(f => filesList.appendChild(createFileRow('modify', f)));
+        (files.delete || []).forEach(f => filesList.appendChild(createFileRow('delete', f)));
+        (files.test || []).forEach(f => filesList.appendChild(createFileRow('test', f)));
+
+        if (!files.create?.length && !files.modify?.length && !files.delete?.length && !files.test?.length) {
+          filesList.innerHTML = '<span style="font-size:0.75rem; color:var(--text-dim);">No file perimeter specified for this task.</span>';
+        }
+
+        // Markdown Excerpt
+        document.getElementById('drawer-markdown').textContent = task.markdownSource || 'No markdown body available.';
+
+        // Execution Proof
+        document.getElementById('drawer-commit').textContent = (task.statusEvidence && task.statusEvidence.commit) || '—';
+        document.getElementById('drawer-exec-log').textContent = (task.statusEvidence && task.statusEvidence.executionLog) || '—';
+
+        // Action Buttons
+        document.getElementById('btn-copy-prompt').onclick = () => {
+          const prompt = `/execute-plan-sdlc --plan ${plan.filePath} --task ${task.id}`;
+          navigator.clipboard.writeText(prompt).then(() => {
+            showToast(`Agent prompt copied: ${prompt}`);
+          });
+        };
+
+        document.getElementById('btn-copy-anchor').onclick = () => {
+          const anchor = task.markdownAnchor || task.title;
+          navigator.clipboard.writeText(anchor).then(() => {
+            showToast(`Markdown anchor copied: ${anchor}`);
+          });
+        };
+
+        document.getElementById('btn-open-ide').onclick = () => {
+          const project = model.getProject(currentProjectId);
+          const fullPath = `${project ? project.repoPath : ''}/${plan.filePath}`;
+          window.location.href = `vscode://file/${fullPath}`;
+        };
+
+        drawer.classList.add('open');
+      }
+
+      function createFileRow(op, path) {
+        const div = document.createElement('div');
+        div.className = 'file-badge-row mono';
+        div.innerHTML = `
+          <span class="file-op-pill op-${op}">${op}</span>
+          <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">${path}</span>
+        `;
+        return div;
+      }
+
+      function closeDrawer() {
+        drawer.classList.remove('open');
+        selectedTask = null;
+        document.querySelectorAll('.task-card').forEach(el => el.classList.remove('selected', 'highlight-upstream', 'highlight-downstream'));
+        document.querySelectorAll('.edge-line').forEach(el => {
+          el.classList.remove('active-upstream', 'active-downstream');
+          el.setAttribute('marker-end', 'url(#arrow)');
+        });
+      }
+
+      function formatStatus(status) {
+        switch(status) {
+          case 'done': return 'Done';
+          case 'in_progress': return 'In Progress';
+          case 'blocked': return 'Blocked';
+          case 'todo': return 'Todo';
+          case 'partly': return 'Partly';
+          default: return status || 'Todo';
+        }
+      }
+
+      function showToast(message) {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+          container = document.createElement('div');
+          container.id = 'toast-container';
+          container.className = 'toast-container';
+          document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.classList.add('visible'), 10);
+        setTimeout(() => {
+          toast.classList.remove('visible');
+          setTimeout(() => toast.remove(), 250);
+        }, 3000);
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
