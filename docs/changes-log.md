@@ -206,3 +206,29 @@ Accepting a plan and then running `/execute-plan-sdlc` without a path now stops 
 
 ### Impact
 No behaviour change. The ESLint config keeps the Node globals for `scripts/` and `skills/`; no rule was disabled.
+
+## Plan catalog: skipped criteria (`- [~]`)
+
+**Date:** 2026-10-07
+**Version:** 0.27.0
+
+### Overview
+The plan catalog (`catalog-sdlc`) and its dashboard now understand the skipped criterion box `- [~]` added to the plan validator in 0.25.0. A skipped criterion is a distinct state that counts as closed, as in the validator. The plan authoring guidelines deployed to projects document the rule.
+
+### Changes Made
+
+#### 1. Shared Checkbox Reader
+- **`scripts/lib/plan-checkboxes.js`**: New `readCheckboxes` lists every box in document order with its state (`open`, `done`, `skipped`), text and, for `[~]`, the skip comment's date, reason and problem. `countCheckboxes` is built on it, so the validator and the indexer use one reader.
+
+#### 2. Plan Indexer and Dashboard
+- **`scripts/lib/plan-indexer/markdown-parser.js`**: Acceptance criteria are read from the whole task body with `readCheckboxes`: any list marker and nesting level, fenced code ignored (before, only `- [ ]`/`- [x]` at column 0 were read, so nested criteria such as those in the `PLAN_GUIDELINES.md` template were missed). Each criterion carries `state`; `checked` means closed (`[x]` or `[~]`), so a task whose boxes are all closed is done. Skipped criteria keep `skipDate` and `skipReason`, or `skipProblem` (the PF6 message) when the comment is missing or invalid.
+- **`scripts/lib/plan-indexer/model.js`**, **`templates/dashboard/index.html`**: `countCriteria` and `metrics.criteria` (`total`, `open`, `done`, `skipped`, `closed`); data without `state` falls back to `checked`. The task table shows `closed/total (N skipped)`; the drawer shows a skipped criterion struck through with its skip note, or the problem with the comment.
+- **`schemas/delivery-graph.schema.json`**: New criterion fields `state`, `skipDate`, `skipReason`, `skipProblem`.
+
+#### 3. Documentation
+- **`templates/guidelines/PLAN_GUIDELINES.md`** and **`skills/plan-guide-sdlc/PLAN_GUIDELINES.md`**: Section 2.3 documents `- [~]`: syntax, required comment, counting, PF5/PF6, and who sets it (a person, or an agent at a person's request).
+- **`scripts/skill/plan-guide.js`**: The `AGENTS.md` snippet mentions the rule.
+- **`skills/catalog-sdlc/SKILL.md`**, **`skills/plan-guide-sdlc/SKILL.md`**, **`skills/plan-sdlc/resources/plan-format-reference.md`**, **`scripts/README.md`**: Updated.
+
+### Impact
+Plans with skipped criteria show correct progress in the catalog and dashboard. Nested criteria are now indexed too, so task progress can change for plans that list criteria under an indented `- **Acceptance criteria:**` bullet. Existing projects get the new guideline text by re-running `plan-guide-sdlc --force`.
