@@ -294,3 +294,20 @@ describe('model DeliveryGraphModel', () => {
     assert.ok(cycleEdge.d.includes('C '));
   });
 });
+
+describe('model.js exports', () => {
+  test('exports the class through CommonJS and globalThis (which is window in a browser)', () => {
+    assert.equal(typeof DeliveryGraphModel, 'function');
+    assert.equal(globalThis.DeliveryGraphModel, DeliveryGraphModel);
+  });
+
+  test('evaluates in a browser-like context without module, exposing the class on globalThis', () => {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(__dirname, 'model.js'), 'utf8');
+    const sandbox = vm.createContext({});
+    vm.runInContext(source, sandbox);
+    assert.equal(typeof vm.runInContext('globalThis.DeliveryGraphModel', sandbox), 'function');
+  });
+});
