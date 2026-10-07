@@ -156,5 +156,6 @@ module.exports = {
   SKIP_COMMENT_FORMAT,
   countCheckboxes,
   isCalendarDate,
+  markFences,
   plainReason,
 };
