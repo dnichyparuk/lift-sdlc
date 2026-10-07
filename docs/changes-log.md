@@ -174,3 +174,20 @@ The PreToolUse validation hook no longer blocks legitimate whole-file writes to 
 
 ### Impact
 Plans folders can hold programme documents next to executable plans, and finished or archived plans can be rewritten with a whole-file write. An executable plan with a structural error is still denied, and a `- [~]` without its comment is still denied (PF6).
+
+## execute-plan-sdlc: explicit plan path only
+
+**Date:** 2026-10-07
+**Version:** 0.26.0
+
+### Overview
+`/execute-plan-sdlc` no longer takes a plan from the conversation context ("Smart loading"). It runs only the plan named by a positional `*.md` path, `--plan <path>` or `--plan-file <path>`, or the plan path recorded in a resumed state file; otherwise it stops with a fix hint. This completes #16 for the standalone executor and matches the Claude Code `sdlc` plugin (R41 there).
+
+### Changes Made
+- **`skills/execute-plan-sdlc/SKILL.md`**: `description` and `argument-hint` (`<plan-file-path>` is now required) state that the plan is never inferred from context. Step 1 reads the plan only from the explicit path and gains a Plan-argument gate (no interactive prompt for the path, no context fallback). A resume with a legacy `planPath: null` state no longer asks for the path; it needs the path on the command line.
+- **`skills/execute-plan-sdlc/resources/state-format.md`**: `planPath` is always set by current versions.
+- **`skills/plan-sdlc/SKILL.md`**: the handoff menus print `/ship-sdlc --plan <path>` and `/execute-plan-sdlc <path>` and pass the written plan path when invoking either skill.
+- **`skills/execute-plan-sdlc/plan-source.test.js`** (new): contract test for the skill text.
+
+### Impact
+Accepting a plan and then running `/execute-plan-sdlc` without a path now stops with a message instead of executing the plan from the conversation. Pass the plan file path (plan-sdlc prints it in its handoff menu).
