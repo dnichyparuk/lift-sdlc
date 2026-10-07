@@ -147,3 +147,29 @@ Plans can mark an acceptance criterion as skipped on purpose with `- [~]`. A ski
 
 ### Impact
 A plan may record deliberately skipped criteria without losing the audit trail, and the PreToolUse plan validation (`hooks/pre-tool-validate.js`) rejects a skipped box without its comment. OpenSpec `tasks.md` parsing (`scripts/lib/openspec.js`) is unchanged: `[~]` is not part of the OpenSpec format.
+
+## Plan validation hook: executable plans only (#17)
+
+**Date:** 2026-10-07
+**Version:** 0.25.1
+
+### Overview
+The PreToolUse validation hook no longer blocks legitimate whole-file writes to a `plans` folder. It validates only content that declares itself an executable plan, accepts plans whose boxes are all ticked or skipped, and skips archive directories. `plan-sdlc` gains a final format check, so a plan finished with replace edits is still validated before handoff.
+
+### Changes Made
+
+#### 1. Hook Scope
+- **`hooks/pre-tool-validate.js`**: A `write_to_file` to `*/plans/*.md` is validated only when the content has a `**Goal:**` line and at least one `### Task N:` heading outside fenced code; READMEs, plan guidelines, briefs and the Step 0 skeleton pass. Paths under `archive/` or `archived/` are not validated. The validator runs with `--allow-closed-criteria`.
+- **`hooks/pre-tool-validate.test.js`**: Covers finished plans, non-plan Markdown (including a fenced example plan), archive paths, and a structural error that is still denied.
+
+#### 2. Plan Format Validator
+- **`scripts/ci/validate-plan-format.js`**: New `isExecutablePlan` export; new `--allow-closed-criteria` flag (PF5 counts `[ ]`, `[x]` and `[~]` boxes; the default stays strict). PF1 reads a header value from the same line only (`[ \t]*` instead of `\s*`), so an empty `**Source:**` no longer takes the next line as its value.
+- **`scripts/lib/plan-checkboxes.js`**: Exports `markFences`.
+- **`scripts/ci/validate-plan-format.test.js`**: Covers the detector, the relaxed PF5 and the PF1 fix.
+
+#### 3. Skill and Reference
+- **`skills/plan-sdlc/SKILL.md`**: New Step 6.6, a hard gate that runs `validate-plan-format.js` (strict PF5) on the finished plan before handoff.
+- **`skills/plan-sdlc/resources/plan-format-reference.md`**: Documents the hook scope.
+
+### Impact
+Plans folders can hold programme documents next to executable plans, and finished or archived plans can be rewritten with a whole-file write. An executable plan with a structural error is still denied, and a `- [~]` without its comment is still denied (PF6).

@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 
-const { checkPF5, checkPF6, extractTasks, validatePlan } = require('./validate-plan-format');
+const { checkPF1, checkPF5, checkPF6, extractTasks, isExecutablePlan, validatePlan } = require('./validate-plan-format');
 
 const SCRIPT = path.join(__dirname, 'validate-plan-format.js');
 const COMMENT = '  *Skipped on 2026-10-06: the next task covers it and the branch is merged.*';
@@ -137,4 +137,47 @@ test('CLI: exit 2 without --file', () => {
   const res = run([]);
   assert.strictEqual(res.status, 2);
   assert.match(res.stderr, /--file <path> is required/);
+});
+
+// ---------------------------------------------------------------------------
+// #17: hook scope, PF5 with closed criteria, PF1 empty field
+// ---------------------------------------------------------------------------
+
+test('isExecutablePlan: needs a **Goal:** line and a ### Task N: heading outside fenced code', () => {
+  assert.strictEqual(isExecutablePlan(plan(['- [ ] a'])), true);
+  assert.strictEqual(isExecutablePlan('# Plans\n\nREADME text\n'), false);
+  assert.strictEqual(isExecutablePlan('**Goal:** [TBD]\n**Source:** [TBD]\n'), false, 'skeleton without tasks');
+  assert.strictEqual(isExecutablePlan('# Brief\n\n### Task 1: x\n'), false, 'tasks without a Goal header');
+  assert.strictEqual(isExecutablePlan('Example:\n\n```\n**Goal:** x\n### Task 1: y\n```\n'), false, 'fenced example');
+  assert.strictEqual(isExecutablePlan('**Goal:** x\r\n\r\n### Task 1: y\r\n'), true, 'CRLF');
+});
+
+test('PF5 with allowClosedCriteria accepts done and skipped boxes, still requires at least one box', () => {
+  const closed = extractTasks(plan(['- [x] a'], ['- [~] b', COMMENT]));
+  assert.strictEqual(checkPF5(closed).status, 'fail', 'default stays strict');
+  assert.strictEqual(checkPF5(closed, { allowClosedCriteria: true }).status, 'pass');
+
+  const none = checkPF5(extractTasks(plan(['plain text, no box'])), { allowClosedCriteria: true });
+  assert.strictEqual(none.status, 'fail');
+  assert.match(none.message, /expected at least one "- \[ \]", "- \[x\]" or "- \[~\]"/);
+});
+
+test('CLI --allow-closed-criteria passes a fully ticked plan that fails without it', () => {
+  const { dir, file } = writeTmp('done.md', plan(['- [x] a'], ['- [x] b']));
+  try {
+    assert.strictEqual(run(['--file', file]).status, 1);
+    const relaxed = run(['--file', file, '--allow-closed-criteria']);
+    assert.strictEqual(relaxed.status, 0, relaxed.stdout + relaxed.stderr);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('PF1: an empty header field does not take the next line as its value', () => {
+  const content = plan(['- [ ] a']).replace('**Source:** conversation context', '**Source:**');
+  const r = checkPF1(content);
+  assert.strictEqual(r.status, 'fail');
+  assert.match(r.message, /Source/);
+  const trailingSpace = plan(['- [ ] a']).replace('**Source:** conversation context', '**Source:**   ');
+  assert.match(checkPF1(trailingSpace).message, /Source/);
 });
