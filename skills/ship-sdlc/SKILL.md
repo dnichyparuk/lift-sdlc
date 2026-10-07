@@ -1,8 +1,8 @@
 ---
 name: ship-sdlc
-description: "Use this skill when shipping a feature end-to-end after plan acceptance: executing, committing, reviewing, fixing critical issues, versioning, and opening a PR in one flow. Dispatches every sub-skill (including execute-plan-sdlc) as an Agent for context isolation, with structured return values driving the pipeline state machine. Arguments: [--auto] [--steps <csv>] [--quick] [--quality full|balanced|minimal] [--bump patch|minor|major|<label>] [--draft] [--dry-run] [--resume] [--workspace branch|worktree|prompt] [--branch | --tree] [--openspec-change <name>] [--init-config] [--gc] [--ttl-days <N>]. The `<label>` form for --bump (e.g. `--bump rc`) is forwarded to version-sdlc, where it is interpreted as `--bump patch --pre <label>`; labels must match `^[a-z][a-z0-9]*$`. Triggers on: ship it, ship this, full pipeline, execute to PR, ship feature, run the whole thing."
+description: "Use this skill when shipping a feature end-to-end after plan acceptance: executing, committing, reviewing, fixing critical issues, versioning, and opening a PR in one flow. Dispatches every sub-skill (including execute-plan-sdlc) as an Agent for context isolation, with structured return values driving the pipeline state machine. Arguments: [--auto] [--steps <csv>] [--quick] [--quality full|balanced|minimal] [--bump patch|minor|major|<label>] [--draft] [--dry-run] [--resume] [--plan <path>] [--workspace branch|worktree|prompt] [--branch | --tree] [--openspec-change <name>] [--init-config] [--gc] [--ttl-days <N>]. The `<label>` form for --bump (e.g. `--bump rc`) is forwarded to version-sdlc, where it is interpreted as `--bump patch --pre <label>`; labels must match `^[a-z][a-z0-9]*$`. Triggers on: ship it, ship this, full pipeline, execute to PR, ship feature, run the whole thing."
 user-invocable: true
-argument-hint: "[--auto] [--steps <csv>] [--quick] [--quality full|balanced|minimal] [--bump patch|minor|major|<label>] [--draft] [--dry-run] [--resume] [--workspace branch|worktree|prompt] [--branch | --tree] [--openspec-change <name>] [--init-config] [--gc] [--ttl-days <N>]"
+argument-hint: "[--auto] [--steps <csv>] [--quick] [--quality full|balanced|minimal] [--bump patch|minor|major|<label>] [--draft] [--dry-run] [--resume] [--plan <path>] [--workspace branch|worktree|prompt] [--branch | --tree] [--openspec-change <name>] [--init-config] [--gc] [--ttl-days <N>]"
 model: gemini-3.8-flash-medium
 ---
 
@@ -32,7 +32,7 @@ node "<PLUGIN_ROOT>/scripts/util/plan-mode-check.js" $ARGUMENTS
    >
    > **Pipeline state saved to `<stateFile>` with resolved flags:** bump=`<flags.bump>`, steps=`<flags.steps>`.
    >
-   > Exit plan mode and re-invoke `/ship-sdlc` (no args needed) — the existing implicit-resume mechanism will pick up the saved state and resume from the first pending step with the originally-resolved flags intact.
+   > Exit plan mode and re-invoke `/ship-sdlc` (no args needed) — the existing implicit-resume mechanism will pick up the saved state and resume from the first pending step with the originally-resolved flags intact (including the `--plan <path>` you passed, recorded as `flags.planFile`).
 5. Run `rm -f "$PLAN_MODE_OUTPUT_FILE"` to clean up the temp output file.
 6. Stop. Do not proceed to subsequent steps.
 
@@ -132,13 +132,14 @@ EXIT_CODE=$?
 echo "PREPARE_OUTPUT_FILE: $PREPARE_OUTPUT_FILE"
 echo "STATUS: $EXIT_CODE"
 ```
-Script-internal note: `skill/ship.js`'s own arg parser also accepts a positional plan path (e.g. `docs/plan.md`) or `--plan-file <path>` as an alias that implies `hasPlan`, without requiring `--has-plan` as well. This is documentation of `ship.js`'s CLI surface, not an instruction to the LLM — the invocation above always passes the literal `--has-plan` flag; there is no condition under which this skill substitutes `--plan-file <path>` for it. The `/ship-sdlc` slash command itself has no plan-path argument (see `argument-hint` in the frontmatter above).
+**Plan file (explicit only).** The plan to execute is named by the user with `--plan <path>` (`--plan-file <path>` and a bare positional `*.md` path are accepted as aliases). `skill/ship.js` never discovers a plan by itself: there is no `plansDirectory` scan and no "newest `*.md` in `~/.gemini/plans/`" fallback, because that folder is shared by every repository and its newest file can belong to another one. The literal `--has-plan` above only says "a plan is expected"; when the `execute` step will run and no plan path was given (and none is recorded in a resumed pipeline's state), the prepare output carries `errors[*].id === "missingPlanFile"` and the run stops in this step. A path that does not exist or is not a `.md` file yields `planFileNotFound` / `planFileNotMarkdown`.
 > **Contract (Input/Output):**
 > - **Input**: Current branch context, plus the conditional flags below.
 > - **Output**: Prints the path of a temp JSON manifest (via `writeOutput`) containing PR and ship status. `--output-file` makes stdout the manifest path; capture it into `PREPARE_OUTPUT_FILE`.
 
 **Conditional flags — append to the invocation above only under the stated condition. Never add a flag "for completeness"; an unconditional flag overrides the user's config.**
 
+- **`--plan "<path>"`** — append when the user passed `--plan <path>`, `--plan-file <path>`, or a positional `*.md` path to ship-sdlc; always forward it as `--plan "<path>"` with the path exactly as the user gave it. Never fill it in yourself — not from the conversation, not from a plan you just wrote or discussed, not from a directory listing. When the user gave no path, append nothing: on a resumed pipeline `skill/ship.js` reuses `flags.planFile` from the state file; otherwise it reports `missingPlanFile` and you show that error and stop (suggest `--plan <path>`, or `--steps` without `execute` when the changes are already implemented).
 - **`--bump <type>`** — append ONLY when the user explicitly passed `--bump` to ship-sdlc. `skill/ship.js` otherwise resolves the bump from config (`version.preRelease`) or the `patch` default. Passing `--bump` unconditionally would override config and break pre-release trains.
 - **Workspace mode** — intentionally omitted from the example above so it falls back to `.sdlc/local.json` → `ship.workspace` via `mergeFlags`. A literal `--workspace <value>` here would override user config. Append `--workspace <branch|worktree|prompt>`, `--branch`, or `--tree` ONLY when the user passed that override for this single run — e.g. `PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/ship.js" --output-file --has-plan --auto --tree)`.
 - **`--steps <csv>`** — append ONLY when the user passed `--steps`. Pipeline composition otherwise comes from config `ship.steps[]` (top-level `schemaVersion: 4`). CLI `--steps` is a one-shot override, e.g. `--steps execute,commit,pr`. Legacy `--preset` / `--skip` are hard-removed. Unrecognized `--steps` values (e.g. `--steps reviw`) are rejected by `ship.js parseArgs` with exit 1 and abort the run — typos never silently skip a step.
@@ -188,7 +189,7 @@ Read `./resources/state-format.md` when resuming from a state file.
 
 ### 1f. Context detection
 
-Print the `context` object values from the `skill/ship.js` output as a labeled list: plan-in-context, uncommitted changes (count), current branch, default branch, `gh` auth status, OpenSpec detection, and `.sdlc/` gitignore status.
+Print the `context` object values from the `skill/ship.js` output as a labeled list: plan file (`context.planFile`, or `none`; append `(from resumed state)` when `context.planFileSource === "state"`), uncommitted changes (count), current branch, default branch, `gh` auth status, OpenSpec detection, and `.sdlc/` gitignore status.
 
 **Contradictory-signal override:** After printing the context detection block, IF `context.openspecAuthoritative.path` is set AND the current session-start `<system-reminder>` contains a line matching `/openspec.*not initialized|not initialized.*openspec/i`, print exactly one line:
 `Ignoring contradictory 'not initialized' signal in session context — openspec/config.yaml exists (authoritative source: SDLC's own check via ship.js prepare output).`
@@ -196,7 +197,7 @@ Then continue the flow. If the contradictory phrase is absent, emit nothing.
 
 ### 1g. Auto-skip logic
 
-Print each step from the `steps` array in the `skill/ship.js` output as `<name>: <status> — <reason>` (e.g. `execute: will_run — plan detected in context`, `version: skipped (auto) — tags are repo-global`).
+Print each step from the `steps` array in the `skill/ship.js` output as `<name>: <status> — <reason>` (e.g. `execute: will_run — plan file: /abs/docs/plans/my-feature.md`, `version: skipped (auto) — tags are repo-global`).
 
 For a `skipped` step, append the `skipSource` field in parentheses after `skipped`:
 - `(cli)` — user passed `--steps` on the command line
@@ -223,7 +224,7 @@ The pipeline table is generated from the `steps` array in the `skill/ship.js` ou
 
 | Step | Skill | Status | Args | Pause |
 |------|-------|--------|------|-------|
-| 1 | execute-plan-sdlc | will_run | (none, or `--quality <X>` if user passed `--quality` to ship) | no |
+| 1 | execute-plan-sdlc | will_run | `--plan-file "<context.planFile>"`, plus `--quality <X>` if user passed `--quality` to ship | no |
 | 2 | commit-sdlc | will_run | `--auto` | no |
 | 3 | review-sdlc | will_run | `--committed` | no |
 | 4 | received-review-sdlc | conditional | (if crit/high) | YES |
@@ -443,7 +444,7 @@ The setup script handles ship state migration (`state/ship.js` migrate) internal
 
 **Execute step resume:** When the pipeline is resuming (gate on `flags.resume === true` from the prepare output — this is `true` whether the user typed `--resume` or the hook triggered implicit resume; do NOT re-parse `$ARGUMENTS`) and the execute step's status in the ship state file is `in_progress`:
 1. Check for `<main-worktree>/.sdlc/execution/execute-<branch>-*.json` (an execute-plan-sdlc state file for the current branch). Resolve `<main-worktree>` from the `mainWorktree` field of `node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" resolve --branch <branch>` (that field is returned whether or not a linked worktree was `found`).
-2. If found, dispatch execute-plan-sdlc via `invoke_subagent` with args from `step.invocation` plus `--resume` (e.g. `"--quality <X> --resume"` if the user passed `--quality` to ship; `"--resume"` otherwise). Wave progress and gates run inside the subagent's context; the structured return value drives the next step. `flags.resume` is the single resume signal regardless of source.
+2. If found, dispatch execute-plan-sdlc via `invoke_subagent` with args from `step.invocation` plus `--resume` (e.g. `"--plan-file \"<path>\" --quality <X> --resume"` if the user passed `--quality` to ship; `"--plan-file \"<path>\" --resume"` otherwise — `step.invocation` already carries the plan path, so it is never dropped on resume). Wave progress and gates run inside the subagent's context; the structured return value drives the next step. `flags.resume` is the single resume signal regardless of source.
 3. If not found, dispatch via `invoke_subagent` normally using `step.invocation` (execute restarts from scratch)
 
 ship-sdlc does not manage execute-plan-sdlc's state file — execute-plan-sdlc handles its own creation, updates, and cleanup.
@@ -458,7 +459,7 @@ node "<PLUGIN_ROOT>/scripts/util/worktree-lifecycle.js" resolve --branch <resume
 
 **Execute-step todo mirroring:**
 
-Assign `PLAN_FILE` from `extract-plan-file.js`. **This script does NOT print the plan path — it prints the path of a temp JSON manifest** (scripts never write raw JSON to stdout). Run it, then read the manifest it names and take `.planFile`:
+Assign `PLAN_FILE` from `extract-plan-file.js` (it reads `context.planFile`, which is always the explicit `--plan` path or the one recorded in the resumed state — never a discovered file). **This script does NOT print the plan path — it prints the path of a temp JSON manifest** (scripts never write raw JSON to stdout). Run it, then read the manifest it names and take `.planFile`:
 
 ```shell
 EXTRACT_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/util/extract-plan-file.js" "$PREPARE_OUTPUT_FILE")

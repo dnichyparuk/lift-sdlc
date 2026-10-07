@@ -2,7 +2,7 @@
 name: execute-plan-sdlc
 description: "Use when the user wants to execute an implementation plan with adaptive intelligence — classifies tasks by complexity and risk, builds optimized dependency waves, critiques wave structure before dispatch, verifies results after each wave, and recovers from failures without stopping. Self-contained: no external sub-skills required. Triggers on: execute plan, run plan, implement plan, autonomous execution, execute this plan. Also auto-triggered when the user accepts a plan from plan-sdlc (plan content is already in conversation context)."
 user-invocable: true
-argument-hint: "[plan-file-path] [--quality full|balanced|minimal] [--resume] [--workspace branch|worktree|prompt] [--rebase auto|skip|prompt] [--auto] [--branch <name>] [--commit-waves] [--plan-file <path>]"
+argument-hint: "[plan-file-path] [--quality full|balanced|minimal] [--resume] [--workspace branch|worktree|prompt] [--rebase auto|skip|prompt] [--auto] [--branch <name>] [--commit-waves] [--plan-file <path> | --plan <path>]"
 model: gemini-3.8-flash-medium
 ---
 
@@ -34,7 +34,7 @@ To prevent context bloat and token exhaustion:
 
 ## Step 1 (LOAD): Load and Validate Plan
 
-**Explicit plan-file override:** If `EXPLICIT_PLAN_FILE` is set (from the `--plan-file <path>` flag parsed in the preamble), skip the Smart loading heuristic entirely. Read the plan from `EXPLICIT_PLAN_FILE` directly using the `view_file` tool and proceed to plan validation below. This branch is authoritative — conversation context is NEVER consulted when `EXPLICIT_PLAN_FILE` is set. This is the compaction-stable path forwarded by ship-sdlc via `context.planFile`, and it is the only way to guarantee the same plan file is read across compaction boundaries.
+**Explicit plan-file override:** If `EXPLICIT_PLAN_FILE` is set (from `--plan-file <path>`, `--plan <path>` or a positional `*.md` path, parsed in the preamble), skip the Smart loading heuristic entirely. Read the plan from `EXPLICIT_PLAN_FILE` directly using the `view_file` tool and proceed to plan validation below. This branch is authoritative — conversation context is NEVER consulted when `EXPLICIT_PLAN_FILE` is set. This is the compaction-stable path forwarded by ship-sdlc via `context.planFile`, and it is the only way to guarantee the same plan file is read across compaction boundaries.
 
 **Smart loading:** When `EXPLICIT_PLAN_FILE` is NOT set, if the plan content is already in the conversation context (the user discussed, wrote, or pasted it in this session), use it directly — do NOT re-read from file. Only read from file when the plan is not already available in context.
 
@@ -145,7 +145,7 @@ The hook is layer-agnostic (it surfaces facts); this discriminator is the consum
 
 **Parse `--auto`:** If `--auto` was passed, store the flag. Auto mode suppresses interactive prompts: resume detection auto-resumes if state exists, high-risk gates auto-approve, and quality-tier selection uses the value from `--quality` (required when `--auto` is set).
 
-**Parse `--plan-file <path>`:** If `--plan-file <path>` was passed, store it as `EXPLICIT_PLAN_FILE`. When set, Step 1 (LOAD) uses this path directly as the plan source and skips the conversation-context discovery path ("plan in context" heuristic). This flag is forwarded by ship-sdlc's `skill/ship.js` from `context.planFile` so plan discovery is stable across compaction. Users may also pass it directly for non-interactive invocations.
+**Parse the plan path:** If `--plan-file <path>`, its alias `--plan <path>`, or a positional argument ending in `.md` (the `[plan-file-path]` of the `argument-hint`) was passed, store that path as `EXPLICIT_PLAN_FILE` (when several are given, `--plan-file` wins, then `--plan`, then the positional path). When set, Step 1 (LOAD) uses this path directly as the plan source and skips the conversation-context discovery path ("plan in context" heuristic). This flag is forwarded by ship-sdlc's `skill/ship.js` from `context.planFile` so plan discovery is stable across compaction. Users may also pass it directly for non-interactive invocations.
 
 **Parse `--commit-waves`:** If `--commit-waves` was passed, store `commitWaves = true`. Default `false`. When set, gates a per-wave WIP commit at Step 5c-quater (which also states the small-plan exemption). Inline help summary:
 

@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { parseArgs, computeSteps, mergeFlags, loadConfig, detectWorktree } = require('./ship.js');
+const { parseArgs, computeSteps, mergeFlags, loadConfig, detectWorktree, resolvePlanFile, runValidation } = require('./ship.js');
 
 // ---------------------------------------------------------------------------
 // parseArgs
@@ -121,13 +121,13 @@ test('mergeFlags: hasPlan is derived from cli.hasPlan || cli.planFile', () => {
 // computeSteps
 // ---------------------------------------------------------------------------
 
-test('computeSteps: hasPlan true with execute in steps yields will_run / "plan detected in context"', () => {
+test('computeSteps: hasPlan true with execute in steps yields will_run and names the plan file', () => {
   const flags = { hasPlan: true, steps: ['execute'], quality: null, workspace: 'prompt', rebase: 'prompt', executeCommitWaves: false };
   const flagSources = { steps: 'cli' };
   const steps = computeSteps(flags, flagSources, { planFile: 'docs/plan.md' });
   const execute = steps.find(s => s.name === 'execute');
   assert.strictEqual(execute.status, 'will_run');
-  assert.strictEqual(execute.reason, 'plan detected in context');
+  assert.strictEqual(execute.reason, 'plan file: docs/plan.md');
   assert.ok(execute.args.includes('--plan-file "docs/plan.md"'));
 });
 
@@ -188,4 +188,113 @@ test('detectWorktree: returns a result shape with inLinkedWorktree and mainWorkt
   const result = detectWorktree(process.cwd());
   assert.strictEqual(typeof result.inLinkedWorktree, 'boolean');
   assert.ok(typeof result.mainWorktreePath === 'string' || result.mainWorktreePath === null);
+});
+
+// ---------------------------------------------------------------------------
+// R-PLANFILE (#16): explicit-only plan path
+// ---------------------------------------------------------------------------
+
+test('parseArgs: --plan sets planFile and implies hasPlan', () => {
+  const result = parseArgs(['node', 'ship.js', '--plan', 'docs/plans/x.md']);
+  assert.strictEqual(result.planFile, 'docs/plans/x.md');
+  assert.strictEqual(result.hasPlan, true);
+  assert.deepStrictEqual(result.errors, []);
+});
+
+test('parseArgs: --plan and --plan-file without a value are errors, not silently ignored', () => {
+  for (const flag of ['--plan', '--plan-file']) {
+    const trailing = parseArgs(['node', 'ship.js', flag]);
+    assert.ok(trailing.errors.some(e => e.startsWith(`${flag} requires a path`)), flag);
+    assert.strictEqual(trailing.planFile, null);
+    const beforeFlag = parseArgs(['node', 'ship.js', flag, '--auto']);
+    assert.ok(beforeFlag.errors.some(e => e.startsWith(`${flag} requires a path`)), flag);
+    assert.strictEqual(beforeFlag.auto, true, 'the next flag is still parsed');
+  }
+});
+
+function withTempDir(fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ship-plan-'));
+  try { return fn(dir); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+test('resolvePlanFile: no CLI path and nothing recorded resolves to null (no directory scan)', () => {
+  const errors = [];
+  assert.deepStrictEqual(resolvePlanFile(null, null, errors), { planFile: null, planFileSource: null });
+  assert.deepStrictEqual(errors, []);
+});
+
+test('resolvePlanFile: an existing CLI .md path resolves to its absolute path', () => {
+  withTempDir((dir) => {
+    const plan = path.join(dir, 'plan.md');
+    fs.writeFileSync(plan, '# Plan\n');
+    const errors = [];
+    assert.deepStrictEqual(resolvePlanFile(plan, null, errors), { planFile: plan, planFileSource: 'cli' });
+    assert.deepStrictEqual(errors, []);
+  });
+});
+
+test('resolvePlanFile: the CLI path wins over the path recorded in the ship state', () => {
+  withTempDir((dir) => {
+    const cli = path.join(dir, 'cli.md');
+    const recorded = path.join(dir, 'recorded.md');
+    fs.writeFileSync(cli, '# A\n');
+    fs.writeFileSync(recorded, '# B\n');
+    assert.deepStrictEqual(resolvePlanFile(cli, recorded, []), { planFile: cli, planFileSource: 'cli' });
+    assert.deepStrictEqual(resolvePlanFile(null, recorded, []), { planFile: recorded, planFileSource: 'state' });
+  });
+});
+
+test('resolvePlanFile: a missing file, a directory and a non-.md file are rejected', () => {
+  withTempDir((dir) => {
+    const missing = [];
+    assert.strictEqual(resolvePlanFile(path.join(dir, 'nope.md'), null, missing).planFile, null);
+    assert.strictEqual(missing[0].id, 'planFileNotFound');
+
+    const directory = [];
+    assert.strictEqual(resolvePlanFile(dir, null, directory).planFile, null);
+    assert.strictEqual(directory[0].id, 'planFileNotFound');
+
+    const txt = path.join(dir, 'plan.txt');
+    fs.writeFileSync(txt, 'x');
+    const notMd = [];
+    assert.strictEqual(resolvePlanFile(txt, null, notMd).planFile, null);
+    assert.strictEqual(notMd[0].id, 'planFileNotMarkdown');
+  });
+});
+
+const VALID_CONTEXT = { ghAuthenticated: true, currentBranch: 'feat/x', defaultBranch: 'main' };
+
+test('runValidation: execute will_run without a plan file is a missingPlanFile error', () => {
+  const flags = { hasPlan: true, steps: ['execute', 'commit'], quality: null, workspace: 'prompt', rebase: 'prompt', executeCommitWaves: false };
+  const steps = computeSteps(flags, { steps: 'cli' }, { planFile: null });
+  assert.strictEqual(steps.find(s => s.name === 'execute').reason, 'no plan file (--plan <path> required)');
+  const { errors } = runValidation(flags, { steps: 'cli' }, steps, { ...VALID_CONTEXT, planFile: null });
+  const err = errors.find(e => e && e.id === 'missingPlanFile');
+  assert.ok(err, 'missingPlanFile expected');
+  assert.ok(err.message.includes('--plan <path-to-plan.md>'));
+});
+
+test('runValidation: no missingPlanFile when a plan file is given or execute does not run', () => {
+  const flags = { hasPlan: true, steps: ['execute', 'commit'], quality: null, workspace: 'prompt', rebase: 'prompt', executeCommitWaves: false };
+  const withPlan = computeSteps(flags, { steps: 'cli' }, { planFile: '/abs/plan.md' });
+  assert.ok(!runValidation(flags, { steps: 'cli' }, withPlan, { ...VALID_CONTEXT, planFile: '/abs/plan.md' })
+    .errors.some(e => e && e.id === 'missingPlanFile'));
+
+  const noExecute = { ...flags, steps: ['commit', 'pr'] };
+  const steps = computeSteps(noExecute, { steps: 'cli' }, { planFile: null });
+  assert.ok(!runValidation(noExecute, { steps: 'cli' }, steps, { ...VALID_CONTEXT, planFile: null })
+    .errors.some(e => e && e.id === 'missingPlanFile'));
+});
+
+test('runValidation: an already rejected --plan does not also report missingPlanFile', () => {
+  const flags = { hasPlan: true, steps: ['execute'], quality: null, workspace: 'prompt', rebase: 'prompt', executeCommitWaves: false };
+  const steps = computeSteps(flags, { steps: 'cli' }, { planFile: null });
+  const context = { ...VALID_CONTEXT, planFile: null };
+  Object.defineProperty(context, 'planFileRejected', { value: true, enumerable: false });
+  assert.ok(!runValidation(flags, { steps: 'cli' }, steps, context).errors.some(e => e && e.id === 'missingPlanFile'));
+});
+
+test('resolvePlanFile: never lists a directory or sorts by mtime', () => {
+  const src = resolvePlanFile.toString();
+  assert.ok(!/readdirSync|mtimeMs|plansDirectory|homedir/.test(src), 'resolvePlanFile must stay explicit-only');
 });
