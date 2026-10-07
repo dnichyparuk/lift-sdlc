@@ -64,9 +64,19 @@ Save as `docs/plans/<topic>_plan.md` (or `docs/plans/YYYY-MM-DD-<slug>.md`):
 * **Dashboard Impact:** This field powers the Directed Acyclic Graph (DAG), Critical Path Method (CPM) calculation, and the **"Ready to Execute"** actionable filter.
 
 ### 2.3. Acceptance Criteria Checklists
-* Define criteria as standard Markdown checkboxes: `- [ ] <Criterion>`.
+* Define criteria as standard Markdown checkboxes: `- [ ] <Criterion>`. Any list marker (`-`, `*`, `+`, `1.`) and nesting level works; boxes inside fenced code blocks are ignored.
 * As work progresses, mark items completed: `- [x] <Criterion>`.
-* **Dashboard Impact:** Scope completion percentages and wave progress bars update automatically based on checked items.
+* A criterion deliberately not done can be marked **skipped**: `- [~] <Criterion>`. Rules:
+  - **Who ticks:** a person, or an agent at a person's request. Planning and execution agents never set `- [~]` on their own; new criteria always start as `- [ ]`.
+  - **Required comment:** an italic line right below the box, indented deeper than the list marker, with no blank line in between: `*Skipped on YYYY-MM-DD: <reason>*`. The date must be a real calendar date and the reason at least 15 characters once Markdown markup is stripped. A comment on the box line itself does not count.
+  - **Counting:** a skipped box is **closed**, like `- [x]`. A task whose boxes are all `[x]` or `[~]` counts as done.
+  - **Validation:** the plan validator (`validate-plan-format.js`) fails a `- [~]` without a valid comment (PF6). Before execution, PF5 still needs at least one open `- [ ]` per task: `[x]` and `[~]` are closed, so a finished task fails PF5 by design.
+  - Do not use `- [~]` for work that is still meant to be done; that box stays `- [ ]`.
+  ```markdown
+  - [~] Load test passes on the staging cluster.
+    *Skipped on 2026-10-06: staging is retired; the production canary in Task 4 covers it.*
+  ```
+* **Dashboard Impact:** Scope completion percentages and wave progress bars update automatically based on closed items (`[x]` and `[~]`). The dashboard shows a skipped criterion as **skipped** with its date and reason, and flags a missing or invalid skip comment.
 
 ### 2.4. File Operations Perimeter (`Files:`)
 * Group file paths by operation:

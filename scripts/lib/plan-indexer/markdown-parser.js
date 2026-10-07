@@ -7,6 +7,7 @@
  */
 
 const path = require('node:path');
+const { readCheckboxes } = require('../plan-checkboxes.js');
 
 /**
  * Helper to slugify task or plan identifiers for DOM and URL safety.
@@ -67,7 +68,31 @@ function normalizeRisk(raw) {
 }
 
 /**
- * Normalize task status
+ * Acceptance criteria of a task body, read with the plan validator's shared checkbox reader
+ * (`scripts/lib/plan-checkboxes.js`): any list marker and nesting level, fenced code ignored.
+ * `checked` is true for a closed box: done (`[x]`) or skipped on purpose (`[~]`). A skipped box
+ * also carries its `*Skipped on YYYY-MM-DD: <reason>*` comment (`skipDate`, `skipReason`) and,
+ * when that comment is missing or invalid, the validator's PF6 message (`skipProblem`).
+ *
+ * @param {string[]} bodyLines - task lines after its header line
+ * @returns {Array<{text: string, checked: boolean, state: "open" | "done" | "skipped",
+ *   skipDate?: string, skipReason?: string, skipProblem?: string}>}
+ */
+function parseAcceptanceCriteria(bodyLines) {
+  return readCheckboxes(bodyLines.join('\n')).map((box) => {
+    const ac = { text: cleanMarkdownText(box.text), checked: box.state !== 'open', state: box.state };
+    if (box.skip) {
+      if (box.skip.date) ac.skipDate = box.skip.date;
+      if (box.skip.reason) ac.skipReason = box.skip.reason;
+      if (box.skip.problem) ac.skipProblem = box.skip.problem;
+    }
+    return ac;
+  });
+}
+
+/**
+ * Normalize task status. With no explicit status, a task whose criteria are all closed (done or
+ * skipped) is done.
  * @param {string} raw
  * @param {Array<{checked: boolean}>} acList
  * @returns {"todo" | "in_progress" | "done" | "partly" | "blocked" | "skipped"}
@@ -147,6 +172,7 @@ function parsePlanMarkdown(markdownContent, options = {}) {
   function finalizeCurrentTask() {
     if (!currentTask) return;
     currentTask.markdownSource = currentTaskLines.join('\n').trim();
+    currentTask.acceptanceCriteria = parseAcceptanceCriteria(currentTaskLines.slice(1));
     // Resolve status if not explicitly set
     if (!currentTask.statusExplicit) {
       currentTask.status = determineTaskStatus(null, currentTask.acceptanceCriteria);
@@ -398,14 +424,8 @@ function parsePlanMarkdown(markdownContent, options = {}) {
         currentTask.dependsOn = resolvedDeps;
       }
 
-      // Acceptance Criteria: - [x] or - [ ]
-      const acMatch = line.match(/^-\s+\[([ xX])\]\s*(.+)$/);
-      if (acMatch) {
-        currentTask.acceptanceCriteria.push({
-          text: cleanMarkdownText(acMatch[2]),
-          checked: acMatch[1].toLowerCase() === 'x'
-        });
-      }
+      // Acceptance criteria (- [ ], - [x], - [~]) are read from the whole task body when the
+      // task is finalized (parseAcceptanceCriteria), so a [~] box sees its continuation lines.
 
       // Files extraction
       // 1. Bullet items: - Create: <path> or - Modify: <path> or - Test: <path> or - Delete: <path>
@@ -654,5 +674,6 @@ module.exports = {
   parsePlanMarkdown,
   parseTodoMarkdown,
   slugify,
-  cleanMarkdownText
+  cleanMarkdownText,
+  parseAcceptanceCriteria
 };

@@ -45,7 +45,7 @@ scripts/
 | `git.js` | `exec`, `checkGitState`, `detectBaseBranch` | Git CLI wrappers |
 | `openspec.js` | `detectActiveChanges`, `validateChange` | OpenSpec change detection |
 | `output.js` | `writeOutput` | Structured JSON output helpers |
-| `plan-checkboxes.js` | `countCheckboxes`, `MIN_SKIP_REASON` | Plan task-list boxes (`[ ]`, `[x]`, skipped `[~]`) and skip-comment checks |
+| `plan-checkboxes.js` | `countCheckboxes`, `readCheckboxes`, `MIN_SKIP_REASON` | Plan task-list boxes (`[ ]`, `[x]`, skipped `[~]`) and skip-comment checks; shared by the plan validator and the plan indexer |
 | `state.js` | `readState`, `writeState`, `initState` | Execution state file I/O |
 | `stepper.js` | `parseArgs`, `createEnvelope`, `initState`, `transition`, `readState`, `writeState`, `addHistory`, `cleanupState` | Step-emitter protocol utilities (envelope creation, state lifecycle, CLI parsing) |
 | `version.js` | `detectVersionFile`, `readVersion`, `computeNextVersions` | Semantic versioning utilities |

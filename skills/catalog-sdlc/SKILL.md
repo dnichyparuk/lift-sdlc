@@ -23,6 +23,7 @@ Textual Markdown plans (`docs/plans/*.md`, `docs/TODO/*.md`) remain the **single
      - `lift-fixed-price` review fixes (`### X1 — [Title]`, `### W1 — [Title]`)
      - MVP and list-style breakdowns (`* **Task 0.1: [Title]**`)
    - Insulates code fences (```) to avoid false task matches.
+   - Reads acceptance criteria with the plan validator's shared reader (`scripts/lib/plan-checkboxes.js`): `- [ ]` open, `- [x]` done, `- [~]` skipped on purpose. A skipped criterion is closed (it counts toward task completion) and keeps its `*Skipped on YYYY-MM-DD: <reason>*` comment (`skipDate`, `skipReason`); a missing or invalid comment is recorded as `skipProblem` and shown in the dashboard.
    - Preserves raw task `markdownSource` chunks for instantaneous zero-disk inspection.
 
 2. **3-Tier Execution & Status Reconciliation:**

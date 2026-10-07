@@ -311,3 +311,41 @@ describe('model.js exports', () => {
     assert.equal(typeof vm.runInContext('globalThis.DeliveryGraphModel', sandbox), 'function');
   });
 });
+
+describe('model acceptance criteria counts', () => {
+  test('countCriteria counts a skipped box as closed and falls back to checked without state', () => {
+    assert.deepEqual(DeliveryGraphModel.countCriteria([
+      { text: 'a', checked: false, state: 'open' },
+      { text: 'b', checked: true, state: 'done' },
+      { text: 'c', checked: true, state: 'skipped' },
+      { text: 'legacy done', checked: true },
+      { text: 'legacy open', checked: false },
+    ]), { total: 5, open: 2, done: 2, skipped: 1, closed: 3 });
+    assert.deepEqual(DeliveryGraphModel.countCriteria(undefined), { total: 0, open: 0, done: 0, skipped: 0, closed: 0 });
+  });
+
+  test('calculateMetrics reports plan-wide criteria counts', () => {
+    const model = new DeliveryGraphModel({
+      projects: [{
+        id: 'p',
+        todos: [],
+        plans: [{
+          id: 'plan',
+          waves: [],
+          tasks: [
+            { id: '1', globalId: 'urn:1', status: 'done', acceptanceCriteria: [
+              { text: 'x', checked: true, state: 'done' },
+              { text: 'y', checked: true, state: 'skipped' },
+            ] },
+            { id: '2', globalId: 'urn:2', status: 'todo', acceptanceCriteria: [
+              { text: 'z', checked: false, state: 'open' },
+            ] },
+          ],
+        }],
+      }],
+    });
+    const m = model.calculateMetrics('p', 'plan');
+    assert.deepEqual(m.criteria, { total: 3, open: 1, done: 1, skipped: 1, closed: 2 });
+    assert.deepEqual(model.calculateMetrics('p', 'missing').criteria, { total: 0, open: 0, done: 0, skipped: 0, closed: 0 });
+  });
+});

@@ -123,6 +123,12 @@ checked), skips files under an `archive/` or `archived/` directory, and passes
 `--allow-closed-criteria`, so PF5 accepts `[x]` and `[~]` boxes and a finished plan can be
 rewritten. The strict PF5 check runs in `plan-sdlc` Step 6.6.
 
+The plan catalog (`catalog-sdlc`, `scripts/lib/plan-indexer/`) reads the boxes with the same
+shared reader (`scripts/lib/plan-checkboxes.js`): a `- [~]` criterion is indexed with state
+`skipped`, counts as closed in task and plan progress, and keeps its skip date and reason; a
+missing or invalid comment is shown in the dashboard. The authoring rules for projects are in
+`PLAN_GUIDELINES.md` (deployed by `plan-guide-sdlc`).
+
 ---
 
 ## Out-of-scope OpenSpec tasks (optional)

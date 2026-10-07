@@ -247,7 +247,27 @@
             "type": "object",
             "properties": {
               "text": { "type": "string" },
-              "checked": { "type": "boolean" }
+              "checked": {
+                "type": "boolean",
+                "description": "True when the box is closed: done (- [x]) or skipped on purpose (- [~])"
+              },
+              "state": {
+                "type": "string",
+                "enum": ["open", "done", "skipped"],
+                "description": "Box state: open (- [ ]), done (- [x]) or skipped on purpose (- [~], closed)"
+              },
+              "skipDate": {
+                "type": "string",
+                "description": "Date from the *Skipped on YYYY-MM-DD: <reason>* comment of a skipped box"
+              },
+              "skipReason": {
+                "type": "string",
+                "description": "Plain-text reason from the skip comment of a skipped box"
+              },
+              "skipProblem": {
+                "type": "string",
+                "description": "Why the skip comment is missing or invalid (the plan validator's PF6 message)"
+              }
             },
             "required": ["text", "checked"],
             "additionalProperties": false

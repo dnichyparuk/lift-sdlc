@@ -167,3 +167,38 @@ test('isCalendarDate', () => {
 test('plainReason strips links, code and emphasis', () => {
   assert.strictEqual(plainReason(' see [PR #9](https://x/9) and `npm test`  _now_ '), 'see PR #9 and npm test now');
 });
+
+test('readCheckboxes lists boxes with state, text and the skip comment', () => {
+  const { readCheckboxes } = require('./plan-checkboxes.js');
+  const md = [
+    '- [ ] open one',
+    '  - [x] nested done',
+    '```',
+    '- [~] fenced, ignored',
+    '```',
+    '* [~] skipped one',
+    `  *Skipped on 2026-10-06: ${REASON}*`,
+    '1. [~] skipped without comment',
+  ].join('\n');
+  const boxes = readCheckboxes(md);
+  assert.deepStrictEqual(boxes.map((b) => [b.line, b.state, b.text]), [
+    [1, 'open', 'open one'],
+    [2, 'done', 'nested done'],
+    [6, 'skipped', 'skipped one'],
+    [8, 'skipped', 'skipped without comment'],
+  ]);
+  assert.deepStrictEqual(boxes[2].skip, { date: '2026-10-06', reason: REASON, problem: null });
+  assert.strictEqual(boxes[3].skip.date, null);
+  assert.match(boxes[3].skip.problem, /needs a comment/);
+  assert.strictEqual(boxes[0].skip, undefined);
+});
+
+test('countCheckboxes agrees with readCheckboxes', () => {
+  const { readCheckboxes } = require('./plan-checkboxes.js');
+  const md = ['- [ ] a', '- [x] b', '- [~] c', '  *Skipped on 2026-02-30: too short*'].join('\n');
+  const counts = countCheckboxes(md);
+  const boxes = readCheckboxes(md);
+  assert.strictEqual(counts.total, boxes.length);
+  assert.strictEqual(counts.skipped, boxes.filter((b) => b.state === 'skipped').length);
+  assert.deepStrictEqual(counts.problems, [{ line: 3, message: boxes[2].skip.problem }]);
+});

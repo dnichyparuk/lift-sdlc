@@ -1032,6 +1032,27 @@
       background: rgba(16, 185, 129, 0.03);
     }
 
+    .ac-item.skipped {
+      border-color: var(--status-todo-border);
+      background: var(--status-todo-bg);
+    }
+
+    .ac-item.skipped .ac-text {
+      text-decoration: line-through;
+      text-decoration-color: var(--status-todo);
+    }
+
+    .ac-skip-note {
+      display: block;
+      margin-top: 0.2rem;
+      font-style: italic;
+      color: var(--text-muted);
+    }
+
+    .ac-skip-note.invalid {
+      color: var(--status-blocked);
+    }
+
     .ac-checkbox {
       margin-top: 0.15rem;
       accent-color: var(--status-done);
@@ -1564,9 +1585,23 @@
         });
       }
 
+      // Acceptance criteria by box state; a skipped box (- [~]) is closed. Mirrors model.js.
+      static countCriteria(criteria) {
+        const counts = { total: 0, open: 0, done: 0, skipped: 0, closed: 0 };
+        for (const ac of criteria || []) {
+          const state = ac.state || (ac.checked ? 'done' : 'open');
+          counts.total += 1;
+          if (state === 'skipped') counts.skipped += 1;
+          else if (state === 'done') counts.done += 1;
+          else counts.open += 1;
+        }
+        counts.closed = counts.done + counts.skipped;
+        return counts;
+      }
+
       calculateMetrics(projectId, planId) {
         const plan = this.getPlan(projectId, planId);
-        if (!plan) return { total: 0, done: 0, donePct: 0, inProgress: 0, blocked: 0, todo: 0, partly: 0, readyToDispatch: 0, wavesCount: 0, wavesCompleted: 0 };
+        if (!plan) return { total: 0, done: 0, donePct: 0, inProgress: 0, blocked: 0, todo: 0, partly: 0, readyToDispatch: 0, wavesCount: 0, wavesCompleted: 0, criteria: DeliveryGraphModel.countCriteria([]) };
         const tasks = plan.tasks || [];
         const total = tasks.length;
         const done = tasks.filter(t => t.status === 'done').length;
@@ -1579,7 +1614,8 @@
         const waves = plan.waves || [];
         const wavesCount = waves.length;
         const wavesCompleted = waves.filter(w => w.status === 'completed').length;
-        return { total, done, donePct, inProgress, blocked, todo, partly, readyToDispatch, wavesCount, wavesCompleted };
+        const criteria = DeliveryGraphModel.countCriteria(tasks.flatMap(t => t.acceptanceCriteria || []));
+        return { total, done, donePct, inProgress, blocked, todo, partly, readyToDispatch, wavesCount, wavesCompleted, criteria };
       }
 
       getEnrichedPlans(projectId) {
@@ -2929,8 +2965,10 @@
         const filtered = model.filterTasks(plan.tasks, { query: searchQuery, status: currentFilterStatus });
         filtered.forEach(task => {
           const tr = document.createElement('tr');
-          const acDone = (task.acceptanceCriteria || []).filter(a => a.checked).length;
-          const acTot = (task.acceptanceCriteria || []).length;
+          const acCounts = DeliveryGraphModel.countCriteria(task.acceptanceCriteria);
+          const acDone = acCounts.closed;
+          const acTot = acCounts.total;
+          const acSkipped = acCounts.skipped > 0 ? ` (${acCounts.skipped} skipped)` : '';
 
           tr.innerHTML = `
             <td class="mono font-bold">${task.id}</td>
@@ -2940,7 +2978,7 @@
             <td><span class="mono">${task.complexity || 'Standard'}</span></td>
             <td><span class="mono">${task.risk || 'Low'}</span></td>
             <td class="mono">${task.dependsOn && task.dependsOn.length ? task.dependsOn.map(d => d.split(':').pop()).join(', ') : 'none'}</td>
-            <td class="mono">${acTot > 0 ? `${acDone}/${acTot}` : '—'}</td>
+            <td class="mono">${acTot > 0 ? `${acDone}/${acTot}${acSkipped}` : '—'}</td>
           `;
 
           tr.addEventListener('click', () => openDrawer(task, plan));
@@ -3017,16 +3055,36 @@
         const acList = document.getElementById('drawer-ac-list');
         acList.innerHTML = '';
         const acs = task.acceptanceCriteria || [];
-        const checkedCount = acs.filter(a => a.checked).length;
-        document.getElementById('drawer-ac-count').textContent = `${checkedCount}/${acs.length} verified`;
+        const acCounts = DeliveryGraphModel.countCriteria(acs);
+        document.getElementById('drawer-ac-count').textContent = acCounts.skipped > 0
+          ? `${acCounts.closed}/${acCounts.total} closed (${acCounts.done} verified, ${acCounts.skipped} skipped)`
+          : `${acCounts.closed}/${acCounts.total} verified`;
 
         acs.forEach(ac => {
+          const state = ac.state || (ac.checked ? 'done' : 'open');
           const row = document.createElement('div');
-          row.className = `ac-item ${ac.checked ? 'checked' : ''}`;
-          row.innerHTML = `
-            <input type="checkbox" class="ac-checkbox" ${ac.checked ? 'checked' : ''} disabled>
-            <span>${ac.text}</span>
-          `;
+          row.className = `ac-item ${state === 'done' ? 'checked' : ''} ${state === 'skipped' ? 'skipped' : ''}`;
+          const box = document.createElement('input');
+          box.type = 'checkbox';
+          box.className = 'ac-checkbox';
+          box.disabled = true;
+          box.checked = state === 'done';
+          if (state === 'skipped') box.indeterminate = true;
+          const body = document.createElement('div');
+          const label = document.createElement('span');
+          label.className = 'ac-text';
+          label.textContent = ac.text;
+          body.appendChild(label);
+          if (state === 'skipped') {
+            const note = document.createElement('span');
+            note.className = `ac-skip-note ${ac.skipProblem ? 'invalid' : ''}`;
+            note.textContent = ac.skipProblem
+              ? `Skipped — invalid skip comment: ${ac.skipProblem}`
+              : `Skipped on ${ac.skipDate}: ${ac.skipReason}`;
+            body.appendChild(note);
+          }
+          row.appendChild(box);
+          row.appendChild(body);
           acList.appendChild(row);
         });
 
