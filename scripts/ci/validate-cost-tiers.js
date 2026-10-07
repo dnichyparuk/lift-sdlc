@@ -133,19 +133,22 @@ function scanAgents(root) {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse the two markdown tables (Skill table + Agent table) from cost-tiers.md.
+ * Parse the two markdown tables (Skill table + Agent table) from model-references.md (or cost-tiers.md).
  * Strategy:
- *   - Find each `## 3. Skill Table` / `## 4. Agent Table` heading.
+ *   - Find each `## 3. ...Skill...` / `## 4. ...Agent...` heading.
  *   - From the heading, scan forward to the first table header row (`| ... |`)
  *     followed by a separator (`|---|...|`).
  *   - Read subsequent rows until a blank line or non-pipe line.
- *   - Extract column 0 (name) and column 1 (model). Reject rows whose pipe
- *     count != header pipe count.
+ *   - Dynamically locate Name and Model columns, stripping markdown formatting.
+ *   - Reject rows whose pipe count != header pipe count.
  */
 function parseDocTables(root) {
-  const docPath = path.join(root, 'docs', 'cost-tiers.md');
+  let docPath = path.join(root, 'docs', 'model-references.md');
   if (!fs.existsSync(docPath)) {
-    throw new Error(`docs/cost-tiers.md not found at ${docPath}`);
+    docPath = path.join(root, 'docs', 'cost-tiers.md');
+  }
+  if (!fs.existsSync(docPath)) {
+    throw new Error(`Neither docs/model-references.md nor docs/cost-tiers.md found in ${root}`);
   }
   const lines = fs.readFileSync(docPath, 'utf8').split('\n');
 
@@ -170,9 +173,27 @@ function parseDocTables(root) {
     return [];
   }
 
+  function cleanCell(cell) {
+    // Strip markdown formatting: bold/italic (*, _), code backticks (`), links [text](url) -> text
+    return cell
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/[*`_]/g, '')
+      .trim();
+  }
+
   function readTableRows(headerIdx, sep) {
     const headerCells = splitRow(lines[headerIdx]);
     const expectedPipes = (lines[headerIdx].match(/\|/g) || []).length;
+
+    const nameColIdx = headerCells.findIndex(h => /name/i.test(h));
+    const modelColIdx = headerCells.findIndex(h => /frontmatter model/i.test(h) || /^model$/i.test(h));
+
+    if (nameColIdx === -1 || modelColIdx === -1) {
+      throw new Error(
+        `Unable to identify Name or Model column in table header: ${lines[headerIdx]}`
+      );
+    }
+
     const rows = [];
     let i = headerIdx + 2; // skip header + separator
     while (i < lines.length) {
@@ -181,13 +202,13 @@ function parseDocTables(root) {
       const pipeCount = (line.match(/\|/g) || []).length;
       if (pipeCount !== expectedPipes) {
         throw new Error(
-          `cost-tiers.md: row ${i + 1} has ${pipeCount} pipes, expected ${expectedPipes}: ${line}`
+          `Table row ${i + 1} has ${pipeCount} pipes, expected ${expectedPipes}: ${line}`
         );
       }
       const cells = splitRow(line);
       rows.push({
-        name: cells[0],
-        model: cells[1],
+        name: cleanCell(cells[nameColIdx]),
+        model: cleanCell(cells[modelColIdx]),
         line: i + 1,
       });
       i++;
@@ -201,14 +222,14 @@ function parseDocTables(root) {
     return trimmed.split('|').map(c => c.trim());
   }
 
-  const skills = findTableAfter(/^##\s+3\.\s+Skill Table/);
-  const agents = findTableAfter(/^##\s+4\.\s+Agent Table/);
+  const skills = findTableAfter(/^##\s+3\.\s+.*Skill/i);
+  const agents = findTableAfter(/^##\s+4\.\s+.*Agent/i);
 
   if (!skills.rows || skills.rows.length === 0) {
-    throw new Error('cost-tiers.md: skill table not found or empty (heading "## 3. Skill Table")');
+    throw new Error('Skill table not found or empty under heading matching "## 3. ...Skill..."');
   }
   if (!agents.rows || agents.rows.length === 0) {
-    throw new Error('cost-tiers.md: agent table not found or empty (heading "## 4. Agent Table")');
+    throw new Error('Agent table not found or empty under heading matching "## 4. ...Agent..."');
   }
 
   return {
