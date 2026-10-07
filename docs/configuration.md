@@ -88,6 +88,8 @@ To save plans to a folder within a specific project (such as inside the `.sdlc` 
 
 The plugin automatically creates the directory structure if it does not already exist.
 
+`plansDirectory` only decides where `/plan-sdlc` **writes** a new plan. No skill reads a plan from it: `/ship-sdlc` and `/execute-plan-sdlc` execute only the plan you name, with `--plan <path>` (alias `--plan-file <path>`), for example `/ship-sdlc --plan docs/plans/my-feature.md`. `/ship-sdlc` no longer picks the newest `*.md` from `plansDirectory` or `~/.gemini/plans/` (that folder is shared by every repository); when its `execute` step would run without a plan path it stops with `missingPlanFile`. A resumed pipeline reuses the plan path recorded in its state file.
+
 ## Review & Execution Configuration (`.sdlc/local.json`)
 
 You can customize subagent defaults and review behavior on a per-workspace basis by creating or modifying `.sdlc/local.json` in your project root (local-only settings ignored by git):

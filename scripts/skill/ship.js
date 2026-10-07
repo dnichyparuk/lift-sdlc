@@ -39,7 +39,6 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const LIB = path.join(__dirname, '..', 'lib');
 
@@ -112,7 +111,8 @@ function parseArgs(argv) {
   // when no state file is found, the hook variant surfaces a structured
   // `implicitResumeNoState` error rather than silently starting fresh.
   let hookActivePipeline = false;
-  // R-PLANFILE: optional path to the active plan markdown (overrides plansDirectory scan)
+  // R-PLANFILE (#16): path to the plan markdown, given explicitly via --plan,
+  // --plan-file or a positional *.md argument. Never discovered by scanning.
   let planFile = null;
   const errors = [];
 
@@ -168,9 +168,16 @@ function parseArgs(argv) {
       } else {
         ttlDays = v;
       }
-    } else if (a === '--plan-file' && args[i + 1]) {
-      planFile = args[++i];
-      hasPlan = true;
+    } else if (a === '--plan' || a === '--plan-file') {
+      // R-PLANFILE (#16): `--plan <path>` is the documented flag; `--plan-file`
+      // is kept as an alias for existing callers. Both are explicit: there is
+      // no directory scan (see resolvePlanFile).
+      if (args[i + 1] && !args[i + 1].startsWith('--')) {
+        planFile = args[++i];
+        hasPlan = true;
+      } else {
+        errors.push(`${a} requires a path to a plan .md file, e.g. ${a} docs/plans/my-feature.md`);
+      }
     } else if (a === '--hook-active-pipeline') {
       hookActivePipeline = true;
     } else if (a === '--verify-pipeline') {
@@ -490,15 +497,17 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
         // final feature commit subsumes per-wave WIP commits cleanly
         // (Fixes #392 / R35).
         flags.executeCommitWaves ? '--commit-waves' : '',
-        // R-PLANFILE: forward resolved plan file so execute-plan-sdlc skips
-        // conversation-context discovery (fragile under compaction).
+        // R-PLANFILE: forward the explicit plan file so execute-plan-sdlc
+        // never falls back to conversation-context discovery.
         planFile ? `--plan-file "${planFile}"` : '',
       ].filter(Boolean).join(' '),
       reason: !flags.hasPlan
         ? 'no plan in context'
         : !isIn('execute')
           ? 'not in steps[]'
-          : 'plan detected in context',
+          : planFile
+            ? `plan file: ${planFile}`
+            : 'no plan file (--plan <path> required)',
       pause: false,
       isolation: null,
       dispatchMode: 'agent',
@@ -872,6 +881,22 @@ function runValidation(flags, flagSources, steps, context) {
     errors.push(context.accessDeniedMessage);
   }
 
+  // R-PLANFILE (#16): explicit-only plan resolution. Keyed on the resolved
+  // execute step (step membership decides whether a plan gets implemented),
+  // not on the raw --has-plan flag the skill always passes.
+  const executeWillRun = steps.some(s => s.name === 'execute' && s.status === 'will_run');
+  if (executeWillRun && !context.planFile && !context.planFileRejected) {
+    errors.push({
+      id: 'missingPlanFile',
+      message:
+        'ship-sdlc cannot run the "execute" step without a plan file. ' +
+        'Fix: re-run with --plan <path-to-plan.md>. ' +
+        'Why: ship-sdlc no longer picks the newest *.md from plansDirectory or ~/.gemini/plans/ — that folder is shared by all repositories, ' +
+        'so the newest file could be a plan written for a different repository and would be implemented here. ' +
+        'If the changes are already implemented, leave "execute" out: --steps <the configured steps without execute>.',
+    });
+  }
+
   // Current branch should not equal base branch
   const notOnDefault = context.currentBranch !== context.defaultBranch;
   if (!notOnDefault) {
@@ -975,6 +1000,45 @@ function runValidation(flags, flagSources, steps, context) {
  * @param {string} currentBranch
  * @returns {{ stateFile: string|null, found: boolean }}
  */
+/**
+ * R-PLANFILE (#16): resolve the plan file explicitly. Returns the absolute
+ * path and where it came from (`cli` | `state` | null). A CLI path wins; the
+ * path recorded in the ship state is used only when the caller passes it
+ * (i.e. the run resumes that pipeline). Invalid paths push a structured
+ * error and resolve to null. Never scans a directory.
+ *
+ * @param {string|null} cliPlanFile path from --plan / --plan-file / positional *.md
+ * @param {string|null} recordedPlanFile path recorded in the resumed ship state
+ * @param {Array} errors error sink (mutated)
+ * @returns {{ planFile: string|null, planFileSource: 'cli'|'state'|null }}
+ */
+function resolvePlanFile(cliPlanFile, recordedPlanFile, errors) {
+  const given = cliPlanFile || recordedPlanFile;
+  if (!given) return { planFile: null, planFileSource: null };
+  const source = cliPlanFile ? 'cli' : 'state';
+  const label = source === 'cli'
+    ? `--plan "${cliPlanFile}"`
+    : `the plan recorded in the ship state ("${recordedPlanFile}")`;
+  const resolved = path.resolve(given);
+  let stat = null;
+  try { stat = fs.statSync(resolved); } catch (_) { /* missing: reported below */ }
+  if (!stat || !stat.isFile()) {
+    errors.push({
+      id: 'planFileNotFound',
+      message: `${label} does not exist (resolved to ${resolved}). Fix: check the path, or run /plan-sdlc first to write the plan.`,
+    });
+    return { planFile: null, planFileSource: null };
+  }
+  if (!/\.md$/i.test(resolved)) {
+    errors.push({
+      id: 'planFileNotMarkdown',
+      message: `${label} must point at a .md plan document (got ${resolved}). Fix: pass the plan markdown itself, not its directory or a state file.`,
+    });
+    return { planFile: null, planFileSource: null };
+  }
+  return { planFile: resolved, planFileSource: source };
+}
+
 function detectResumeState(_projectRoot, currentBranch) {
   const { stateFile, found, fresh, nextPendingStep, fullPath } = detectResumeStateLib({
     prefix: 'ship',
@@ -1115,7 +1179,9 @@ function main() {
   // to persist pipeline init state so the next /ship-sdlc invocation can auto-resume.
   if (flags.planModeBlocked) {
     const stateShipPath = path.join(__dirname, '..', 'state', 'ship.js');
-    const flagsJson = JSON.stringify(flags);
+    // R-PLANFILE (#16): record the explicit plan so the resumed run (no args)
+    // reuses it; it is validated again when the pipeline resumes.
+    const flagsJson = JSON.stringify({ ...flags, planFile: cli.planFile ? path.resolve(cli.planFile) : null });
     const currentBranch = gitState.currentBranch;
     const result = spawnSync('node', [
       stateShipPath, 'init',
@@ -1250,61 +1316,24 @@ function main() {
   }
 
   // Build context
-  // R-PLANFILE: resolve the active plan file path for execute-step task mirroring.
-  // Priority: (1) CLI --plan-file flag, (2) project .gemini/antigravity-cli/settings.json plansDirectory,
-  // (3) global ~/.gemini/antigravity-cli/settings.json plansDirectory, (4) default ~/.gemini/plans/ (most recent *.md).
-  // Returns absolute path string or null if no plan file can be found.
-  function resolvePlanFile(cliPlanFile) {
-    if (cliPlanFile) {
-      return path.resolve(cliPlanFile);
-    }
-
-    const candidateDirs = [];
-
-    // Project settings (takes precedence)
-    const projectSettings = path.join(projectRoot, '.gemini/antigravity-cli', 'settings.json');
-    if (fs.existsSync(projectSettings)) {
-      try {
-        const s = JSON.parse(fs.readFileSync(projectSettings, 'utf8'));
-        if (s.plansDirectory) candidateDirs.push(s.plansDirectory);
-      } catch (_) { /* ignore */ }
-    }
-
-    // Global settings
-    const globalSettings = path.join(os.homedir(), '.gemini/antigravity-cli', 'settings.json');
-    if (fs.existsSync(globalSettings)) {
-      try {
-        const s = JSON.parse(fs.readFileSync(globalSettings, 'utf8'));
-        if (s.plansDirectory) candidateDirs.push(s.plansDirectory);
-      } catch (_) { /* ignore */ }
-    }
-
-    // Default fallback
-    candidateDirs.push(path.join(os.homedir(), '.gemini', 'plans'));
-
-    for (const dir of candidateDirs) {
-      if (!fs.existsSync(dir)) continue;
-      try {
-        const entries = fs.readdirSync(dir)
-          .filter(f => f.endsWith('.md'))
-          .map(f => {
-            try {
-              const stat = fs.statSync(path.join(dir, f));
-              return { name: f, mtime: stat.mtimeMs };
-            } catch (_) { return null; }
-          })
-          .filter(Boolean)
-          .sort((a, b) => b.mtime - a.mtime);
-        if (entries.length > 0) {
-          return path.join(dir, entries[0].name);
-        }
-      } catch (_) { continue; }
-    }
-
-    return null;
+  // R-PLANFILE (#16): the plan file is explicit-only — `--plan <path>` (alias
+  // `--plan-file`, or a positional *.md). There is no plansDirectory scan and no
+  // "newest *.md by mtime" heuristic: ~/.gemini/plans/ is shared by every
+  // repository, so the newest file there can be a plan written for another repo,
+  // and the execute step would implement it here. Mirrors the Claude Code sdlc
+  // plugin (#505 there). The one non-CLI source is the plan path recorded in this
+  // branch's ship state, used only when the run resumes that pipeline.
+  const resume = detectResumeState(projectRoot, gitState.currentBranch);
+  const resuming = cli.resume === true || Boolean(resume && resume.found && resume.fresh);
+  let recordedPlanFile = null;
+  if (resuming && !cli.planFile) {
+    try {
+      const st = readState('ship', slugifyBranch(gitState.currentBranch));
+      const recorded = st && st.data && st.data.flags && st.data.flags.planFile;
+      if (typeof recorded === 'string' && recorded) recordedPlanFile = recorded;
+    } catch (_) { /* no readable state: nothing recorded */ }
   }
-
-  const planFile = resolvePlanFile(cli.planFile || null);
+  const { planFile, planFileSource } = resolvePlanFile(cli.planFile || null, recordedPlanFile, errors);
 
   const context = {
     currentBranch: gitState.currentBranch,
@@ -1330,7 +1359,14 @@ function main() {
     worktree: worktreeInfo,
     expectedBranch,
     planFile,
+    planFileSource,
   };
+  // An invalid --plan already produced planFileNotFound / planFileNotMarkdown;
+  // do not stack missingPlanFile on top of it.
+  Object.defineProperty(context, 'planFileRejected', {
+    value: errors.some(e => e && (e.id === 'planFileNotFound' || e.id === 'planFileNotMarkdown')),
+    enumerable: false,
+  });
 
   // Compute steps (pass openspec context for archive-openspec step)
   const openspecContext = {
@@ -1346,8 +1382,7 @@ function main() {
   errors.push(...validation.errors);
   warnings.push(...validation.warnings);
 
-  // Detect resume state
-  const resume = detectResumeState(projectRoot, gitState.currentBranch);
+  // Resume state was detected above, before plan resolution (R-PLANFILE).
 
   // R-implicit-resume (#359): when a fresh state file exists for the current
   // branch AND the user did NOT explicitly pass --resume, flip the resume
@@ -1439,6 +1474,9 @@ function main() {
       // branch and the user did not pass --resume explicitly.
       implicitResume: flags.implicitResume === true,
       hasPlan: flags.hasPlan,
+      // R-PLANFILE (#16): recorded in the ship state by `state/ship.js init
+      // --flags`, so a resumed run reuses the same plan without a new --plan.
+      planFile: planFile || null,
       workspace: flags.workspace,
       rebase: flags.rebase,
       openspecChange: flags.openspecChange,
@@ -1508,4 +1546,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseArgs, computeSteps, mergeFlags, loadConfig, detectWorktree };
+module.exports = { parseArgs, computeSteps, mergeFlags, loadConfig, detectWorktree, resolvePlanFile, runValidation };

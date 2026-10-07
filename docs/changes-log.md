@@ -1,5 +1,26 @@
 # SDLC Plugin Changes Log
 
+## ship-sdlc: explicit plan path only (#16)
+
+**Date:** 2026-10-07
+
+### Overview
+`/ship-sdlc` now executes only the plan the user names with `--plan <path>`. It no longer takes the newest `*.md` by modification time from `plansDirectory` or `~/.gemini/plans/`; that folder is shared by every repository, so the newest file could be a plan for another repository, and the `execute` step would have implemented it here. The behaviour matches the Claude Code `sdlc` plugin (#505 there).
+
+### Changes Made
+
+#### 1. Prepare Script
+- **`scripts/skill/ship.js`**: New `--plan <path>` flag; `--plan-file <path>` and a positional `*.md` stay as aliases, and either flag without a value is now an error. `resolvePlanFile` is explicit-only (no directory scan, no mtime sort) and rejects a missing path or a directory (`planFileNotFound`) and a non-`.md` file (`planFileNotMarkdown`). When the `execute` step will run and no plan path is given, the run stops with `missingPlanFile`. A resumed pipeline (explicit `--resume` or implicit resume of a fresh state file) reuses the plan path recorded as `flags.planFile` in its ship state; the plan-mode-blocked path records it too. The execute step's reason now names the plan file.
+- **`scripts/skill/ship.test.js`**: Covers the flag forms, `resolvePlanFile`, and `missingPlanFile`.
+
+#### 2. Skills and Docs
+- **`skills/ship-sdlc/SKILL.md`**: `--plan <path>` in `description` and `argument-hint`; Step 1c forwards the user's plan path and never fills it in; context, pipeline table and resume text cite the plan file.
+- **`skills/execute-plan-sdlc/SKILL.md`**: Accepts `--plan <path>` and the positional `*.md` path promised by its `argument-hint`, as aliases of `--plan-file`.
+- **`docs/configuration.md`**: `plansDirectory` only sets where `/plan-sdlc` writes plans.
+
+### Impact
+`/ship-sdlc` without `--plan` and with `execute` in its steps now stops with a clear error instead of executing a guessed plan. To ship changes that are already implemented, leave `execute` out of `--steps`.
+
 ## received-review-sdlc Verification Orchestrator
 
 **Date:** 2026-09-14
