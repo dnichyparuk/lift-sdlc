@@ -14,7 +14,7 @@ Initializes standard plan authoring guidelines (`docs/plans/PLAN_GUIDELINES.md`)
 ## Capabilities
 
 1. **Creates `docs/plans/PLAN_GUIDELINES.md`**:
-   - Deploys canonical copy-paste template with waves, tasks, dependencies (`Depends on:`), file perimeters (`Create/Modify/Delete/Test`), and acceptance criteria (`- [ ]`).
+   - Deploys canonical copy-paste template with waves, tasks, dependencies (`Depends on:`), file perimeters (`Create/Modify/Delete/Test`), and acceptance criteria (`- [ ]` open, `- [x]` done, `- [~]` skipped on purpose with a required `*Skipped on YYYY-MM-DD: <reason>*` comment).
    - Documents rules for task ID stability and linking blockers from `docs/TODO/*.md`.
 
 2. **Updates `AGENTS.md`**:

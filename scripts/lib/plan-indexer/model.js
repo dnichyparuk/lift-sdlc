@@ -262,6 +262,25 @@ class DeliveryGraphModel {
   }
 
   /**
+   * Count acceptance criteria by box state. A skipped box (`- [~]`) is closed, like a done one.
+   * Graph data without `state` (older catalogs) falls back to `checked` (closed = done).
+   * @param {Array<{checked?: boolean, state?: string}>} criteria
+   * @returns {{ total: number, open: number, done: number, skipped: number, closed: number }}
+   */
+  static countCriteria(criteria) {
+    const counts = { total: 0, open: 0, done: 0, skipped: 0, closed: 0 };
+    for (const ac of criteria || []) {
+      const state = ac.state || (ac.checked ? 'done' : 'open');
+      counts.total += 1;
+      if (state === 'skipped') counts.skipped += 1;
+      else if (state === 'done') counts.done += 1;
+      else counts.open += 1;
+    }
+    counts.closed = counts.done + counts.skipped;
+    return counts;
+  }
+
+  /**
    * Calculate summary metrics for a plan.
    * @param {string} projectId
    * @param {string} planId
@@ -280,7 +299,8 @@ class DeliveryGraphModel {
         partly: 0,
         readyToDispatch: 0,
         wavesCount: 0,
-        wavesCompleted: 0
+        wavesCompleted: 0,
+        criteria: DeliveryGraphModel.countCriteria([])
       };
     }
 
@@ -298,6 +318,7 @@ class DeliveryGraphModel {
     const waves = plan.waves || [];
     const wavesCount = waves.length;
     const wavesCompleted = waves.filter(w => w.status === 'completed').length;
+    const criteria = DeliveryGraphModel.countCriteria(tasks.flatMap(t => t.acceptanceCriteria || []));
 
     return {
       total,
@@ -309,7 +330,8 @@ class DeliveryGraphModel {
       partly,
       readyToDispatch,
       wavesCount,
-      wavesCompleted
+      wavesCompleted,
+      criteria
     };
   }
 

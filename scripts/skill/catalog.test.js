@@ -124,4 +124,35 @@ describe('catalog end-to-end integration', () => {
       if (fs.existsSync(tmpHtml)) fs.unlinkSync(tmpHtml);
     }
   });
+  test('indexes skipped "- [~]" criteria as closed and embeds them in the dashboard', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sdlc-catalog-skip-'));
+    try {
+      const plansDir = path.join(tmpDir, 'docs', 'plans');
+      fs.mkdirSync(plansDir, { recursive: true });
+      fs.writeFileSync(path.join(plansDir, 'skip-plan.md'), `# Skip Plan
+
+**Goal:** Catalog skipped criteria
+
+### Task 1: Closed by skip
+**Depends on:** none
+
+**Acceptance criteria:**
+- [x] Built
+- [~] Benchmarked
+  *Skipped on 2026-10-06: the benchmark host is retired for this release*
+`, 'utf8');
+      const htmlOut = path.join(tmpDir, 'dashboard.html');
+      const { graphData, stats } = generateCatalog({ projectDir: tmpDir, jsonPath: null, htmlPath: htmlOut });
+      const task = graphData.projects[0].plans[0].tasks[0];
+      assert.equal(task.status, 'done');
+      assert.equal(stats.tasksCount.done, 1);
+      assert.deepEqual(task.acceptanceCriteria.map(a => a.state), ['done', 'skipped']);
+      assert.equal(task.acceptanceCriteria[1].skipReason, 'the benchmark host is retired for this release');
+      const html = fs.readFileSync(htmlOut, 'utf8');
+      assert.ok(html.includes('"state": "skipped"'));
+      assert.ok(html.includes('static countCriteria(criteria)'));
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -9,7 +9,8 @@ const {
   parsePlanMarkdown,
   parseTodoMarkdown,
   slugify,
-  cleanMarkdownText
+  cleanMarkdownText,
+  parseAcceptanceCriteria
 } = require('./markdown-parser.js');
 
 describe('markdown-parser', () => {
@@ -222,5 +223,75 @@ describe('markdown-parser', () => {
     assert.equal(todo.priority, 'P2');
     assert.ok(todo.blocks.length > 0);
     assert.ok(todo.markdownSource && todo.markdownSource.includes('021 — Execute the Part 1b unification plan'));
+  });
+});
+
+describe('markdown-parser skipped "- [~]" criteria', () => {
+  const REASON = 'the next task GATE covers it and the branch is merged';
+  const md = `# Skip Plan
+
+**Goal:** Index skipped criteria
+
+### Task 1: Mixed criteria
+**Depends on:** none
+
+**Acceptance criteria:**
+- [x] Done criterion
+- [~] Skipped criterion
+  *Skipped on 2026-10-06: ${REASON}*
+- [ ] Open criterion
+
+### Task 2: All closed
+**Depends on:** none
+
+**Acceptance criteria:**
+- [x] Done criterion
+- [~] Skipped criterion
+  *Skipped on 2026-10-06: ${REASON}*
+
+### Task 3: Only skipped, one comment missing
+**Depends on:** none
+- **Acceptance criteria:**
+  - [~] Skipped with comment
+    *Skipped on 2026-10-06: ${REASON}*
+  - [~] Skipped without comment
+`;
+  const plan = parsePlanMarkdown(md, { filePath: 'docs/plans/skip.md', projectId: 'p' });
+
+  test('a [~] box is a distinct skipped state that counts as closed', () => {
+    const acs = plan.tasks[0].acceptanceCriteria;
+    assert.deepEqual(acs.map(a => [a.text, a.state, a.checked]), [
+      ['Done criterion', 'done', true],
+      ['Skipped criterion', 'skipped', true],
+      ['Open criterion', 'open', false],
+    ]);
+    assert.equal(acs[1].skipDate, '2026-10-06');
+    assert.equal(acs[1].skipReason, REASON);
+    assert.equal(acs[1].skipProblem, undefined);
+    assert.equal(acs[0].skipDate, undefined);
+    assert.equal(plan.tasks[0].status, 'in_progress');
+  });
+
+  test('a task whose boxes are all done or skipped is done', () => {
+    assert.equal(plan.tasks[1].status, 'done');
+    assert.equal(plan.tasks[2].status, 'done');
+  });
+
+  test('nested criteria are read, and a [~] without its comment carries the PF6 problem', () => {
+    const acs = plan.tasks[2].acceptanceCriteria;
+    assert.equal(acs.length, 2);
+    assert.equal(acs[0].skipProblem, undefined);
+    assert.match(acs[1].skipProblem, /needs a comment on an indented continuation line/);
+    assert.equal(acs[1].skipReason, undefined);
+  });
+
+  test('the skip comment line is not read as a criterion and stays in markdownSource', () => {
+    assert.equal(plan.tasks[1].acceptanceCriteria.length, 2);
+    assert.ok(plan.tasks[1].markdownSource.includes('*Skipped on 2026-10-06:'));
+  });
+
+  test('parseAcceptanceCriteria ignores fenced boxes', () => {
+    const acs = parseAcceptanceCriteria(['- [ ] real', '```', '- [~] fenced', '```']);
+    assert.deepEqual(acs, [{ text: 'real', checked: false, state: 'open' }]);
   });
 });

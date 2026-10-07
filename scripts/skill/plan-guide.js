@@ -19,6 +19,7 @@ When authoring or modifying implementation plans under \`docs/plans/\`, agents *
 - Use explicit task headers (\`### Task N: <Title>\`).
 - Always declare \`- **Depends on:**\` (\`none\` if unblocked) for topological DAG ordering and Critical Path computation.
 - Define actionable acceptance criteria with checkboxes (\`- [ ]\`) to track execution progress.
+- Mark a criterion skipped on purpose with \`- [~]\` only when a person decides it (or asks an agent to), with an indented \`*Skipped on YYYY-MM-DD: <reason>*\` line right below it; a skipped box counts as closed.
 - Specify affected files under \`- **Files:**\` (\`Create:\`, \`Modify:\`, \`Delete:\`, \`Test:\`).
 `;
 

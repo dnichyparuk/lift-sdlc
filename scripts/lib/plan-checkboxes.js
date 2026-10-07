@@ -84,13 +84,14 @@ function plainReason(reason) {
 }
 
 /**
- * Checks the comment of the `[~]` box on `lines[index]`.
+ * Reads the comment of the `[~]` box on `lines[index]`.
  *
  * @param {{ text: string, fenced: boolean }[]} lines
  * @param {number} index
- * @returns {string | null} the problem, or null when the comment is valid
+ * @returns {{ date: string | null, reason: string | null, problem: string | null }} the comment's
+ *   date and plain-text reason when found, and the problem (null when the comment is valid)
  */
-function skippedBoxProblem(lines, index) {
+function readSkipComment(lines, index) {
   const marker = indentWidth(lines[index].text);
   const continuation = [];
   let j = index + 1;
@@ -101,22 +102,59 @@ function skippedBoxProblem(lines, index) {
   }
   const m = SKIP_COMMENT.exec(continuation.join(' '));
   if (!m) {
+    const missing = { date: null, reason: null };
     if (/Skipped on/.test(lines[index].text)) {
-      return `the skip comment is on the box line; move it to an indented continuation line: ${SKIP_COMMENT_FORMAT}`;
+      return { ...missing, problem: `the skip comment is on the box line; move it to an indented continuation line: ${SKIP_COMMENT_FORMAT}` };
     }
     let k = j;
     while (k < lines.length && !lines[k].fenced && lines[k].text.trim() === '') k += 1;
     if (k > j && k < lines.length && !lines[k].fenced && /Skipped on/.test(lines[k].text)) {
-      return 'the skip comment is separated from the box by a blank line; put it on the line right after the box';
+      return { ...missing, problem: 'the skip comment is separated from the box by a blank line; put it on the line right after the box' };
     }
-    return `"[~]" needs a comment on an indented continuation line: ${SKIP_COMMENT_FORMAT}`;
+    return { ...missing, problem: `"[~]" needs a comment on an indented continuation line: ${SKIP_COMMENT_FORMAT}` };
   }
-  if (!isCalendarDate(m[1])) return `skip date ${JSON.stringify(m[1])} is not a valid YYYY-MM-DD calendar date`;
+  const date = m[1].trim();
   const reason = plainReason(m[2]);
-  if (reason.length < MIN_SKIP_REASON) {
-    return `skip reason ${JSON.stringify(reason)} has ${reason.length} characters; at least ${MIN_SKIP_REASON} are required`;
+  if (!isCalendarDate(m[1])) {
+    return { date, reason, problem: `skip date ${JSON.stringify(m[1])} is not a valid YYYY-MM-DD calendar date` };
   }
-  return null;
+  if (reason.length < MIN_SKIP_REASON) {
+    return {
+      date,
+      reason,
+      problem: `skip reason ${JSON.stringify(reason)} has ${reason.length} characters; at least ${MIN_SKIP_REASON} are required`,
+    };
+  }
+  return { date, reason, problem: null };
+}
+
+/** The state of a box marker character. */
+function boxState(marker) {
+  if (marker === ' ') return 'open';
+  return marker === '~' ? 'skipped' : 'done';
+}
+
+/**
+ * Lists the task-list boxes of a Markdown text in document order, ignoring fenced code blocks.
+ * `text` is the rest of the box line after the marker, trimmed. A `skipped` box also carries
+ * `skip`: its comment's date and plain-text reason (null when missing) and the comment problem
+ * (null when the comment is valid).
+ *
+ * @param {string} markdown
+ * @returns {{ line: number, state: 'open' | 'done' | 'skipped', text: string,
+ *   skip?: { date: string | null, reason: string | null, problem: string | null } }[]}
+ */
+function readCheckboxes(markdown) {
+  const boxes = [];
+  const lines = markFences(markdown);
+  lines.forEach(({ text, fenced }, i) => {
+    const m = fenced ? null : CHECKBOX.exec(text);
+    if (!m) return;
+    const box = { line: i + 1, state: boxState(m[1]), text: text.slice(m[0].length).trim() };
+    if (box.state === 'skipped') box.skip = readSkipComment(lines, i);
+    boxes.push(box);
+  });
+  return boxes;
 }
 
 /**
@@ -130,24 +168,12 @@ function skippedBoxProblem(lines, index) {
  */
 function countCheckboxes(markdown) {
   const counts = { total: 0, open: 0, done: 0, skipped: 0, closed: 0, problems: [] };
-  const lines = markFences(markdown);
-  lines.forEach(({ text, fenced }, i) => {
-    const m = fenced ? null : CHECKBOX.exec(text);
-    if (!m) return;
+  for (const box of readCheckboxes(markdown)) {
     counts.total += 1;
-    if (m[1] === ' ') {
-      counts.open += 1;
-      return;
-    }
-    counts.closed += 1;
-    if (m[1] !== '~') {
-      counts.done += 1;
-      return;
-    }
-    counts.skipped += 1;
-    const message = skippedBoxProblem(lines, i);
-    if (message) counts.problems.push({ line: i + 1, message });
-  });
+    counts[box.state] += 1;
+    if (box.state !== 'open') counts.closed += 1;
+    if (box.skip && box.skip.problem) counts.problems.push({ line: box.line, message: box.skip.problem });
+  }
   return counts;
 }
 
@@ -158,4 +184,5 @@ module.exports = {
   isCalendarDate,
   markFences,
   plainReason,
+  readCheckboxes,
 };
