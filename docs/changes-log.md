@@ -100,3 +100,29 @@ Hardened the plugin's CLI scripts against two drift risks: scripts that read std
 
 ### Impact
 `execute.js` now matches the unknown-flag-rejection convention already followed by its sibling CLI scripts, and every CLI script in the plugin is guaranteed to terminate on `--help` even with stdin held open by a parent process — both enforced going forward by `scripts/ci/cli-help-contract.test.js`. Review dimension diffs that are oversized or truncated, or whose `max-diff-bytes` frontmatter is invalid, now surface as explicit warnings instead of failing silently, and the review orchestrator's Step 2b keeps later steps from blocking on dimensions that were never reviewed. See `scripts/README.md`'s "CLI contract" section for the rules new scripts must follow.
+
+## Skipped plan checkboxes (`- [~]`)
+
+**Date:** 2026-10-06
+**Version:** 0.25.0
+
+### Overview
+Plans can mark an acceptance criterion as skipped on purpose with `- [~]`. A skipped box is closed, like `- [x]`, and must carry a `*Skipped on YYYY-MM-DD: <reason>*` comment on its continuation lines. A person (or an agent at a person's request) sets it; `plan-sdlc` keeps generating open `- [ ]` boxes and `execute-plan-sdlc` never writes boxes into the plan.
+
+### Changes Made
+
+#### 1. Shared Checkbox Reader
+- **`scripts/lib/plan-checkboxes.js`** (new): `countCheckboxes` counts open, done and skipped boxes (any list marker and nesting level, fenced code ignored, CRLF read as LF) and reports every `[~]` whose comment is missing, misplaced, dated with an invalid calendar date, or has a reason shorter than `MIN_SKIP_REASON` (15) characters.
+- **`scripts/lib/plan-checkboxes.test.js`** (new): Unit coverage.
+
+#### 2. Plan Format Validator
+- **`scripts/ci/validate-plan-format.js`**: New check PF6 fails each invalid `[~]` and names `<file>:<line>`; it is reported only when the plan has a `[~]`, so reports for other plans are unchanged. PF5 still requires an open `- [ ]` per task (the validator checks a plan before execution); its message notes that a skipped box is closed. The checks are now exported behind a `require.main` guard.
+- **`scripts/ci/validate-plan-format.test.js`** (new): Covers PF5/PF6 and the CLI exit codes.
+
+#### 3. Documentation
+- **`skills/plan-sdlc/resources/plan-format-reference.md`**: New "Acceptance criteria boxes" section.
+- **`scripts/README.md`**: Lists the new shared module.
+- **`skills/execute-plan-sdlc/SKILL.md`**: Skipped criteria stay out of the fact sheet's `acceptanceCriteria`; the executor never writes `- [~]`.
+
+### Impact
+A plan may record deliberately skipped criteria without losing the audit trail, and the PreToolUse plan validation (`hooks/pre-tool-validate.js`) rejects a skipped box without its comment. OpenSpec `tasks.md` parsing (`scripts/lib/openspec.js`) is unchanged: `[~]` is not part of the OpenSpec format.

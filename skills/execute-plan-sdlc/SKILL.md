@@ -375,7 +375,7 @@ Options:
    > **Contract (Input/Output):**
    > - **Input**: `--wave <N>`, `--tasks-json '<json-array>'`, `--run-id <id>`.
    > - **Output**: Prints JSON containing `factSheets: [paths]` to `stdout`.
-   This writes `<stateDir>/execution/<runId>/task-<id>.md` for each task. The printed JSON includes `factSheets: [...]` — the absolute paths to use as `factSheetPath` in the manifest. Task name, description, files, and acceptance criteria live in the fact sheet; do NOT inline them in the manifest.
+   This writes `<stateDir>/execution/<runId>/task-<id>.md` for each task. The printed JSON includes `factSheets: [...]` — the absolute paths to use as `factSheetPath` in the manifest. Task name, description, files, and acceptance criteria live in the fact sheet; do NOT inline them in the manifest. Leave criteria marked `- [~]` (skipped on purpose, closed) out of `acceptanceCriteria`, and never write `- [~]` into the plan on your own — a person (or an agent at a person's request) sets it.
 
    **Manifest extensions:** every wave manifest MUST additionally carry:
    - `guardrails: [{id, description, severity}]` — sourced verbatim from `activeGuardrails` loaded in Step 1 (Guardrail loading block above). When `activeGuardrails` is empty, the field is still present as `[]` (stable shape across waves — never omitted). Wave-runner threads this into the conditional `## Project Guardrails` block of every per-task and batched-trivial Agent prompt; when empty the block renders nothing.

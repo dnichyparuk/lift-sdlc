@@ -225,13 +225,13 @@ function main() {
     assert.strictEqual(preservedFiles.length, 3, 'Pending files must remain untouched after abort');
 
     // Clean up manifest file
-    try { fs.unlinkSync(manifestPath); } catch (_) {}
+    try { fs.unlinkSync(manifestPath); } catch (_) { /* best-effort cleanup: the file may already be gone */ }
 
     console.log('[simulate-learning-loop] ✅ All phases of the self-learning loop completed successfully.');
   } finally {
     try {
       fs.rmSync(baseDir, { recursive: true, force: true });
-    } catch (_) {}
+    } catch (_) { /* best-effort cleanup of the temporary directory */ }
   }
 }
 

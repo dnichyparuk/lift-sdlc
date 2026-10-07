@@ -19,7 +19,9 @@
  *   PF2 — Task numbering (contiguous from 0 or 1)
  *   PF3 — Required metadata (Complexity, Risk, Depends on, Verify)
  *   PF4 — Dependency validity (valid refs, no cycles)
- *   PF5 — Task body (Description, Acceptance criteria)
+ *   PF5 — Task body (Description, Acceptance criteria with at least one open "- [ ]")
+ *   PF6 — Skipped boxes: every "- [~]" carries a "*Skipped on YYYY-MM-DD: <reason>*" comment
+ *         (reported only when the plan has at least one "- [~]" outside fenced code)
  *
  * Uses only Node.js built-in modules. No npm install required.
  */
@@ -30,6 +32,7 @@ const fs   = require('node:fs');
 const path = require('node:path');
 
 const { resolveSdlcRoot } = require(path.join(__dirname, '..', 'lib', 'config'));
+const { countCheckboxes } = require(path.join(__dirname, '..', 'lib', 'plan-checkboxes'));
 
 // ---------------------------------------------------------------------------
 // CLI parsing
@@ -40,6 +43,7 @@ function parseArgs(argv) {
   // C-projectroot (#360): default to main-worktree .sdlc/ root, not cwd.
   let projectRoot  = resolveSdlcRoot();
   let filePath     = null;
+  let fileArg      = null;
   let outputFormat = 'json';
 
   for (let i = 0; i < args.length; i++) {
@@ -47,7 +51,8 @@ function parseArgs(argv) {
     if (a === '--project-root' && args[i + 1]) {
       projectRoot = path.resolve(args[++i]);
     } else if (a === '--file' && args[i + 1]) {
-      filePath = path.resolve(args[++i]);
+      fileArg  = args[++i];
+      filePath = path.resolve(fileArg);
     } else if (a === '--json') {
       outputFormat = 'json';
     } else if (a === '--markdown') {
@@ -55,7 +60,7 @@ function parseArgs(argv) {
     }
   }
 
-  return { projectRoot, filePath, outputFormat };
+  return { projectRoot, filePath, fileArg, outputFormat };
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +294,9 @@ function checkPF5(tasks) {
     } else {
       const checkboxCount = (acMatch[1].match(/- \[ \]/g) || []).length;
       if (checkboxCount === 0) {
-        issues.push(`${prefix}: **Acceptance criteria:** has no checkbox items (expected at least one "- [ ]")`);
+        // A skipped "- [~]" box is closed, like "- [x]": PF5 checks a plan before execution.
+        const hint = countCheckboxes(acMatch[1]).skipped > 0 ? ', and a skipped "- [~]" is closed' : '';
+        issues.push(`${prefix}: **Acceptance criteria:** has no checkbox items (expected at least one "- [ ]"${hint})`);
       }
     }
   }
@@ -298,6 +305,20 @@ function checkPF5(tasks) {
     return { id: 'PF5', status: 'fail', message: issues.join('; ') };
   }
   return { id: 'PF5', status: 'pass', message: 'All tasks have Description and Acceptance criteria' };
+}
+
+/**
+ * PF6 — every skipped "- [~]" box carries its comment. Returns null when the plan has no
+ * skipped box outside fenced code, so the report of such a plan is unchanged.
+ */
+function checkPF6(content, fileLabel = 'plan') {
+  const { skipped, problems } = countCheckboxes(content);
+  if (skipped === 0) return null;
+  if (problems.length > 0) {
+    const issues = problems.map(p => `${fileLabel}:${p.line}: ${p.message}`);
+    return { id: 'PF6', status: 'fail', message: issues.join('; ') };
+  }
+  return { id: 'PF6', status: 'pass', message: `${skipped} skipped "- [~]" box(es), each with a valid comment` };
 }
 
 // ---------------------------------------------------------------------------
@@ -330,21 +351,9 @@ function formatMarkdown(report) {
 // Entry point
 // ---------------------------------------------------------------------------
 
-try {
-  const { projectRoot, filePath, outputFormat } = parseArgs(process.argv);
-
-  if (!filePath) {
-    process.stderr.write('validate-plan-format.js error: --file <path> is required\n');
-    process.exit(2);
-  }
-
-  if (!fs.existsSync(filePath)) {
-    process.stderr.write(`validate-plan-format.js error: file not found: ${filePath}\n`);
-    process.exit(2);
-  }
-
-  const content = fs.readFileSync(filePath, 'utf8');
-  const tasks   = extractTasks(content);
+/** Runs every check on a plan text; `fileLabel` names the file in PF6 messages. */
+function validatePlan(content, fileLabel = 'plan') {
+  const tasks = extractTasks(content);
 
   const checks = [
     checkPF1(content),
@@ -353,9 +362,11 @@ try {
     checkPF4(tasks),
     checkPF5(tasks),
   ];
+  const pf6 = checkPF6(content, fileLabel);
+  if (pf6) checks.push(pf6);
 
   const passed = checks.every(c => c.status === 'pass');
-  const report = {
+  return {
     passed,
     checks,
     summary: {
@@ -364,15 +375,52 @@ try {
       failed: checks.filter(c => c.status === 'fail').length,
     },
   };
+}
 
-  if (outputFormat === 'markdown') {
-    process.stdout.write(formatMarkdown(report) + '\n');
-  } else {
-    process.stdout.write(formatJson(report) + '\n');
+function main() {
+  try {
+    const { filePath, fileArg, outputFormat } = parseArgs(process.argv);
+
+    if (!filePath) {
+      process.stderr.write('validate-plan-format.js error: --file <path> is required\n');
+      process.exit(2);
+    }
+
+    if (!fs.existsSync(filePath)) {
+      process.stderr.write(`validate-plan-format.js error: file not found: ${filePath}\n`);
+      process.exit(2);
+    }
+
+    const content = fs.readFileSync(filePath, 'utf8');
+    const report  = validatePlan(content, fileArg);
+
+    if (outputFormat === 'markdown') {
+      process.stdout.write(formatMarkdown(report) + '\n');
+    } else {
+      process.stdout.write(formatJson(report) + '\n');
+    }
+
+    process.exit(report.passed ? 0 : 1);
+  } catch (err) {
+    process.stderr.write(`validate-plan-format.js error: ${err.message}\n`);
+    process.exit(2);
   }
+}
 
-  process.exit(passed ? 0 : 1);
-} catch (err) {
-  process.stderr.write(`validate-plan-format.js error: ${err.message}\n`);
-  process.exit(2);
+module.exports = {
+  parseArgs,
+  extractTasks,
+  checkPF1,
+  checkPF2,
+  checkPF3,
+  checkPF4,
+  checkPF5,
+  checkPF6,
+  validatePlan,
+  formatJson,
+  formatMarkdown,
+};
+
+if (require.main === module) {
+  main();
 }
