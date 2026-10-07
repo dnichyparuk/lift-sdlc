@@ -795,12 +795,11 @@ class DeliveryGraphModel {
   }
 }
 
-// Universal export pattern: Node.js (CommonJS), browser (window), and globalThis
+// Universal export pattern: CommonJS for Node.js, and `globalThis` for any other host.
+// In a browser `globalThis` is `window`, so no separate `window` branch is needed (and this
+// file stays free of browser-only globals, as linted under the Node environment).
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { DeliveryGraphModel };
-}
-if (typeof window !== 'undefined') {
-  window.DeliveryGraphModel = DeliveryGraphModel;
 }
 if (typeof globalThis !== 'undefined') {
   globalThis.DeliveryGraphModel = DeliveryGraphModel;
