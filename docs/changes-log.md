@@ -232,3 +232,26 @@ The plan catalog (`catalog-sdlc`) and its dashboard now understand the skipped c
 
 ### Impact
 Plans with skipped criteria show correct progress in the catalog and dashboard. Nested criteria are now indexed too, so task progress can change for plans that list criteria under an indented `- **Acceptance criteria:**` bullet. Existing projects get the new guideline text by re-running `plan-guide-sdlc --force`.
+
+## English-only plugin
+
+**Date:** 2026-10-07
+**Version:** 0.27.1
+
+### Overview
+The plugin is now English-only. The last Russian text is translated, and a new test fails `npm test` if Cyrillic comes back into any git-tracked file.
+
+### Changes Made
+
+#### 1. Plan Guidelines Title
+- **`templates/guidelines/PLAN_GUIDELINES.md`** and **`skills/plan-guide-sdlc/PLAN_GUIDELINES.md`**: The title is `# Plan Authoring Guidelines`; the Russian subtitle is removed. The two copies stay byte-identical.
+- **`scripts/skill/plan-guide.test.js`**: Covers that the two copies are byte-identical and that `plan-guide.js` deploys the English title, also when it overwrites an existing guide with `--force`.
+
+#### 2. Documentation
+- **`docs/delivery-dashboard/README.md`**, **`docs/delivery-dashboard/plan.md`**, **`docs/antigravity-skills-migration-analysis.md`**: Translated to English with structure, tables, links, code and status markers unchanged. The JSON and HTML files in `docs/delivery-dashboard/` had no Cyrillic.
+
+#### 3. English-only Guard
+- **`scripts/ci/english-only.test.js`**: New test. It scans every git-tracked file for Cyrillic (U+0400–U+04FF) and reports each hit as `file:line:column` with the line. Exemptions go in an explicit `ALLOWED_FILES` map with a required reason, and an exemption with no Cyrillic left fails too. The list is empty.
+
+### Impact
+No behaviour change apart from the deployed guideline title. Projects get the English title by re-running `plan-guide-sdlc --force`.
