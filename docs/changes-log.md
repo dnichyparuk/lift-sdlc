@@ -130,6 +130,7 @@ A plan may record deliberately skipped criteria without losing the audit trail, 
 ## Plan validation hook: executable plans only (#17)
 
 **Date:** 2026-10-07
+**Version:** 0.25.1
 
 ### Overview
 The PreToolUse validation hook no longer blocks legitimate whole-file writes to a `plans` folder. It validates only content that declares itself an executable plan, accepts plans whose boxes are all ticked or skipped, and skips archive directories. `plan-sdlc` gains a final format check, so a plan finished with replace edits is still validated before handoff.
