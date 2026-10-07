@@ -73,7 +73,7 @@ If there are no linked worktrees, `mainWorktree` is the current repo root. Never
 | `skill`      | string        | Always `"execute-plan-sdlc"`. Disambiguates from `ship-sdlc` state files in the same directory. |
 | `startedAt`  | string        | ISO 8601 UTC timestamp when execution was invoked.                                   |
 | `branch`     | string        | Git branch name at execution start.                                                  |
-| `planPath`   | string \| null | Repository-relative path to the plan file, or `null` if the plan was provided via context rather than a file. |
+| `planPath`   | string \| null | Repository-relative path to the plan file. Always set by current versions (plans are explicit-only); `null` only in legacy state files, which cannot be resumed without passing the plan path again. |
 | `planHash`   | string        | SHA-256 hash of the plan content at execution start. Detects if the plan changed between a failure and a resume attempt. |
 | `preset`     | string \| null | Execution preset (`"full"`, `"balanced"`, or `"minimal"`), or `null` if none was applied. Legacy `"A"`/`"B"`/`"C"` values may appear in older state files. |
 | `totalTasks` | number        | Total number of tasks across all waves.                                              |

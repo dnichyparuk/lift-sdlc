@@ -420,8 +420,8 @@ The script reads `$TMPDIR/sdlc-context-stats.json` and emits a `/compact` adviso
 **Plan mode:** Announce the plan path and propose execution. Prepend any advisory output from the wrapper above the `ship` / `execute` lines:
 
 > Plan written to `<path>`. On approval:
->   ship    — run the full pipeline: execute → commit → review → version → PR (/ship-sdlc)
->   execute — execute the plan only (/execute-plan-sdlc)
+>   ship    — run the full pipeline: execute → commit → review → version → PR (/ship-sdlc --plan <path>)
+>   execute — execute the plan only (/execute-plan-sdlc <path>)
 
 Then leave plan mode via the host's mechanism (Antigravity has no plan-mode exit tool — simply end the turn). Do NOT invoke execute-plan-sdlc or ship-sdlc in this turn — they run after the user accepts in the next turn.
 
@@ -478,14 +478,14 @@ After writing the plan (normal mode only), present the user with available next 
 
 ```
 What would you like to do next?
-  ship     — execute, commit, review, version, and PR (/ship-sdlc)
-  execute  — execute the plan only (/execute-plan-sdlc)
+  ship     — execute, commit, review, version, and PR (/ship-sdlc --plan <path>)
+  execute  — execute the plan only (/execute-plan-sdlc <path>)
   done     — stop here
 
 Select:
 ```
 
-On selection, invoke the chosen skill (or recommend the corresponding slash command). On "done", end without further action.
+On selection, invoke the chosen skill with the plan path written in this run (`<path>` above — execute-plan-sdlc and ship-sdlc require it explicitly and never read the plan from the conversation), or recommend the corresponding slash command with that path. On "done", end without further action.
 
 ## See Also
 
