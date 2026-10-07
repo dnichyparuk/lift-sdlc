@@ -191,3 +191,18 @@ Plans folders can hold programme documents next to executable plans, and finishe
 
 ### Impact
 Accepting a plan and then running `/execute-plan-sdlc` without a path now stops with a message instead of executing the plan from the conversation. Pass the plan file path (plan-sdlc prints it in its handoff menu).
+
+## plan-indexer: lint-clean model export
+
+**Date:** 2026-10-07
+**Version:** 0.26.1
+
+### Overview
+`npm run lint` is clean again. `scripts/lib/plan-indexer/model.js` assigned `window.DeliveryGraphModel` behind a `typeof window` guard; the file is linted as Node code, where `window` is not a declared global, so ESLint reported `'window' is not defined`.
+
+### Changes Made
+- **`scripts/lib/plan-indexer/model.js`**: The `window` branch is removed. The file still exports through CommonJS and `globalThis`, and in a browser `globalThis` is `window`, so the class stays reachable in every host. The dashboard (`templates/dashboard/index.html`) embeds its own copy of the model and is not affected.
+- **`scripts/lib/plan-indexer/model.test.js`**: Covers the CommonJS and `globalThis` exports and evaluation in a module-less context.
+
+### Impact
+No behaviour change. The ESLint config keeps the Node globals for `scripts/` and `skills/`; no rule was disabled.

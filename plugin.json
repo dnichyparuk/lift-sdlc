@@ -1,7 +1,7 @@
 {
   "name": "lift-sdlc",
   "description": "Skills and commands for software development lifecycle workflows: pull requests, code reviews, release",
-  "version": "0.26.0",
+  "version": "0.26.1",
   "author": {
     "name": "dnichyparuk"
   }
