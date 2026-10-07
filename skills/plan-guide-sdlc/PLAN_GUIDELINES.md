@@ -1,4 +1,4 @@
-# Plan Authoring Guidelines (Руководство по оформлению планов)
+# Plan Authoring Guidelines
 
 > **Purpose:** Canonical standard for authoring implementation plans under `docs/plans/`. Ensures plans remain human-readable (SSOT) while enabling automatic parsing by `catalog-sdlc`, DAG dependency visualization, critical path computation (CPM), and execution tracking in the Universal Delivery Dashboard.
 
