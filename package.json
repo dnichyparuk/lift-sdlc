@@ -1,6 +1,6 @@
 {
   "name": "lift-sdlc",
-  "version": "0.25.2",
+  "version": "0.26.0",
   "private": true,
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
