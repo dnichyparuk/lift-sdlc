@@ -255,3 +255,26 @@ The plugin is now English-only. The last Russian text is translated, and a new t
 
 ### Impact
 No behaviour change apart from the deployed guideline title. Projects get the English title by re-running `plan-guide-sdlc --force`.
+
+## .sdlc/.gitignore shared with the sdlc plugin
+
+**Date:** 2026-10-10
+**Version:** 0.27.2
+
+### Overview
+A project that runs lift-sdlc and the Claude Code `sdlc` plugin (0.21.29) no longer sees its tracked `.sdlc/.gitignore` flip between two shapes. Each writer used to strip the other's patterns and append its own block last; lift-sdlc now writes the same bytes the `sdlc` writer leaves, so the file is identical whichever plugin wrote it last.
+
+### Changes Made
+
+#### 1. Writer
+- **`scripts/lib/config.js`**: `ensureSdlcGitignore` keeps the first complete `sdlc-utilities managed` block verbatim and places the `lift-sdlc managed` block immediately before it, with project lines first. When that block lists the base patterns (`*`, `!.gitignore`, `!config.json`, `!review-dimensions/`, `!review-dimensions/**`), the lift-sdlc block holds only `!learnings/`, `!learnings/pending/`, `!learnings/pending/**`; without an `sdlc` block, or with one emptied by lift-sdlc 0.27.1 or earlier, it keeps the full allowlist.
+- **`.sdlc/.gitignore`**: This repository's file is rewritten to the canonical shape.
+
+#### 2. Tests
+- **`scripts/lib/sdlc-gitignore-convergence.test.js`**: New test with a copy of the `sdlc` 0.21.29 writer. Over 362 inputs (empty file, either block alone, both blocks in either order, full and stripped variants, 0-3 project lines before and after, with and without a final newline) both orders give byte-identical results and both writers are idempotent. Also covers the canonical shape, the verbatim `sdlc` block, the lift-only file and the known limitation below.
+
+#### 3. Documentation
+- **`docs/configuration.md`**: New `.sdlc/.gitignore` section with the canonical shape (project lines, lift-sdlc block, `sdlc` block, final newline) and the known limitation.
+
+### Impact
+No change for projects that use lift-sdlc alone. In projects that use both plugins, the file settles after the next run of either plugin. Known limitation: lines above the `sdlc` block's `*` (including the lift-sdlc negations and project lines, which both writers move to the top) are shadowed for untracked files; tracked files are unaffected, so such files are added once with `git add -f`.

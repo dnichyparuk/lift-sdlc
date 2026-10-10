@@ -90,6 +90,10 @@ The plugin automatically creates the directory structure if it does not already 
 
 `plansDirectory` only decides where `/plan-sdlc` **writes** a new plan. No skill reads a plan from it: `/ship-sdlc` and `/execute-plan-sdlc` execute only the plan you name, with `--plan <path>` (alias `--plan-file <path>`), for example `/ship-sdlc --plan docs/plans/my-feature.md`. `/ship-sdlc` no longer picks the newest `*.md` from `plansDirectory` or `~/.gemini/plans/` (that folder is shared by every repository); when its `execute` step would run without a plan path it stops with `missingPlanFile`. A resumed pipeline reuses the plan path recorded in its state file.
 
+## `.sdlc/.gitignore`
+
+lift-sdlc keeps `.sdlc/` deny-all with an allowlist (`.gitignore`, `config.json`, `review-dimensions/`, `learnings/pending/`) in its managed block `# >>> lift-sdlc managed …` / `# <<< lift-sdlc managed`. When the Claude Code `sdlc` plugin's block (`# >>> sdlc-utilities managed …`) is also present, lift-sdlc writes only the patterns that block does not list (`!learnings/`, `!learnings/pending/`, `!learnings/pending/**`), leaves that block untouched and puts its own block right before it, so the file is byte-identical whichever plugin wrote it last: project lines, then the lift-sdlc block, then the `sdlc` block, then a final newline. Known limitation: both writers move project lines placed after the blocks to the top, and everything above the `sdlc` block's `*`, including the lift-sdlc negations, is shadowed by it for untracked files (a hand-written `!learnings/log.md`, new files under `learnings/pending/`). Tracked files are unaffected, so add such files once with `git add -f`.
+
 ## Review & Execution Configuration (`.sdlc/local.json`)
 
 You can customize subagent defaults and review behavior on a per-workspace basis by creating or modifying `.sdlc/local.json` in your project root (local-only settings ignored by git):

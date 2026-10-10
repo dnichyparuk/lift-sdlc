@@ -405,23 +405,43 @@ function normalizeBlankLines(lines) {
 // Deny-all + allowlist. Everything inside `.sdlc/` is ignored except:
 // `.gitignore` (the file itself), `config.json`, `review-dimensions/`, and
 // `learnings/pending/`. All other files and directories are ignored by default.
-const SDLC_GITIGNORE_PATTERNS = [
+//
+// The Claude Code `sdlc` plugin writes the base patterns in its own managed
+// block of the same file. When that block is present, lift-sdlc writes only
+// the patterns the block does not already list (normally just the learnings
+// negations) and places its block immediately before it, so that the file is
+// byte-identical whichever plugin wrote it last.
+const SDLC_GITIGNORE_BASE_PATTERNS = [
   '*',
   '!.gitignore',
   '!config.json',
   '!review-dimensions/',
   '!review-dimensions/**',
+];
+const SDLC_GITIGNORE_LIFT_PATTERNS = [
   '!learnings/',
   '!learnings/pending/',
   '!learnings/pending/**',
 ];
+const SDLC_GITIGNORE_PATTERNS = [
+  ...SDLC_GITIGNORE_BASE_PATTERNS,
+  ...SDLC_GITIGNORE_LIFT_PATTERNS,
+];
 const SDLC_GITIGNORE_BEGIN = '# >>> lift-sdlc managed (do not edit) — selective ignores';
 const SDLC_GITIGNORE_END   = '# <<< lift-sdlc managed';
+// Markers of the Claude Code `sdlc` plugin's block (sdlc 0.21.29,
+// scripts/lib/config.js). lift-sdlc keeps that block verbatim.
+const SDLC_UTILITIES_GITIGNORE_BEGIN = '# >>> sdlc-utilities managed (do not edit) — selective ignores';
+const SDLC_UTILITIES_GITIGNORE_END   = '# <<< sdlc-utilities managed';
 
 /**
  * Create `.sdlc/` directory and `.sdlc/.gitignore` with selective ignore
  * patterns (issue #231). Idempotent — re-running rewrites the managed block
  * in place rather than duplicating it.
+ *
+ * Shape: project lines, then the lift-sdlc block, then the `sdlc` block (if
+ * any, kept verbatim), then a final newline. Project lines found after the
+ * `sdlc` block are moved before the lift-sdlc block, as the `sdlc` writer does.
  *
  * @param {string} projectRoot
  * @returns {'created'|'updated'|'unchanged'}
@@ -432,12 +452,6 @@ function ensureSdlcGitignore(projectRoot) {
 
   const gitignorePath = path.join(sdlcDir, '.gitignore');
 
-  const managedBlock = [
-    SDLC_GITIGNORE_BEGIN,
-    ...SDLC_GITIGNORE_PATTERNS,
-    SDLC_GITIGNORE_END,
-  ].join('\n');
-
   // Step 1: Read existing file (empty string if absent).
   let existing = '';
   let fileExisted = false;
@@ -446,8 +460,8 @@ function ensureSdlcGitignore(projectRoot) {
     fileExisted = true;
   }
 
-  // Step 2: Split into lines. Locate any existing managed block via markers;
-  // extract it and remove it from the line list (leaving "other" lines).
+  // Step 2: Split into lines. Drop our own managed block; keep the first
+  // complete `sdlc` block verbatim; collect the remaining "other" lines.
   const lines = existing === '' ? [] : existing.split('\n');
   // Remove trailing empty string caused by a final newline.
   if (lines.length > 0 && lines[lines.length - 1] === '') {
@@ -456,8 +470,10 @@ function ensureSdlcGitignore(projectRoot) {
 
   const managedPatternSet = new Set(SDLC_GITIGNORE_PATTERNS);
   const otherLinesRaw = [];
+  let sdlcBlock = null;
   let insideBlock = false;
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (line === SDLC_GITIGNORE_BEGIN) {
       insideBlock = true;
       continue;
@@ -469,6 +485,14 @@ function ensureSdlcGitignore(projectRoot) {
     if (insideBlock) {
       // Drop lines that are part of the managed block.
       continue;
+    }
+    if (sdlcBlock === null && line === SDLC_UTILITIES_GITIGNORE_BEGIN) {
+      const end = lines.indexOf(SDLC_UTILITIES_GITIGNORE_END, i + 1);
+      if (end !== -1) {
+        sdlcBlock = lines.slice(i, end + 1);
+        i = end;
+        continue;
+      }
     }
     // Step 3: Drop any "other" lines whose trimmed value exactly matches a
     // member of SDLC-managed patterns (legacy raw pattern lines).
@@ -483,16 +507,18 @@ function ensureSdlcGitignore(projectRoot) {
   // by 2 lines per invocation in the worst case.
   const otherLines = normalizeBlankLines(otherLinesRaw);
 
-  // Step 4: Reconstruct: leading user lines (if any) + single newline separator +
-  // managed block + trailing newline. (Issue #273: use single '\n' between user
-  // content and managed block so the writer is byte-identical to the committed
-  // canonical shape — no spurious blank line.)
-  let next;
-  if (otherLines.length > 0) {
-    next = otherLines.join('\n') + '\n' + managedBlock + '\n';
-  } else {
-    next = managedBlock + '\n';
-  }
+  // Step 4: Our block lists the base patterns only when the `sdlc` block does
+  // not already list them (no `sdlc` block, or one emptied by an older
+  // lift-sdlc). Reconstruct: user lines + our block + `sdlc` block + newline,
+  // separated by single '\n' (issue #273: no spurious blank line).
+  const sdlcPatterns = new Set(sdlcBlock || []);
+  const managedBlock = [
+    SDLC_GITIGNORE_BEGIN,
+    ...SDLC_GITIGNORE_BASE_PATTERNS.filter((p) => !sdlcPatterns.has(p)),
+    ...SDLC_GITIGNORE_LIFT_PATTERNS,
+    SDLC_GITIGNORE_END,
+  ];
+  const next = [...otherLines, ...managedBlock, ...(sdlcBlock || [])].join('\n') + '\n';
 
   // Step 5: Compare result to original; return status.
   if (next === existing) return 'unchanged';
