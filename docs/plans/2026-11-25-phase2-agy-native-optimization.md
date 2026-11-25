@@ -62,9 +62,9 @@ Update `readSection(root, 'execute')` in `scripts/lib/config.js` to merge `.sdlc
 Share `extractTasks`, `extractField`, and `checkPF4` from `scripts/ci/validate-plan-format.js` into `scripts/lib/plan-static-critique.js`. Implement deterministic `G3` (DAG cycles), `G4` (shared `Modify:` files without explicit `Depends on:` ordering), `G10` (`Modify:` exists on disk or in earlier `Create:`), and `G12` (missing dependency targets). Add `plan.js --critique-static --plan <path>` emitting `{ gateIds: ["G3", "G4", "G10", "G12"], issues, passes, laneStatus: "ok" }`, drop `file-existence` from `buildLanes()`, and narrow `static-structural` to `{G1, G2, G7}` (`gemini-4-hydrogen-medium` / `flash`).
 
 **Acceptance criteria:**
-- [ ] `node scripts/skill/plan.js --critique-static --plan <path>` evaluates `G3`, `G4`, `G10`, and `G12` deterministically with 0 LLM calls
-- [ ] `buildLanes()` no longer emits `file-existence` and narrows `static-structural` to `{G1, G2, G7}`
-- [ ] Unit tests cover cycle detection, missing deps, unsequenced shared `Modify:` conflicts, and missing/created-in-plan file existence
+- [x] `node scripts/skill/plan.js --critique-static --plan <path>` evaluates `G3`, `G4`, `G10`, and `G12` deterministically with 0 LLM calls
+- [x] `buildLanes()` no longer emits `file-existence` and narrows `static-structural` to `{G1, G2, G7}`
+- [x] Unit tests cover cycle detection, missing deps, unsequenced shared `Modify:` conflicts, and missing/created-in-plan file existence
 
 ### Task 4: Harden CI link/schema checks and add hermetic hook & workflow smoke tests
 

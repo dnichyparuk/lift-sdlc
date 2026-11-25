@@ -142,44 +142,55 @@ test('buildLanes: guardrails absent, dimensions present — dimension-coverage l
   try {
     const lanes = buildLanes(FAKE_G17_DISPATCH, [], projectRoot);
 
-    // guardrail-compliance is dropped (no guardrails) but dimension-coverage
-    // is present, so it shifts into the position slice(0, 4) used to occupy.
-    assert.strictEqual(lanes.length, 4);
+    // guardrail-compliance is dropped (no guardrails) and file-existence is
+    // handled deterministically by --critique-static; dimension-coverage is
+    // present, so it shifts to index 2.
+    assert.strictEqual(lanes.length, 3);
     assert.deepStrictEqual(
       lanes.map(l => l.id),
-      ['static-structural', 'content-coverage', 'file-existence', 'dimension-coverage']
+      ['static-structural', 'content-coverage', 'dimension-coverage']
     );
+    const staticLane = lanes.find(l => l.id === 'static-structural');
+    assert.strictEqual(staticLane.model, 'gemini-4-hydrogen-medium');
+    assert.strictEqual(staticLane.agyModel, 'flash');
+    assert.deepStrictEqual(staticLane.gateIds, ['G1', 'G2', 'G7', 'G14']);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
 });
 
-test('buildLanes: guardrails present, dimensions present — all lanes selected, output unchanged', () => {
+test('buildLanes: guardrails present, dimensions present — all remaining LLM lanes selected, file-existence dropped, static-structural narrowed to {G1, G2, G7}', () => {
   const projectRoot = makeProjectRoot({ withDimensions: true });
   try {
     const guardrails = [{ id: 'g1', description: 'stub guardrail', severity: 'error' }];
     const lanes = buildLanes(FAKE_G17_DISPATCH, guardrails, projectRoot);
 
-    assert.strictEqual(lanes.length, 5);
+    assert.strictEqual(lanes.length, 4);
     assert.deepStrictEqual(
       lanes.map(l => l.id),
-      ['static-structural', 'content-coverage', 'file-existence', 'guardrail-compliance', 'dimension-coverage']
+      ['static-structural', 'content-coverage', 'guardrail-compliance', 'dimension-coverage']
     );
+    const staticLane = lanes.find(l => l.id === 'static-structural');
+    assert.strictEqual(staticLane.model, 'gemini-4-hydrogen-medium');
+    assert.strictEqual(staticLane.agyModel, 'flash');
+    assert.deepStrictEqual(staticLane.gateIds, ['G1', 'G2', 'G7']);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
 });
 
-test('buildLanes: guardrails absent, dimensions absent — no dimension-coverage lane at all', () => {
+test('buildLanes: guardrails absent, dimensions absent — static-structural includes conditional G14 and G17, no dimension-coverage or file-existence lane', () => {
   const projectRoot = makeProjectRoot({ withDimensions: false });
   try {
     const lanes = buildLanes(FAKE_G17_DISPATCH, [], projectRoot);
 
-    assert.strictEqual(lanes.length, 3);
+    assert.strictEqual(lanes.length, 2);
     assert.deepStrictEqual(
       lanes.map(l => l.id),
-      ['static-structural', 'content-coverage', 'file-existence']
+      ['static-structural', 'content-coverage']
     );
+    const staticLane = lanes.find(l => l.id === 'static-structural');
+    assert.deepStrictEqual(staticLane.gateIds, ['G1', 'G2', 'G7', 'G14', 'G17']);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
@@ -224,7 +235,6 @@ function makeIsolatedPlanScript() {
 const LANE_TEMPLATE_NAMES = [
   'lane-static-structural-prompt.md',
   'lane-content-coverage-prompt.md',
-  'lane-file-existence-prompt.md',
   'lane-guardrail-compliance-prompt.md',
 ];
 const LENS_TEMPLATE_NAMES = [
@@ -307,10 +317,10 @@ test('main(): dimension-coverage lane never receives its own missing-template wa
     // g17Dispatch's own "prompt template not found" warning still fires.
     assert.match(result.stderr, /\[plan-prepare\] G17 skipped —/);
 
-    // Every non-G17 lane (static-structural, content-coverage,
-    // file-existence — no guardrail-compliance since guardrails are absent)
-    // gets exactly one skip warning.
-    for (const laneName of ['static-structural', 'content-coverage', 'file-existence']) {
+    // Every non-G17 lane (static-structural, content-coverage — no
+    // guardrail-compliance since guardrails are absent) gets exactly one skip
+    // warning.
+    for (const laneName of ['static-structural', 'content-coverage']) {
       const matches = result.stderr.match(new RegExp(`lane "${laneName}" skipped — prompt template not found`, 'g')) || [];
       assert.strictEqual(matches.length, 1, `expected exactly one skip warning for lane "${laneName}", got ${matches.length}. stderr:\n${result.stderr}`);
     }
@@ -373,7 +383,7 @@ test('main(): guardrails present, dimensions present, all prompt templates found
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     assert.deepStrictEqual(
       manifest.lanes.map(l => l.id),
-      ['static-structural', 'content-coverage', 'file-existence', 'guardrail-compliance', 'dimension-coverage']
+      ['static-structural', 'content-coverage', 'guardrail-compliance', 'dimension-coverage']
     );
     for (const lane of manifest.lanes) {
       assert.notStrictEqual(lane.promptTemplatePath, null, `lane "${lane.id}" should have resolved a prompt template`);

@@ -1,10 +1,12 @@
 # Step 3 Lane: Static-Structural Gate Evaluation
 
 **Lane:** static-structural
-**Gates owned:** G1, G2, G3, G7, G12
+**Gates owned:** G1, G2, G7
 **Default model:** gemini-4-hydrogen-medium (`flash`)
 
-You are a plan critique lane agent. Your role is to evaluate the plan against the static-structural quality gates listed below. These are pure dependency/coverage graph checks — they do not require reading source files or evaluating content quality.
+You are a plan critique lane agent. Your role is to evaluate the plan against the semantic static-structural coverage gates listed below.
+
+> **Note:** Deterministic graph and file-existence gates (**G3**, **G4**, **G10**, and **G12**) are handled separately by `scripts/skill/plan.js --critique-static` and must NOT be evaluated by this lane.
 
 ---
 
@@ -27,11 +29,7 @@ Evaluate each gate. For each gate, return a pass or one or more issues.
 
 **G2 — No orphan tasks:** Every task traces back to a stated requirement. A task with no clear requirement link is a violation.
 
-**G3 — Dependency integrity:** No circular dependencies exist. Every `Depends on: Task N` reference points to a task that appears before it in the dependency order. Circular deps are blocking.
-
 **G7 — No scope creep:** No tasks implement functionality beyond what the stated requirements ask for. Tasks adding unrequested features or refactors are a violation.
-
-**G12 — Dependency target existence:** Every `Depends on: Task N` reference names a task that actually exists in the plan. A missing dependency target is blocking.
 
 ---
 
@@ -41,7 +39,7 @@ Return a single JSON object as your final output (no prose after the JSON block)
 
 ```json
 {
-  "gateIds": ["G1", "G2", "G3", "G7", "G12"],
+  "gateIds": ["G1", "G2", "G7"],
   "issues": [
     {
       "gateId": "G1",
@@ -51,21 +49,20 @@ Return a single JSON object as your final output (no prose after the JSON block)
       "blocking": true
     }
   ],
-  "passes": ["G2", "G3", "G7", "G12"],
+  "passes": ["G2", "G7"],
   "laneStatus": "ok"
 }
 ```
 
 **Field rules:**
-- `gateIds` — always the full list above (even when all pass)
+- `gateIds` — always `["G1", "G2", "G7"]` (even when all pass)
 - `issues` — empty array `[]` when all gates pass
 - `passes` — list of gate IDs with no issues
 - `laneStatus` — `"ok"` when evaluation completed (even with issues); `"failed"` when you could not evaluate a gate (e.g., plan file unreadable); `"timeout"` is set by the caller when the agent times out
 
 **Severity:**
 - G1, G2, G7: `"warning"` (advisory) when isolated; `"error"` when plan has ≥3 uncovered requirements or ≥3 orphan tasks
-- G3, G12: always `"error"` (blocking) — circular or missing dependencies cannot be resolved autonomously
 
-**Do not evaluate G4, G5, G6, G8–G11, G13–G17 — those belong to other lanes.**
+**Do not evaluate G3, G4, G5, G6, G8–G16, G17 — G3, G4, G10, and G12 are handled deterministically by `scripts/skill/plan.js --critique-static`, and the remaining gates belong to other lanes.**
 
 Output the JSON object as the last content in your response.

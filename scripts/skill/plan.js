@@ -5,8 +5,9 @@
  * Uses lib/openspec.js for detection and lib/config.js for guardrail loading.
  *
  * Usage:
- *   node plan-prepare.js [--from-openspec <change-name>] [--output-file]
- *   node plan-prepare.js --mark <name> [--path <abs>]
+ *   node plan.js [--from-openspec <change-name>] [--output-file]
+ *   node plan.js --mark <name> [--path <abs>]
+ *   node plan.js --critique-static --plan <path> [--project-root <path>]
  *
  * Options:
  *   --from-openspec <name>  Validate a specific OpenSpec change for direct bridging
@@ -14,6 +15,9 @@
  *   --mark <name>           Update the latest plan state file with a checkpoint marker.
  *                           Valid names: plan-file, guardrailsEvaluated, critiqueRan
  *   --path <abs>            Absolute path to the plan file (required when --mark plan-file)
+ *   --critique-static       Run deterministic G3, G4, G10, G12 checks on --plan <path> and emit JSON
+ *   --plan <path>           Plan file path (used with --critique-static)
+ *   --project-root <path>   Project root override (used with --critique-static; defaults to cwd)
  *
  * Exit codes: 0 = success, 1 = validation error, 2 = unexpected crash
  * Stdout: JSON (or file path with --output-file)
@@ -31,7 +35,7 @@ const LIB = path.join(__dirname, '..', 'lib');
 
 const { detectActiveChanges, validateChange, parseTasks } = require(path.join(LIB, 'openspec'));
 const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
-const { writeOutput } = require(path.join(LIB, 'output'));
+const { writeOutput, writeJsonLine } = require(path.join(LIB, 'output'));
 const { resolveSkipConfigCheck, ensureConfigVersion } = require(path.join(LIB, 'config-version-prepare'));
 const { initState, findStateFile, readState, writeState, slugifyBranch, pruneStateFiles } = require(path.join(LIB, 'state'));
 const { exec, parseRemoteOwner } = require(path.join(LIB, 'git'));
@@ -61,6 +65,9 @@ function parseArgs(argv) {
   let fromOpenspec = null;
   let markName = null;
   let markPath = null;
+  let critiqueStatic = false;
+  let planPath = null;
+  let projectRoot = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--from-openspec' && args[i + 1]) {
@@ -69,11 +76,60 @@ function parseArgs(argv) {
       markName = args[++i];
     } else if (args[i] === '--path' && args[i + 1]) {
       markPath = args[++i];
+    } else if (args[i] === '--critique-static') {
+      critiqueStatic = true;
+    } else if (args[i] === '--plan' && args[i + 1]) {
+      planPath = args[++i];
+    } else if (args[i] === '--project-root' && args[i + 1]) {
+      projectRoot = args[++i];
     }
     // --output-file is handled by writeOutput
   }
 
-  return { fromOpenspec, markName, markPath };
+  return { fromOpenspec, markName, markPath, critiqueStatic, planPath, projectRoot };
+}
+
+// ---------------------------------------------------------------------------
+// --critique-static mode: deterministic G3, G4, G10, G12 checks
+// ---------------------------------------------------------------------------
+
+function runCritiqueStaticMode(planPath, projectRootArg) {
+  // Lazy-require so isolated fixtures without scripts/ci/ can still run prepare/mark modes.
+  const { runStaticCritique } = require(path.join(LIB, 'plan-static-critique'));
+
+  if (!planPath) {
+    const msg = '--critique-static requires --plan <path>';
+    process.stderr.write(`[plan-prepare] ${msg}\n`);
+    writeJsonLine(
+      {
+        gateIds: ['G3', 'G4', 'G10', 'G12'],
+        issues: [{ gateId: 'lane-failure', severity: 'error', taskRef: null, message: msg, blocking: true }],
+        passes: [],
+        laneStatus: 'failed',
+      },
+      { exitCode: 1 },
+    );
+    return;
+  }
+
+  const resolvedPlan = path.resolve(planPath);
+  const projectRoot = projectRootArg ? path.resolve(projectRootArg) : process.cwd();
+
+  try {
+    const result = runStaticCritique(resolvedPlan, projectRoot);
+    writeJsonLine(result, { exitCode: 0 });
+  } catch (err) {
+    process.stderr.write(`[plan-prepare] --critique-static: ${err.message}\n`);
+    writeJsonLine(
+      {
+        gateIds: ['G3', 'G4', 'G10', 'G12'],
+        issues: [{ gateId: 'lane-failure', severity: 'error', taskRef: null, message: err.message, blocking: true }],
+        passes: [],
+        laneStatus: 'failed',
+      },
+      { exitCode: 1 },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +263,8 @@ function buildG17Dispatch() {
 
 /**
  * Build P16 lanes[] metadata (R35).
- * Five entries per KD1 lane partitioning. Entry [4] mirrors g17Dispatch verbatim.
+ * Up to four LLM lane entries (G3, G4, G10, G12 are evaluated deterministically via --critique-static).
+ * Final entry (when present) mirrors g17Dispatch verbatim.
  * @param {{ subagentType: string, model: string, agyModel?: string, promptTemplatePath: string|null }} g17Dispatch
  * @returns {Array<{ id: string, name: string, subagentType: string, model: string, agyModel: string, promptTemplatePath: string|null, gateIds: string[] }>}
  */
@@ -221,7 +278,7 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
       name: 'static-structural',
       model: 'gemini-4-hydrogen-medium',
       templateName: 'lane-static-structural-prompt.md',
-      gateIds: ['G1', 'G2', 'G3', 'G7', 'G12', ...(hasGuardrails ? [] : ['G14']), ...(hasDimensions ? [] : ['G17'])],
+      gateIds: ['G1', 'G2', 'G7', ...(hasGuardrails ? [] : ['G14']), ...(hasDimensions ? [] : ['G17'])],
     },
     {
       name: 'content-coverage',
@@ -229,13 +286,7 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
       templateName: 'lane-content-coverage-prompt.md',
       gateIds: ['G5', 'G6', 'G8', 'G9', 'G11', 'G13', 'G15', 'G16'],
     },
-    {
-      name: 'file-existence',
-      model: 'gemini-4-hydrogen-medium',
-      templateName: 'lane-file-existence-prompt.md',
-      gateIds: ['G4', 'G10'],
-    },
-      ...(hasGuardrails ? [{
+    ...(hasGuardrails ? [{
       name: 'guardrail-compliance',
       model: 'gemini-4-hydrogen-medium',
       templateName: 'lane-guardrail-compliance-prompt.md',
@@ -255,7 +306,7 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
 
   // dimension-coverage — mirrors g17Dispatch verbatim (backwards compatibility).
   // Pushed last, but its position is NOT fixed: guardrail-compliance above is
-  // itself conditional on hasGuardrails, so this lane can land at index 3 or 4
+  // itself conditional on hasGuardrails, so this lane can land at index 2 or 3
   // depending on which lanes were dropped. Select this lane by `id`, never by
   // position (see the `lane.id` filter in main()).
   if (hasDimensions) {
@@ -394,10 +445,28 @@ function runExplorePack(fromOpenspec, userPrompt) {
 // ---------------------------------------------------------------------------
 
 function main() {
-  const { fromOpenspec, markName, markPath } = parseArgs(process.argv);
+  const {
+    fromOpenspec,
+    markName,
+    markPath,
+    critiqueStatic,
+    planPath,
+    projectRoot: projectRootArg,
+  } = parseArgs(process.argv);
+
+  // Short-circuit modes before reading stdin or running prepare flow
+  if (critiqueStatic) {
+    runCritiqueStaticMode(planPath, projectRootArg);
+    return;
+  }
+
+  if (markName !== null) {
+    runMarkMode(markName, markPath);
+    return; // runMarkMode calls process.exit(); this is a safeguard
+  }
 
   // Read user prompt from stdin (piped by SKILL.md). May be empty when
-  // invoked without stdin — e.g. from --mark mode or unit tests.
+  // invoked without stdin — e.g. from unit tests.
   // Passing via stdin avoids a new CLI surface (see Task 5 Key Decision).
   let userPrompt = '';
   try {
@@ -406,12 +475,6 @@ function main() {
     }
   } catch (_) {
     // Non-fatal — plan-explore will run with empty prompt
-  }
-
-  // --mark mode: short-circuit before normal prepare flow
-  if (markName !== null) {
-    runMarkMode(markName, markPath);
-    return; // runMarkMode calls process.exit(); this is a safeguard
   }
 
   const projectRoot = resolveSdlcRoot(); // issue #351: route to main worktree .sdlc/
@@ -604,4 +667,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { main, runExplorePack, buildLanes };
+module.exports = { main, runExplorePack, buildLanes, parseArgs };
