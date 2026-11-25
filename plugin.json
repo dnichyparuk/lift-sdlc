@@ -2,6 +2,7 @@
   "name": "lift-sdlc",
   "description": "Skills and commands for software development lifecycle workflows: pull requests, code reviews, release",
   "version": "0.27.2",
+  "logo": "assets/logo.svg",
   "author": {
     "name": "dnichyparuk"
   }

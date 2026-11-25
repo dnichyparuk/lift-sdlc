@@ -1,0 +1,245 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/dnichyparuk/lift-sdlc/main/schemas/sdlc-local.schema.json",
+  "title": "SDLCLocalConfig",
+  "description": "Schema for .sdlc/local.json — developer-local (gitignored) configuration for Lift-SDLC",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "JSON Schema URL for editor validation"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Local config schema version (current: 4)"
+    },
+    "quality": {
+      "type": "string",
+      "enum": ["full", "balanced", "minimal"],
+      "description": "Developer-local default execution quality tier"
+    },
+    "ship": {
+      "$ref": "#/definitions/shipSection"
+    },
+    "execute": {
+      "$ref": "#/definitions/executeSection"
+    },
+    "review": {
+      "$ref": "#/definitions/reviewSection"
+    },
+    "receivedReview": {
+      "$ref": "#/definitions/receivedReviewSection"
+    },
+    "workspace": {
+      "$ref": "#/definitions/workspaceSection"
+    },
+    "state": {
+      "$ref": "#/definitions/stateSection"
+    },
+    "hooks": {
+      "$ref": "#/definitions/hooksSection"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "canonicalStep": {
+      "type": "string",
+      "enum": [
+        "execute",
+        "commit",
+        "review",
+        "version",
+        "archive-openspec",
+        "pr",
+        "verify-pipeline",
+        "await-remote-review",
+        "learnings-commit"
+      ]
+    },
+    "shipSection": {
+      "type": "object",
+      "description": "Developer-local pipeline preferences for ship-sdlc",
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/canonicalStep" }
+        },
+        "quick": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/canonicalStep" }
+        },
+        "quality": {
+          "type": "string",
+          "enum": ["full", "balanced", "minimal"]
+        },
+        "engine": {
+          "type": "string",
+          "enum": ["native", "pipeline-sdlc", "legacy"],
+          "description": "Execution engine for ship-sdlc (native run_workflow, pipeline-sdlc, or legacy)"
+        },
+        "bump": {
+          "type": "string",
+          "pattern": "^(major|minor|patch|[a-z][a-z0-9]*)$",
+          "description": "Default version bump level or pre-release label"
+        },
+        "draft": { "type": "boolean" },
+        "auto": { "type": "boolean" },
+        "workspace": {
+          "type": "string",
+          "enum": ["branch", "worktree", "prompt"]
+        },
+        "rebase": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "string", "enum": ["auto", "skip", "prompt"] }
+          ]
+        },
+        "reviewThreshold": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low"]
+        },
+        "verifyPipelineTimeout": { "type": "integer", "minimum": 30 },
+        "verifyPipelineInterval": { "type": "integer", "minimum": 10 },
+        "verifyPipelineMaxIterations": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "awaitRemoteReviewTimeout": { "type": "integer", "minimum": 30 },
+        "awaitRemoteReviewInterval": { "type": "integer", "minimum": 10 },
+        "awaitRemoteReviewers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "execute": {
+          "type": "object",
+          "properties": {
+            "commitWaves": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "executeSection": {
+      "type": "object",
+      "description": "Developer-local execution worker routing and wave context caps for execute-plan-sdlc",
+      "properties": {
+        "standardWorkerEnum": {
+          "type": "string",
+          "enum": ["pro", "inherit"],
+          "description": "Worker model enum for Balanced Standard tasks (pro for Hydrogen sessions, inherit for Neon sessions)"
+        },
+        "priorWaveContextCaps": {
+          "type": "object",
+          "properties": {
+            "maxFiles": { "type": "integer", "minimum": 1 },
+            "maxDecisions": { "type": "integer", "minimum": 1 },
+            "maxInterfaces": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "reviewSection": {
+      "type": "object",
+      "description": "Developer-local code review defaults for review-sdlc",
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": ["all", "committed", "staged", "working", "worktree"]
+        },
+        "subagent_model": {
+          "type": "string",
+          "description": "Default model for review dimension subagents when a dimension file omits model:"
+        }
+      },
+      "additionalProperties": false
+    },
+    "receivedReviewSection": {
+      "type": "object",
+      "description": "Developer-local auto-apply and hardening settings for received-review-sdlc",
+      "properties": {
+        "alwaysFixSeverities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"]
+          }
+        },
+        "alwaysHardenFromReview": {
+          "type": "boolean",
+          "description": "When true, dispatch harden-sdlc per cluster without a consent prompt"
+        },
+        "hardenClusterCap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Maximum number of harden-sdlc clusters dispatched per Step 11.6 run"
+        }
+      },
+      "additionalProperties": false
+    },
+    "workspaceSection": {
+      "type": "object",
+      "description": "Developer-local git worktree and branch naming preferences",
+      "properties": {
+        "worktree": {
+          "type": "object",
+          "properties": {
+            "layout": {
+              "type": "string",
+              "enum": ["inside", "sibling", "central", "template"]
+            },
+            "base": { "type": "string" },
+            "template": { "type": "string" },
+            "ensureGitignore": { "type": "boolean" },
+            "nameTemplate": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "branch": {
+          "type": "object",
+          "properties": {
+            "template": { "type": "string" },
+            "slugMaxLength": { "type": "integer", "minimum": 8 },
+            "typeMap": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "stateSection": {
+      "type": "object",
+      "description": "State file lifecycle and garbage-collection settings",
+      "properties": {
+        "gc": {
+          "type": "object",
+          "properties": {
+            "ttlDays": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "hooksSection": {
+      "type": "object",
+      "description": "Developer-local plugin hook toggles",
+      "properties": {
+        "agentIsolationGuard": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

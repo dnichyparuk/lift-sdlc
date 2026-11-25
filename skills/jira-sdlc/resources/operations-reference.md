@@ -18,7 +18,7 @@ conditionally after Step 2 classifies the operation type.
 > 3. Detect placeholders via the C13 regex; escalate every `low`-confidence marker via `ask_question`
 > 4. Build the proposed payload
 > 5. Critique — emit the `Initial:` / `Critique:` / `Final:` block, then call `lib/artifact-store.js` `writeCritique(hash, ...)`
-> 6. Approval gate — `ask_question` with `approve` / `change <what>` / `cancel`; on `approve` call `lib/artifact-store.js` `writeApprovalToken(hash)`. No PreToolUse hook exists to verify the artifacts written by steps 5–6 or block dispatch if they're missing — `hooks/pre-tool-jira-write-guard.js` is not implemented and not registered in `hooks.json`. Step 7 dispatch is gated by LLM instruction-following only; verify both artifacts yourself before dispatching
+> 6. Approval gate — `ask_question` with `approve` / `change <what>` / `cancel`; on `approve` call `lib/artifact-store.js` `writeApprovalToken(hash)`. `hooks/pre-tool-jira-write-guard.js` (registered in `hooks.json`) enforces fail-closed that a fresh (< 10 min TTL) paired `approval-<hash>.token` and `critique-<hash>.json` exist in the `artifact-store.js` store directory before Step 7 dispatch; still verify both artifacts yourself before dispatching
 > 7. Dispatch the MCP write call
 > 8. Post-op cache update
 >
@@ -71,7 +71,7 @@ conditionally after Step 2 classifies the operation type.
    - On `cancel`: abort — do not dispatch
 
 7. Dispatch — call mcp__atlassian__createJiraIssue with contentFormat: "markdown"
-   - Before dispatch, re-derive the hash from the final `tool_input` and confirm both artifacts exist for it — no hook backstop exists; this check is yours
+   - Before dispatch, re-derive the hash from the final `tool_input` and confirm both artifacts exist for it (`hooks/pre-tool-jira-write-guard.js` enforces the fresh token pair fail-closed)
    - On 400 error: check fieldSchemas for the issue type; verify field shapes from
      REFERENCE.md Section 2
 

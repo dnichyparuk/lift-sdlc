@@ -447,6 +447,7 @@ function main() {
 module.exports = {
   parseArgs,
   extractTasks,
+  extractField,
   checkPF1,
   checkPF2,
   checkPF3,

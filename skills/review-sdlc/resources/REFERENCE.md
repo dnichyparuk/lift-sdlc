@@ -15,7 +15,7 @@ See `EXAMPLES.md` (in this directory) for 5 copy-paste-ready example dimension f
 {
   "version": 1,
   "timestamp": "ISO-8601",
-  "subagent_model": "gemini-3.8-flash-medium",
+  "subagent_model": "gemini-4-hydrogen-medium",
   "scope": "all",
   "base_branch": "main",
   "current_branch": "feat/xyz",
@@ -39,7 +39,7 @@ See `EXAMPLES.md` (in this directory) for 5 copy-paste-ready example dimension f
       "description": "...",
       "severity": "high",
       "requires_full_diff": false,
-      "model": "gemini-3.8-flash-medium",
+      "model": "gemini-4-hydrogen-medium",
       "status": "ACTIVE",
       "matched_files": ["src/auth/login.ts"],
       "matched_count": 1,
@@ -134,7 +134,7 @@ requires-full-diff: false   # OPTIONAL. Default: false. If true, subagent receiv
 | `severity` | No | string | `medium` | One of: `critical`, `high`, `medium`, `low`, `info` |
 | `max-files` | No | integer | `100` | Positive integer |
 | `requires-full-diff` | No | boolean | `false` | — |
-| `model` | No | string | `null` | One of: `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high`, `gemini-3.1-pro-low`, `gemini-3.1-pro-high`. Per-dimension model override; falls back to `manifest.subagent_model` when null. Antigravity-Code-only — Copilot transform omits it. |
+| `model` | No | string | `null` | One of: `gemini-4-hydrogen-low`, `gemini-4-hydrogen-medium`, `gemini-4-hydrogen-high`, `gemini-4-neon-low`, `gemini-4-carbon-high` (or any Gemini 4 tier / `agy` enum `inherit | flash_lite | flash | pro`). Per-dimension model override; falls back to `manifest.subagent_model` when null. Antigravity-Code-only — Copilot transform omits it. |
 
 ### Body content
 

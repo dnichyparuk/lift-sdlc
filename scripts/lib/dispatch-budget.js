@@ -14,11 +14,17 @@
 // ---------------------------------------------------------------------------
 // Model context limits (conservative byte ceiling = token limit × 4 bytes/token)
 // Using 75% of budget for inputs; 25% reserved for sub-agent reasoning + output.
-// Antigravity 4 family: all models have 200K token input limit.
+// Gemini 4 family: all models have 1M token input limit.
 // ---------------------------------------------------------------------------
+const ONE_MILLION_INPUT_BYTES = Math.floor(1_000_000 * 4 * 0.75);
 const MODEL_MAX_INPUT_BYTES = {
-  'gemini-3.8-flash': Math.floor(1_000_000 * 4 * 0.75),
-  'gemini-3.1-pro': Math.floor(1_000_000 * 4 * 0.75), // all models share 1M token window
+  'gemini-4-hydrogen': ONE_MILLION_INPUT_BYTES,
+  'gemini-4-neon': ONE_MILLION_INPUT_BYTES,
+  'gemini-4-argon': ONE_MILLION_INPUT_BYTES,
+  'gemini-4-carbon': ONE_MILLION_INPUT_BYTES,
+  // Legacy Gemini 3.x entries (backwards compatibility)
+  'gemini-3.8-flash': ONE_MILLION_INPUT_BYTES,
+  'gemini-3.1-pro': ONE_MILLION_INPUT_BYTES,
 };
 
 // Static wave-size cap table (tasks 4-8 → 4, 9-15 → 5, 16+ → 6).
@@ -56,25 +62,41 @@ function staticCap(totalRemainingTasks) {
  * @param {number}   opts.guardrailsBytes           - bytes for rendered guardrails block
  * @param {number[]} opts.perTaskFactSheetBytes      - array of fact-sheet sizes, one per candidate task
  * @param {number}   opts.priorWaveContextBytes      - bytes for prior-wave context summary
- * @param {string}   opts.model                     - "gemini-3.8-flash" | "gemini-3.1-pro"
+ * @param {string}   opts.model                     - Gemini 4 model (e.g. "gemini-4-hydrogen", "gemini-4-neon") or legacy Gemini 3.x model
  * @param {number}   [opts.modelMaxInputBytes]       - override model limit (for testing)
  * @param {number}   [opts.totalRemainingTasks]      - used for static-cap lookup (default: perTaskFactSheetBytes.length)
  *
  * @returns {{ maxConcurrentTasks: number, perTaskCeiling: number, totalReservedBytes: number }}
  */
+function getReservedRatio(model) {
+  const norm = typeof model === 'string' ? model.trim().toLowerCase() : '';
+  if (norm.endsWith('-xhigh') || norm === 'gemini-4-carbon-high') {
+    return 0.35;
+  }
+  return 0.25;
+}
+
 function computeWaveBudget({
   templateBytes = 0,
   guardrailsBytes = 0,
   perTaskFactSheetBytes = [],
   priorWaveContextBytes = 0,
-  model = 'gemini-3.8-flash',
+  model = 'gemini-4-hydrogen',
   modelMaxInputBytes: modelMaxInputBytesOverride,
   totalRemainingTasks,
 }) {
-  const baseModel = model.replace(/-(low|medium|high)$/, '');
+  const normalizedModel = typeof model === 'string' ? model.trim().toLowerCase() : 'gemini-4-hydrogen';
+  const reservedRatio = getReservedRatio(normalizedModel);
+  const baseModel = normalizedModel.replace(/-(low|medium|high|xhigh)$/, '');
+  const baseMaxInputBytes = MODEL_MAX_INPUT_BYTES[baseModel] || MODEL_MAX_INPUT_BYTES['gemini-4-hydrogen'];
+  // MODEL_MAX_INPUT_BYTES encodes the default 0.25 reservedRatio (75% input).
+  // Re-scale to (1 - reservedRatio) when thinking-level output reserve increases.
+  const computedMaxInputBytes = reservedRatio === 0.25
+    ? baseMaxInputBytes
+    : Math.floor((baseMaxInputBytes / 0.75) * (1 - reservedRatio));
   const maxInputBytes = modelMaxInputBytesOverride != null
     ? modelMaxInputBytesOverride
-    : (MODEL_MAX_INPUT_BYTES[baseModel] || MODEL_MAX_INPUT_BYTES['gemini-3.8-flash']);
+    : computedMaxInputBytes;
 
   const numCandidates = perTaskFactSheetBytes.length;
   const totalRemaining = totalRemainingTasks != null ? totalRemainingTasks : numCandidates;
@@ -126,4 +148,4 @@ function computeWaveBudget({
   };
 }
 
-module.exports = { computeWaveBudget, staticCap, MODEL_MAX_INPUT_BYTES };
+module.exports = { computeWaveBudget, staticCap, getReservedRatio, MODEL_MAX_INPUT_BYTES };

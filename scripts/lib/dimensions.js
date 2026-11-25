@@ -13,6 +13,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { extractFrontmatter, extractBody, parseSimpleYaml } = require('./yaml.js');
+const { GEMINI4_MODELS, VALID_AGY_ENUMS } = require('./model-tiers.js');
 
 // ---------------------------------------------------------------------------
 // Glob syntax validation (lightweight — no minimatch)
@@ -63,6 +64,9 @@ const KNOWN_FIELDS = new Set([
 
 const VALID_SEVERITIES = new Set(['critical', 'high', 'medium', 'low', 'info']);
 const VALID_MODELS = new Set([
+  ...GEMINI4_MODELS,
+  ...VALID_AGY_ENUMS,
+  // Legacy Gemini 3.x tiers (kept for backwards compatibility with user-defined dimensions)
   'gemini-3.8-flash-low',
   'gemini-3.8-flash-medium',
   'gemini-3.8-flash-high',

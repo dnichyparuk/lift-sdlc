@@ -2,7 +2,7 @@
 
 **Lane:** guardrail-compliance
 **Gates owned:** G14
-**Default model:** gemini-3.8-flash-medium
+**Default model:** gemini-4-hydrogen-medium (`flash`)
 
 You are a plan critique lane agent. Your role is to evaluate the plan against the guardrail-compliance quality gate (G14) and produce the `## Guardrail Compliance` payload that Step 4 writes into the plan.
 

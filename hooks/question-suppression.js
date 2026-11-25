@@ -15,7 +15,7 @@
 
 'use strict';
 
-const fs = require('node:fs');
+const { readHookContext } = require('./lib/hook-context');
 
 const APPROVAL_GATE_MARKERS = [
   'approve',
@@ -34,28 +34,34 @@ function hasApprovalMarker(text) {
 
 try {
   // Read stdin
-  let input = {};
-  try {
-    const raw = fs.readFileSync(0, 'utf8');
-    if (raw && raw.trim()) input = JSON.parse(raw);
-  } catch (_) {
+  const { ok, input, workspaceCwd } = readHookContext({ failClosed: true });
+  if (!ok) {
     // Fail closed if input is unreadable or malformed
     process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'question-suppression hook could not parse tool-call input (fail-closed)' }) + '\n');
     process.exit(0);
   }
 
   const { pipelineAdvancing } = require('../scripts/lib/state');
-  const adv = pipelineAdvancing();
+  const adv = pipelineAdvancing({ cwd: workspaceCwd });
 
   if (adv && adv.advancing && adv.auto) {
     const toolCall = input.toolCall || {};
-    if (toolCall.name && toolCall.name !== 'AskUserQuestion' && toolCall.name !== 'ask_question') {
+    if (
+      toolCall.name &&
+      toolCall.name !== 'AskUserQuestion' &&
+      toolCall.name !== 'ask_question' &&
+      toolCall.name !== 'ask_user'
+    ) {
       process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
       process.exit(0);
     }
 
     const args = toolCall.args || {};
-    const questions = Array.isArray(args.questions) ? args.questions : [];
+    const questions = Array.isArray(args.questions)
+      ? args.questions
+      : (typeof args.question === 'string'
+        ? [{ question: args.question, options: Array.isArray(args.options) ? args.options : [] }]
+        : []);
     if (questions.length === 0) {
       process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
       process.exit(0);
@@ -63,13 +69,24 @@ try {
 
     let isApprovalGate = false;
     for (const q of questions) {
+      if (typeof q === 'string') {
+        if (hasApprovalMarker(q)) {
+          isApprovalGate = true;
+          break;
+        }
+        continue;
+      }
+      if (!q || typeof q !== 'object') continue;
       if (hasApprovalMarker(q.question)) {
         isApprovalGate = true;
         break;
       }
       if (Array.isArray(q.options)) {
         for (const opt of q.options) {
-          if (hasApprovalMarker(opt)) {
+          if (
+            hasApprovalMarker(opt) ||
+            (opt && typeof opt === 'object' && (hasApprovalMarker(opt.label) || hasApprovalMarker(opt.description)))
+          ) {
             isApprovalGate = true;
             break;
           }

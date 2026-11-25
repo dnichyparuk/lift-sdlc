@@ -232,6 +232,60 @@ test('question-suppression: allows ask_question with approval marker in auto mod
   }
 });
 
+test('question-suppression: denies non-approval ask_user in auto mode and allows with approval marker', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'q-supp-test-'));
+  const prevOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
+  process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
+
+  try {
+    const branch = exec('git branch --show-current') || 'feature/test';
+
+    initState('ship', branch, {
+      branch,
+      flags: { auto: true },
+      steps: [{ name: 'review', status: 'in_progress' }],
+    });
+
+    const denyPayload = JSON.stringify({
+      toolCall: {
+        name: 'ask_user',
+        args: { questions: [{ question: 'Which style?', options: ['Style1', 'Style2'] }] },
+      },
+    });
+    const denyRes = spawnSync(process.execPath, [HOOK_PATH], {
+      input: denyPayload,
+      encoding: 'utf8',
+      env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir, SDLC_BRANCH_OVERRIDE: branch },
+    });
+    assert.strictEqual(denyRes.status, 0);
+    const denyJson = JSON.parse(denyRes.stdout.trim());
+    assert.strictEqual(denyJson.decision, 'deny');
+    assert.ok(denyJson.reason.includes('review'));
+
+    const allowPayload = JSON.stringify({
+      toolCall: {
+        name: 'ask_user',
+        args: { questions: [{ question: 'Do you approve proceeding?', options: ['Yes', 'No'] }] },
+      },
+    });
+    const allowRes = spawnSync(process.execPath, [HOOK_PATH], {
+      input: allowPayload,
+      encoding: 'utf8',
+      env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir, SDLC_BRANCH_OVERRIDE: branch },
+    });
+    assert.strictEqual(allowRes.status, 0);
+    const allowJson = JSON.parse(allowRes.stdout.trim());
+    assert.strictEqual(allowJson.decision, 'allow');
+  } finally {
+    if (prevOverride !== undefined) {
+      process.env.SDLC_STATE_DIR_OVERRIDE = prevOverride;
+    } else {
+      delete process.env.SDLC_STATE_DIR_OVERRIDE;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('question-suppression: fails closed (deny) on malformed or unparseable stdin', () => {
   const res = spawnSync(process.execPath, [HOOK_PATH], {
     input: '{ not-json',

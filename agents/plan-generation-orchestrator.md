@@ -2,8 +2,8 @@
 name: plan-generation-orchestrator
 description: Receives exploration brief, requirements, and codebase context to write the implementation plan file containing tasks with dependencies, complexity, and verification metadata.
 subagent: true
-tools: view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command
-model: gemini-3.1-pro-high
+tools: [view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command]
+model: pro
 ---
 
 # Plan Generation Orchestrator

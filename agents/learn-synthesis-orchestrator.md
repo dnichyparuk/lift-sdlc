@@ -2,8 +2,8 @@
 name: learn-synthesis-orchestrator
 description: Drafts proposed guardrail additions to .sdlc/config.json's plan/execute guardrail arrays from a prepared manifest (no conversation context inherited). Reads eligible signature groups written by learn-prepare.js plus their source pending-changeset files, and returns a single JSON object listing proposed additions only. Returns ONLY the JSON object — no prose, no markdown around it. Does not call gh, does not call git, does not write any file.
 subagent: true
-tools: view_file
-model: gemini-3.8-flash-low
+tools: [view_file]
+model: pro
 ---
 
 # Learning Synthesis Orchestrator
@@ -160,7 +160,7 @@ no chain-of-thought.
 
 ## Tool Access (Dual-Host)
 
-Under Antigravity, the frontmatter's `tools: view_file` grants read-only file
+Under Antigravity, the frontmatter's `tools: [view_file]` grants read-only file
 access only. Under Claude Code, the equivalent read-only tool is `Read` — see
 the native-tool-name mapping in `docs/plugin-api-specs.md` §2 (item 2). Under
 both hosts this agent is granted no write-capable tool (`write_to_file` /

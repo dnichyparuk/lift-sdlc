@@ -108,3 +108,48 @@ test('PD5 passes with no sibling refs at all', () => {
   const finding = pd5(root);
   assert.strictEqual(finding.status, 'pass');
 });
+
+test('PD5 resolves lowercase `./resources/*.md`, `resources/*.md`, and markdown links', () => {
+  const root = makeTree({
+    'plugin.json': MINIMAL_MANIFEST,
+    'skills/demo/SKILL.md': [
+      '---',
+      'name: demo',
+      'description: demo skill',
+      '---',
+      '',
+      'Read `./resources/state-format.md`, `resources/guide.md`, and [details](./resources/more-info.md#section).',
+    ].join('\n'),
+    'skills/demo/resources/state-format.md': '# State\n',
+    'skills/demo/resources/guide.md': '# Guide\n',
+    'skills/demo/resources/more-info.md': '# More\n',
+  });
+
+  const finding = pd5(root);
+  assert.strictEqual(finding.status, 'pass');
+});
+
+test('PD5 fails on dangling lowercase `./resources/*.md` or markdown resource links', () => {
+  const root = makeTree({
+    'plugin.json': MINIMAL_MANIFEST,
+    'skills/demo/SKILL.md': [
+      '---',
+      'name: demo',
+      'description: demo skill',
+      '---',
+      '',
+      'Read `./resources/dangling-guide.md` and [missing](resources/missing-link.md).',
+    ].join('\n'),
+  });
+
+  const finding = pd5(root);
+  assert.strictEqual(finding.status, 'fail');
+  assert.ok(
+    finding.details.some(d => d.includes('resources/dangling-guide.md')),
+    `expected details to mention resources/dangling-guide.md, got: ${JSON.stringify(finding.details)}`
+  );
+  assert.ok(
+    finding.details.some(d => d.includes('resources/missing-link.md')),
+    `expected details to mention resources/missing-link.md, got: ${JSON.stringify(finding.details)}`
+  );
+});

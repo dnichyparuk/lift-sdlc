@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 /**
  * session-start.js
- * PreInvocation hook — outputs plugin version, skill count, and project
+ * SessionStart hook — outputs plugin version, skill count, and project
  * context (pipeline resume, OpenSpec, git status, Jira cache, ship config)
- * as an ephemeral message injected before the model is called.
+ * as a systemMessage injected when a session starts.
  *
- * Antigravity has no SessionStart event; PreInvocation fires before EVERY
- * model invocation, so this hook gates itself on `invocationNum` and only
- * emits the banner on the first invocation of a conversation. Later
- * invocations return `{}` (no injection).
+ * Also retains the `invocationNum > 1` gate in case a host invokes this script
+ * on PreInvocation (later invocations return `{}`).
  *
  * Lazy-loads ../scripts/lib/state.js and ../scripts/lib/git.js for project
  * context phases. Falls back gracefully if unavailable.
@@ -20,29 +18,13 @@
 'use strict';
 
 const fs   = require('node:fs');
+const { readHookContext, formatSystemMessage } = require('./lib/hook-context');
 
 // ---------------------------------------------------------------------------
-// Invocation gate (PreInvocation fires every turn)
-// Stdin payload shape (official Antigravity PreInvocation contract):
-//   { invocationNum, initialNumSteps, conversationId, workspacePaths,
-//     transcriptPath, artifactDirectoryPath, modelName }
-// Only invocationNum === 1 (or a missing/unparseable payload, for graceful
-// degradation) emits the banner.
+// Stdin parsing & workspace resolution
 // ---------------------------------------------------------------------------
 
-let stdinRaw = '';
-try {
-  stdinRaw = fs.readFileSync(0, 'utf8');
-} catch {
-  // Stdin unreadable — treat as first invocation (advisory-only contract).
-}
-
-let envelope = null;
-try {
-  if (stdinRaw) envelope = JSON.parse(stdinRaw);
-} catch {
-  // Non-JSON stdin — envelope stays null.
-}
+const { input: envelope, workspaceCwd } = readHookContext({ failClosed: false });
 
 if (
   envelope &&
@@ -125,7 +107,7 @@ const resumeLines = [];
 try {
   const { slugifyBranch, findStateFile, readState, getRegisteredPrefixes } = require('../scripts/lib/state');
   const { exec } = require('../scripts/lib/git');
-  const branch = exec('git branch --show-current');
+  const branch = exec('git branch --show-current', { cwd: workspaceCwd });
   if (branch) {
     const branchSlug = slugifyBranch(branch);
 
@@ -135,9 +117,9 @@ try {
       : ['ship', 'run-workflow'];
 
     for (const prefix of prefixes) {
-      const found = findStateFile(prefix, branchSlug);
+      const found = findStateFile(prefix, branchSlug, workspaceCwd);
       if (found) {
-        const state = readState(prefix, branchSlug);
+        const state = readState(prefix, branchSlug, workspaceCwd);
         if (state && state.data && Array.isArray(state.data.steps)) {
           const steps = state.data.steps;
           const inProgress = steps.find(s => s.status === 'in_progress');
@@ -156,9 +138,9 @@ try {
     }
 
     // Check for execute state file
-    const executeFound = findStateFile('execute', branchSlug);
+    const executeFound = findStateFile('execute', branchSlug, workspaceCwd);
     if (executeFound) {
-      const executeState = readState('execute', branchSlug);
+      const executeState = readState('execute', branchSlug, workspaceCwd);
       if (executeState && executeState.data && Array.isArray(executeState.data.waves)) {
         const waves = executeState.data.waves;
         const completedWaves = waves.filter(w => w.status === 'completed').length;
@@ -195,14 +177,14 @@ try {
   try {
     const stateLib = require('../scripts/lib/state');
     const { exec } = require('../scripts/lib/git');
-    recoveryDir = stateLib.resolveStateDir();
-    const branch = exec('git branch --show-current');
+    recoveryDir = stateLib.resolveStateDir(workspaceCwd);
+    const branch = exec('git branch --show-current', { cwd: workspaceCwd });
     if (branch) branchSlug = stateLib.slugifyBranch(branch);
     maxAgeMs = stateLib.COMPACT_RECOVERY_TTL_MS;
   } catch {
     // R-projectroot: main-worktree-rooted resolution (#360).
     const { resolveSdlcRoot } = require('../scripts/lib/config');
-    recoveryDir = path.join(resolveSdlcRoot(), '.sdlc', 'execution');
+    recoveryDir = path.join(resolveSdlcRoot({ cwd: workspaceCwd }), '.sdlc', 'execution');
     // Fallback when state lib is unreachable — match the canonical TTL.
     maxAgeMs = HOUR_MS;
   }
@@ -308,7 +290,7 @@ try {
 try {
   // R-projectroot: main-worktree-rooted resolution (#360).
   const { resolveSdlcRoot } = require('../scripts/lib/config');
-  const projectRoot = resolveSdlcRoot();
+  const projectRoot = resolveSdlcRoot({ cwd: workspaceCwd });
   const { detectActiveChanges, STAGE_LABELS } = require('../scripts/lib/openspec');
   const openspec = detectActiveChanges(projectRoot);
 
@@ -330,7 +312,7 @@ try {
     if (openspec.branchMatch === change.name) {
       try {
         const { exec } = require('../scripts/lib/git');
-        const branch = exec('git branch --show-current');
+        const branch = exec('git branch --show-current', { cwd: workspaceCwd });
         if (branch) {
           resumeLines.push(`  Branch match: ${branch} -> auto-linked`);
         }
@@ -374,7 +356,7 @@ try {
 try {
   const { checkGitState, detectBaseBranch, exec } = require('../scripts/lib/git');
   // KEEP: pure git op — do not change to resolveSdlcRoot()
-  const projectRoot = process.cwd();
+  const projectRoot = workspaceCwd;
   const gitState = checkGitState(projectRoot);
   const { currentBranch, dirtyFiles } = gitState;
 
@@ -482,7 +464,7 @@ try {
 try {
   const { readSection, normalizePreset, resolveSdlcRoot } = require(path.join(__dirname, '..', 'scripts', 'lib', 'config.js'));
   // R-projectroot: main-worktree-rooted resolution (#360).
-  const projectRoot = resolveSdlcRoot();
+  const projectRoot = resolveSdlcRoot({ cwd: workspaceCwd });
   const shipConfig = readSection(projectRoot, 'ship');
   if (shipConfig) {
     // Note: steps[] is the v2 canonical field. preset/skip are legacy v1
@@ -514,12 +496,4 @@ const outputLines = [
 ];
 
 const sessionNotice = outputLines.join('\n');
-process.stdout.write(JSON.stringify({
-  injectSteps: [
-    {
-      ephemeralMessage: sessionNotice,
-      type: 'ephemeralMessage',
-      content: sessionNotice,
-    },
-  ]
-}) + '\n');
+process.stdout.write(JSON.stringify(formatSystemMessage(sessionNotice)) + '\n');

@@ -39,47 +39,49 @@ When signals are mixed, round up (prefer higher risk level).
 
 Model assignment derives from the complexity class. The three presets in Step 4 apply these mappings across all tasks.
 
-| Complexity | Default Model | Rationale |
-|---|---|---|
-| Trivial | `gemini-3.8-flash-medium` | Capable baseline; avoids syntax errors on simple tasks. Single trivial → execute inline. Two or more trivials in the same phase → dispatch as one batch agent. |
-| Standard | `gemini-3.8-flash-medium` | Capable, cost-efficient |
-| Complex | `gemini-3.1-pro-low` | Most capable; needed for architectural work |
+| Complexity | Default Model | `agy` Enum | Rationale |
+|---|---|---|---|
+| Trivial | `gemini-4-hydrogen-medium` | `flash` | Capable baseline; avoids syntax errors on simple tasks. Single trivial → execute inline. Two or more trivials in the same phase → dispatch as one batch agent. |
+| Standard | `gemini-4-neon-low` | `pro` (or `inherit`)* | Neon-for-Coding baseline for multi-file feature and test work (`execute.standardWorkerEnum: "pro" \| "inherit"`) |
+| Complex | `gemini-4-neon-medium` | `pro` | Deep reasoning needed for architectural and cross-cutting work |
 
 ### Override signals
 
-Assign `gemini-3.1-pro-low` to any task with `Risk: High` (e.g., authentication, authorization, session management, cryptography, database migrations, credentials, destructive file/functionality removal, shared mutable state), regardless of its complexity class.
+Assign `gemini-4-neon-low` / `gemini-4-neon-medium` (`pro`) to any task with `Risk: High` (e.g., authentication, authorization, session management, cryptography, database migrations, credentials, destructive file/functionality removal, shared mutable state), regardless of its complexity class.
 
-Assign `gemini-3.1-pro-low` to a Standard task when:
+Assign `gemini-4-neon-medium` (`pro`) to a Standard task when:
 - The task involves unfamiliar or poorly documented code
 - The task requires nuanced judgment (choosing between multiple valid approaches)
-- A prior `gemini-3.8-flash-medium` attempt on a similar task in this project failed
+- A prior `gemini-4-hydrogen-medium` (`flash`) attempt on a similar task in this project failed
 
-Assign `gemini-3.8-flash-medium` to a Complex task when:
+Assign `gemini-4-hydrogen-medium` (`flash`) to a Complex task when:
 - The task is complex only because it touches many files, but each individual change is mechanical
 - The changes are fully specified with exact code to write (no design judgment needed)
 
 ### Model Presets
 
-Always present 3 presets in Step 4, regardless of plan size. The actual subagents dispatched by the wave-runner will explicitly inherit these reasoning budgets.
+Always present 3 presets in Step 4, regardless of plan size. Subagents dispatched via `invoke_subagent` map each Gemini 4 profile to its `agy` runtime enum (`flash_lite`, `flash`, or `pro`, or `"inherit"` for Standard tasks when configured).
 
 | Preset | Trivial | Standard | Complex | Best when |
 |---|---|---|---|---|
-| **Speed** | gemini-3.8-flash-medium | gemini-3.8-flash-medium | gemini-3.8-flash-high | Plan is well-specified, changes are mechanical |
-| **Balanced** | gemini-3.8-flash-medium | gemini-3.8-flash-medium | gemini-3.8-flash-high* | Default (hybrid) — fast Flash execution, Pro escalation on retry |
-| **Quality** | gemini-3.8-flash-medium | gemini-3.1-pro-low | gemini-3.1-pro-high | Codebase is unfamiliar, high-stakes tasks requiring deep Pro reasoning |
+| **Speed** (`--quality minimal`) | `gemini-4-hydrogen-medium` (`flash`) | `gemini-4-hydrogen-medium` (`flash`) | `gemini-4-hydrogen-high` (`flash`) | Plan is well-specified, changes are mechanical |
+| **Balanced** (`--quality balanced`) | `gemini-4-hydrogen-medium` (`flash`) | `gemini-4-neon-low` (`pro`)* | `gemini-4-neon-medium` (`pro`) | Default — Hydrogen trivials, Neon-for-Coding Standard & Complex |
+| **Quality** (`--quality full`) | `gemini-4-hydrogen-medium` (`flash`) | `gemini-4-neon-medium` (`pro`) | `gemini-4-carbon-medium` (`pro`) | Codebase is unfamiliar, high-stakes tasks requiring flagship Carbon Pro reasoning |
 
-\* In Balanced tier, Complex tasks start on `gemini-3.8-flash-high` for maximum execution speed and low latency. If a task fails verification, it automatically escalates to `gemini-3.1-pro-low` on Retry 1 and `gemini-3.1-pro-high` on Retry 2.
+*\* `execute.standardWorkerEnum: "pro" | "inherit"` (default `"pro"`): in `.sdlc/config.json` or `.sdlc/local.json`, set `"inherit"` when running inside a Neon session so Standard tasks inherit the session's Neon model directly; keep `"pro"` (default) so Hydrogen sessions still dispatch Standard workers on Neon. On failure, retries follow the failure-aware ladder (`NEEDS_CONTEXT` same model; `FAILED_TESTS`/capability failures escalate Hydrogen → Neon → Argon → Carbon; `agy` enum `flash_lite -> flash -> pro`).*
 
 ### Model Dispatch Enforcement
 
 The `Model:` parameter is REQUIRED on every `invoke_subagent` dispatch — no exception. Omitting it causes the agent to inherit the parent context model, defeating the preset system's cost optimization.
 
-**Platform Enum Mapping**: The `invoke_subagent` tool accepts only `inherit`, `flash_lite`, `flash`, or `pro`. Map the assigned task model before calling the tool:
-- `gemini-3.1-pro-*` → `"pro"`
-- `gemini-3.8-flash-low` → `"flash_lite"`
-- `gemini-3.8-flash-medium` / `gemini-3.8-flash-high` → `"flash"`
+**Platform Enum Mapping** (`scripts/lib/model-tiers.js::toAgyModelEnum`): The `invoke_subagent` tool accepts only `inherit`, `flash_lite`, `flash`, or `pro`. Map the assigned Gemini 4 model before calling the tool:
+- `gemini-4-hydrogen-low` → `"flash_lite"`
+- `gemini-4-hydrogen-medium` / `gemini-4-hydrogen-high` / `gemini-4-hydrogen-xhigh` → `"flash"`
+- `gemini-4-neon-*` / `gemini-4-argon-*` / `gemini-4-carbon-*` → `"pro"` (or `"inherit"` for Balanced Standard tasks when `execute.standardWorkerEnum === "inherit"`)
 
-When dispatching a wave-runner Agent, lock the orchestrator to `"Model": "flash_lite"`. The presets above apply strictly to the *per-task worker subagents* that the wave-runner spawns.
+**Escalation Ladder** (`scripts/lib/model-tiers.js::escalateAgyModel`): `flash_lite -> flash -> pro` (logical Gemini 4 ladder: Hydrogen → Neon → Argon → Carbon; `NEEDS_CONTEXT` retries on the same model).
+
+When dispatching a wave-runner Agent, lock the orchestrator to `"Model": "flash"` (`gemini-4-hydrogen-medium`). The presets above apply strictly to the *per-task worker subagents* that the wave-runner spawns.
 
 ## Wave-Building Algorithm
 
@@ -123,7 +125,7 @@ When dispatching a wave-runner Agent, lock the orchestrator to `"Model": "flash_
 
 7. **Identify pre-wave trivials:** Trivial tasks that have downstream dependents in Wave 1 should run in the pre-wave. If there is only 1 pre-wave trivial, execute it inline. If there are 2+, dispatch them as a single batch agent (see Batched Trivial Tasks Prompt Template below).
 
-8. **Identify in-wave trivial batches:** Within each wave, if 2 or more tasks are classified Trivial, dispatch them together as a single batch agent (using the assigned model for Trivial tasks, e.g., gemini-3.8-flash-medium) rather than executing each inline. A single trivial task in a wave is still executed inline. Same-file ordering rules apply within the batch (see Batched Trivial Tasks Prompt Template below).
+8. **Identify in-wave trivial batches:** Within each wave, if 2 or more tasks are classified Trivial, dispatch them together as a single batch agent (using the assigned model for Trivial tasks, e.g., `gemini-4-hydrogen-medium` / `flash`) rather than executing each inline. A single trivial task in a wave is still executed inline. Same-file ordering rules apply within the batch (see Batched Trivial Tasks Prompt Template below).
 
 ## Adaptive Wave Size Cap
 
@@ -242,8 +244,7 @@ Review your work before reporting. Check:
 If you find issues during self-review, fix them before reporting.
 
 ## Execution Context
-- Assigned model: {MODEL — gemini-3.8-flash-low, gemini-3.8-flash-medium, gemini-3.8-flash-high, gemini-3.1-pro-low, or gemini-3.1-pro-high}
-- Permission mode: bypassPermissions (set explicitly on this agent — do not change).
+- Assigned model: {MODEL — any tier in GEMINI4_MODELS: gemini-4-hydrogen-{low,medium,high,xhigh}, gemini-4-neon-{low,medium,high,xhigh}, gemini-4-argon-{low,medium,high}, or gemini-4-carbon-{low,medium,high} (agy enum: inherit | flash_lite | flash | pro)}
 - Attempt: {first attempt | retry N — previous attempt failed: {failure description}}
 - {If model was escalated: "Model escalated from {previous-model} to {this-model} due to prior failure."}
 ```
@@ -337,8 +338,7 @@ VERIFY Task {N}: <symbol_name> in <file_path>
 Use the primary symbol added or modified in each task. The orchestrator greps for these symbols to confirm changes persisted.
 
 ## Execution Context
-- Assigned model: {MODEL — gemini-3.8-flash-low, gemini-3.8-flash-medium, gemini-3.8-flash-high, gemini-3.1-pro-low, or gemini-3.1-pro-high}
-- Permission mode: bypassPermissions (set explicitly on this agent — do not change).
+- Assigned model: {MODEL — any tier in GEMINI4_MODELS: gemini-4-hydrogen-{low,medium,high,xhigh}, gemini-4-neon-{low,medium,high,xhigh}, gemini-4-argon-{low,medium,high}, or gemini-4-carbon-{low,medium,high} (agy enum: inherit | flash_lite | flash | pro)}
 - Attempt: {first attempt | retry N — previous attempt failed: {failure description}}
 - {If model was escalated: "Model escalated from {previous-model} to {this-model} due to prior failure."}
 ~~~

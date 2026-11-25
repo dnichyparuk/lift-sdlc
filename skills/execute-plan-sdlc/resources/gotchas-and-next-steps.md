@@ -14,13 +14,13 @@ when Step 9 (REPORT) is reached.
 
 **Batch agent ordering matters for same-file trivials.** When 2+ trivial tasks in a batch touch the same file, include an Ordering Constraints section in the batch prompt that lists the required sequence. Without it, the agent may apply edits in the wrong order and the second edit will conflict with the first.
 
-**Partial batch failure requires per-task extraction.** When a batch agent reports some tasks as SUCCESS and others as FAILED, do not re-dispatch the entire batch. Extract only the failed tasks and re-dispatch each individually with model escalation (gemini-3.8-flash-low → gemini-3.8-flash-medium). Completed tasks in the batch are final — re-running them risks duplicate changes.
+**Partial batch failure requires per-task extraction.** When a batch agent reports some tasks as SUCCESS and others as FAILED, do not re-dispatch the entire batch. Extract only the failed tasks and re-dispatch each individually with model escalation (`gemini-4-hydrogen-medium` → `gemini-4-neon-low` / `flash` → `pro`). Completed tasks in the batch are final — re-running them risks duplicate changes.
 
 **Plan drift compounds across waves.** After 3+ waves, the codebase may differ significantly from what the plan assumed. The inter-wave critique (Step 5e) exists specifically to catch this. Skipping it on "obvious" waves is where cascading failures begin.
 
 **Wave sizing heuristics are guidelines.** On resource-constrained systems or when tasks share state (databases, caches), reduce wave size to 2–3 regardless of the heuristic table.
 
-**Model escalation is not a retry substitute.** Escalating from gemini-3.8-flash-medium to gemini-3.8-flash-high (or gemini-3.8-flash-high to gemini-3.1-pro-low) gives the agent more capability, but if the failure was caused by a bad prompt or insufficient context, a stronger model won't help. Always add failure context to the retry prompt regardless of model change. Escalation consumes one of the 2 allowed retries.
+**Model escalation is not a retry substitute.** Escalating from `gemini-4-hydrogen-medium` to `gemini-4-neon-low` (or `gemini-4-neon-low` to `gemini-4-argon-low` / `gemini-4-carbon-medium`) gives the agent more capability, but if the failure was caused by a bad prompt or insufficient context, a stronger model won't help. Always add failure context to the retry prompt regardless of model change. Escalation consumes one of the 2 allowed retries.
 
 **Agents may bypass native editing tools.** Agents sometimes use bash `sed`, `awk`, Python scripts, or compiled programs in `/tmp` to modify files instead of `replace_file_content` or `write_to_file`. These approaches are fragile (wrong line numbers, regex mismatches, wrong working directory) and silently fail — the agent reports success, but the file is unchanged or corrupted. The Hard Constraints in the agent prompt forbid this, but the filesystem verification in Step 5c catches cases where the constraint was ignored.
 

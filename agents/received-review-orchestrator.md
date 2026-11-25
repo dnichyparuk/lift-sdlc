@@ -2,8 +2,8 @@
 name: received-review-orchestrator
 description: Orchestrates verification of outstanding received-review comment threads. Reads a manifest of PR review threads, groups them by file path, dispatches verifier subagents in parallel to check reviewer claims against the actual code, persists a verification report to disk, and returns a bounded VERIFY_SUMMARY token to the main context.
 subagent: true
-tools: view_file, write_to_file, find_by_name, grep_search, run_command, invoke_subagent
-model: gemini-3.8-flash-low
+tools: [view_file, write_to_file, find_by_name, grep_search, run_command, invoke_subagent]
+model: flash
 ---
 
 # Received-Review Verification Orchestrator
@@ -41,7 +41,7 @@ For each group, build a verifier prompt from the "Verifier Prompt Template" belo
 `firstComment.body`, `severity`).
 
 Determine `Model` for the group's `invoke_subagent` entry:
-- Any thread in the group has `severity: "critical"` -> `pro`
+- Any thread in the group has `severity: "critical"` or `severity: "high"` -> `pro`
 - Otherwise -> `flash`
 
 **Dispatch ALL groups in a SINGLE `invoke_subagent` call** (passing an array of `Subagents` entries, each
@@ -54,8 +54,8 @@ Collect all subagent results. Each verifier is expected to return one `VERIFY_RE
 thread it was assigned.
 
 For each dispatched thread whose `id` has no matching `VERIFY_RESULT:` line among the returned results,
-retry ONCE: re-dispatch a verifier (same `Model` mapping rule as Step 1) covering only the still-missing
-thread(s) from that group, via a single `invoke_subagent` call.
+retry ONCE: re-dispatch a verifier covering only the still-missing thread(s) from that group, via a single
+`invoke_subagent` call, escalating `Model` from `flash` -> `pro` (groups already on `pro` remain `pro`).
 
 After the retry, any thread still missing a `VERIFY_RESULT:` line is omitted from `findings[]` entirely
 (so the skill's schema check in the main context detects the gap as CONTEXT_OVERFLOW) — never fabricate a

@@ -39,12 +39,12 @@ Lift-SDLC classifies all skills and workflows into three distinct operational cl
 
 **Definition:** Stateful, multi-step orchestrators that coordinate a sequence of Class A and Class B workflows to advance software through an SDLC stage.
 
-- **Examples:** `/ship-sdlc`, `/run-workflow`, `/execute-plan-sdlc`.
+- **Examples:** `/ship-sdlc`, `/pipeline-sdlc` (replaces `run-workflow` to avoid shadowing `agy`'s built-in `/run-workflow`), `/execute-plan-sdlc`.
 - **Characteristics:**
   - Maintains persistent state files in `.sdlc/execution/`.
-  - Dispatches sub-skills via isolated Agent tool calls with dynamic model selection.
+  - Dispatches sub-skills via isolated `invoke_subagent` calls or flattened native Python `run_workflow` scripts (`skills/ship-sdlc/workflows/ship.py`, `skills/execute-plan-sdlc/workflows/execute.py`, `skills/review-sdlc/workflows/review.py`, `skills/received-review-sdlc/workflows/verify.py`), keeping subagent depth ≤ 1 via `call_tool("run_command", ...)`, `asyncio.gather(..., return_exceptions=True)`, and JSON-schema-enforced `agent()`.
   - Coordinates conditional branching, loops, and terminal cleanup sweeps.
-  - Protected by the Auto-Mode Enforcement Hook Ring (`stop-block`, `question-suppression`, `drift-nudge`, `git-guard` (`hooks/pre-tool-git-guard.js`)).
+  - Protected by the 9-hook Enforcement Ring (`session-context` on `SessionStart`; `git-guard`, `question-suppression`, `jira-write-guard`, `validation-guard` on `PreToolUse`; `drift-nudge` on `PostInvocation`; `stop-block`, `state-save`, `plan-integrity-guard` on `Stop`).
 - **Obligations:**
   - Must define a declarative manifest (`pipeline.json`) and prepare script.
   - Must manage lifecycle transitions through `scripts/state/pipeline.js`.

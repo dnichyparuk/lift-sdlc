@@ -59,8 +59,8 @@ const RE_FIND_SCRIPT = /find\s[^`\n]*?-name\s+["']([^"'<>]+\.js)["']/g;
 const RE_PATH_SCRIPT = /-path\s+["']\*\/sdlc\*\/scripts\/([^\s"'<>]+\.js)["']/g;
 
 // Extract script filenames from direct-path fallback pattern:
-// plugins/lift-sdlc/scripts/<subdir>/<script>.js
-const RE_DIRECT_SCRIPT = /plugins\/lift-sdlc\/scripts\/([^\s"'<>]+\.js)/g;
+// scripts/<subdir>/<script>.js (or <PLUGIN_ROOT>/scripts/<subdir>/<script>.js)
+const RE_DIRECT_SCRIPT = /(?:<PLUGIN_ROOT>\/)?scripts\/((?:skill|util|state|lib|ci)\/[^\s"'<>]+\.js)/g;
 
 function extractScriptRefs(content) {
   const names = new Set();
@@ -118,21 +118,34 @@ function extractAgentRefs(content) {
   return [...names];
 }
 
-// Extract sibling supporting-file references: backtick-wrapped uppercase .md filenames.
+// Extract sibling supporting-file references:
+// 1. Backtick-wrapped bare uppercase .md filenames (e.g. `REFERENCE.md`).
+// 2. Relative `resources/*.md`, `./resources/*.md`, or `@resources/*.md` links
+//    inside single backticks or markdown links (supports lowercase/kebab-case).
 // Uses negative lookbehind/lookahead to exclude double-backtick code spans
 // (`` `REFERENCE.md` `` is an example in text, not a real file reference).
 // Also excludes known project artifact filenames that are never skill siblings.
-const RE_SIBLING_MD = /(?<!`)`(?:resources\/)?([A-Z][A-Z0-9_-]*\.md)`(?!`)/g;
+const RE_SIBLING_MD = /(?<!`)`([A-Z][A-Z0-9_-]*\.md)`(?!`)/g;
+const RE_RESOURCE_BACKTICK = /(?<!`)`(?:\.\/|@)?resources\/([A-Za-z0-9][A-Za-z0-9._/-]*\.md)`(?!`)/g;
+const RE_RESOURCE_LINK = /\]\((?:\.\/)?resources\/([A-Za-z0-9][A-Za-z0-9._/-]*\.md)(?:#[^)]*)?\)/g;
 const NON_SIBLING_MD = new Set(['CHANGELOG.md', 'README.md', 'LICENSE.md', 'AGENTS.md', 'SKILL.md']);
 
 function extractSiblingFileRefs(content) {
   const names = new Set();
   let m;
-  const re = new RegExp(RE_SIBLING_MD.source, 'g');
-  while ((m = re.exec(content)) !== null) {
+  const reSibling = new RegExp(RE_SIBLING_MD.source, 'g');
+  while ((m = reSibling.exec(content)) !== null) {
     if (!NON_SIBLING_MD.has(m[1])) {
       names.add(m[1]);
     }
+  }
+  const reResBacktick = new RegExp(RE_RESOURCE_BACKTICK.source, 'g');
+  while ((m = reResBacktick.exec(content)) !== null) {
+    names.add(`resources/${m[1]}`);
+  }
+  const reResLink = new RegExp(RE_RESOURCE_LINK.source, 'g');
+  while ((m = reResLink.exec(content)) !== null) {
+    names.add(`resources/${m[1]}`);
   }
   return [...names];
 }
@@ -255,12 +268,13 @@ function checkPD5(projectRoot) {
     const siblingRefs = extractSiblingFileRefs(content);
     for (const ref of siblingRefs) {
       if (ref === 'SKILL.md') continue;
-      // Resolution order (pinned): try the skill dir directly first, then
-      // fall back to the skill's resources/ subdirectory — refs written as
-      // `` `resources/FOO.md` `` in SKILL.md legitimately live there.
+      // Explicit resources/<file>.md refs must resolve directly under skills/<name>/resources/.
+      // Bare uppercase sibling refs try the skill dir first, then fall back to resources/.
       const directPath = path.join(skillsDir, d, ref);
-      const resourcesPath = path.join(skillsDir, d, 'resources', ref);
-      if (!isFile(directPath) && !isFile(resourcesPath)) {
+      const exists = ref.startsWith('resources/')
+        ? isFile(directPath)
+        : (isFile(directPath) || isFile(path.join(skillsDir, d, 'resources', ref)));
+      if (!exists) {
         details.push(
           `skills/${d}/SKILL.md: references \`${ref}\` ` +
           `but the file does not exist in the skill directory`

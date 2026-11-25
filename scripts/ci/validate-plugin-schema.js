@@ -42,10 +42,9 @@
  *   check:plugin`, not auto-triggered by anything. That is what "wired into
  *   CI" means by this repo's own existing standard for the phrase.
  *
- * @usage node scripts/ci/validate-plugin-schema.js [--plugin-dir <path>]
- * @exit 0 valid (schema + tool-boundary + hooks shape), or `agy` not
- *          installed (schema check skipped, the two hand-rolled assertions
- *          still run and must pass)
+ * @usage node scripts/ci/validate-plugin-schema.js [--plugin-dir <path>] [--no-check-skill-size] [--strict-warnings]
+ * @exit 0 valid (schema + tool-boundary + hooks shape + skill/rule size), or `agy` not
+ *          installed (schema check skipped, local assertions still run and must pass)
  * @exit 1 agy-reported schema violation, either read-only agent's `tools:`
  *          value is not exactly `view_file`, or hooks.json violates the
  *          official event-array shapes
@@ -60,7 +59,7 @@ const { spawnSync } = require('node:child_process');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 
 /** The one and only permitted `tools:` value for these two agents (allowlist, not denylist — see header). */
-const REQUIRED_TOOLS_VALUE = 'view_file';
+const REQUIRED_TOOLS_VALUE = '[view_file]';
 
 /** The read-only self-learning agents this script mechanically asserts on. Fixed list (per Contract's `sync: none`) — not derived from docs/plugin-api-specs.md. */
 const AGENTS_TO_CHECK = [
@@ -78,17 +77,30 @@ const SKIP_NOTE =
 // CLI
 // ---------------------------------------------------------------------------
 
+/** Maximum byte size for skills/<name>/SKILL.md and rules/AGENTS.md (agy truncates above 24000 bytes). */
+const MAX_SKILL_SIZE_BYTES = 24000;
+
 /**
  * Parse command-line flags. Manual parser, mirroring validate-skill-script-refs.js.
  * @param {string[]} args
- * @returns {{pluginDir: string}}
+ * @returns {{pluginDir: string, checkSkillSize: boolean, strictWarnings: boolean}}
  */
 function parseArgs(args) {
-  const result = { pluginDir: REPO_ROOT };
+  const result = {
+    pluginDir: REPO_ROOT,
+    checkSkillSize: true,
+    strictWarnings: false,
+  };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--plugin-dir' && i + 1 < args.length) {
       result.pluginDir = args[i + 1];
       i++;
+    } else if (args[i] === '--check-skill-size') {
+      result.checkSkillSize = true;
+    } else if (args[i] === '--no-check-skill-size') {
+      result.checkSkillSize = false;
+    } else if (args[i] === '--strict-warnings') {
+      result.strictWarnings = true;
     }
   }
   return result;
@@ -157,6 +169,61 @@ function checkToolBoundary(pluginDir) {
   return violations;
 }
 
+/** Valid `agy` enum values for `model:` in `agents/*.md` frontmatter. */
+const VALID_AGENT_MODELS = new Set(['inherit', 'flash_lite', 'flash', 'pro']);
+
+/**
+ * Read the `model:` frontmatter value from one agent file's content.
+ * @param {string} text
+ * @returns {string|null} the trimmed value, or `null` when no `model:` line
+ *   is found in the frontmatter block.
+ */
+function readModelValue(text) {
+  const frontmatter = extractFrontmatter(text);
+  if (frontmatter === null) return null;
+  const m = /^model:\s*(.*)$/m.exec(frontmatter);
+  if (!m) return null;
+  return m[1].trim();
+}
+
+/**
+ * Assert that every `agents/*.md` file's `model:` frontmatter value (when
+ * present) is a valid `agy` enum (`inherit`, `flash_lite`, `flash`, `pro`).
+ *
+ * @param {string} pluginDir
+ * @returns {Array<{file: string, reason: string}>} violations, empty when all pass
+ */
+function checkAgentModels(pluginDir) {
+  const agentsDir = path.join(pluginDir, 'agents');
+  if (!fs.existsSync(agentsDir)) return [];
+  let entries;
+  try {
+    entries = fs.readdirSync(agentsDir).filter((f) => f.endsWith('.md')).sort();
+  } catch (err) {
+    return [{ file: 'agents', reason: `cannot read agents directory: ${err.message}` }];
+  }
+  const violations = [];
+  for (const name of entries) {
+    const rel = `agents/${name}`;
+    const abs = path.join(agentsDir, name);
+    let text;
+    try {
+      text = fs.readFileSync(abs, 'utf8');
+    } catch (err) {
+      violations.push({ file: rel, reason: `cannot read file: ${err.message}` });
+      continue;
+    }
+    const value = readModelValue(text);
+    if (value !== null && !VALID_AGENT_MODELS.has(value)) {
+      violations.push({
+        file: rel,
+        reason: `model: value is "${value}", expected one of: ${Array.from(VALID_AGENT_MODELS).join(', ')}`,
+      });
+    }
+  }
+  return violations;
+}
+
 // ---------------------------------------------------------------------------
 // hooks.json shape assertion (official contract — see header)
 // ---------------------------------------------------------------------------
@@ -164,7 +231,7 @@ function checkToolBoundary(pluginDir) {
 /** Events whose array elements are `{ matcher?, hooks: [handler, ...] }` wrappers. */
 const MATCHER_EVENTS = ['PreToolUse', 'PostToolUse'];
 /** Events whose array elements are handler objects directly (matcher ignored). */
-const DIRECT_EVENTS = ['PreInvocation', 'PostInvocation', 'Stop'];
+const DIRECT_EVENTS = ['SessionStart', 'PreInvocation', 'PostInvocation', 'Stop'];
 const ALL_EVENTS = [...MATCHER_EVENTS, ...DIRECT_EVENTS];
 
 function isPlainObject(v) {
@@ -282,6 +349,86 @@ function checkHooksShape(pluginDir) {
 }
 
 // ---------------------------------------------------------------------------
+// Skill & rule size assertion (enabled by default; opt out via --no-check-skill-size)
+// ---------------------------------------------------------------------------
+
+/**
+ * Check that every `skills/<name>/SKILL.md` and `rules/AGENTS.md` (when present)
+ * is at most `MAX_SKILL_SIZE_BYTES` (24000) bytes.
+ * @param {string} pluginDir
+ * @returns {Array<{file: string, reason: string}>}
+ */
+function checkSkillSize(pluginDir) {
+  const violations = [];
+  const skillsDir = path.join(pluginDir, 'skills');
+  if (fs.existsSync(skillsDir)) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(skillsDir).sort();
+    } catch (err) {
+      violations.push({ file: 'skills', reason: `cannot read skills directory: ${err.message}` });
+    }
+    for (const name of entries) {
+      const skillFile = path.join(skillsDir, name, 'SKILL.md');
+      if (!fs.existsSync(skillFile)) continue;
+      const rel = `skills/${name}/SKILL.md`;
+      try {
+        const size = fs.statSync(skillFile).size;
+        if (size > MAX_SKILL_SIZE_BYTES) {
+          violations.push({
+            file: rel,
+            reason: `file size is ${size} bytes, exceeds maximum ${MAX_SKILL_SIZE_BYTES} bytes`,
+          });
+        }
+      } catch (err) {
+        violations.push({ file: rel, reason: `cannot stat file: ${err.message}` });
+      }
+    }
+  }
+
+  const rulesAgents = path.join(pluginDir, 'rules', 'AGENTS.md');
+  if (fs.existsSync(rulesAgents)) {
+    const rel = 'rules/AGENTS.md';
+    try {
+      const size = fs.statSync(rulesAgents).size;
+      if (size > MAX_SKILL_SIZE_BYTES) {
+        violations.push({
+          file: rel,
+          reason: `file size is ${size} bytes, exceeds maximum ${MAX_SKILL_SIZE_BYTES} bytes`,
+        });
+      }
+    } catch (err) {
+      violations.push({ file: rel, reason: `cannot stat file: ${err.message}` });
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * Extract warning lines from `agy plugin validate` stdout/stderr.
+ * Matches lines containing `⚠`, singular `warning`, or non-zero `<N> warnings`.
+ * Note: `--strict-warnings` remains opt-in because running inside the plugin
+ * source repo produces one expected warning for contributor-only root `AGENTS.md`
+ * (while consumer runtime rules live in `rules/AGENTS.md`).
+ * @param {{stdout?: string, stderr?: string}} agyResult
+ * @returns {string[]}
+ */
+function findAgyWarnings(agyResult) {
+  const combined = [agyResult.stdout || '', agyResult.stderr || ''].join('\n');
+  const lines = combined.split(/\r?\n/);
+  return lines
+    .map((l) => l.trim())
+    .filter((line) => {
+      if (!line) return false;
+      if (line.includes('⚠')) return true;
+      if (/\bwarning\b/i.test(line)) return true;
+      if (/\b[1-9]\d*\s+warnings\b/i.test(line)) return true;
+      return false;
+    });
+}
+
+// ---------------------------------------------------------------------------
 // agy wrapper
 // ---------------------------------------------------------------------------
 
@@ -336,7 +483,14 @@ function runAgyValidate(spawnFn, pluginDir) {
  * @param {{toolViolations: Array<{file: string, reason: string}>, hooksViolations?: Array<{file: string, reason: string}>, agyResult: object}} input
  * @returns {{exitCode: 0|1, stdout: string[], stderr: string[]}}
  */
-function evaluate({ toolViolations, hooksViolations = [], agyResult }) {
+function evaluate({
+  toolViolations,
+  hooksViolations = [],
+  modelViolations = [],
+  skillSizeViolations = [],
+  agyResult,
+  strictWarnings = false,
+}) {
   const stdout = [];
   const stderr = [];
 
@@ -346,7 +500,17 @@ function evaluate({ toolViolations, hooksViolations = [], agyResult }) {
   for (const v of hooksViolations) {
     stderr.push(`hooks-shape: ${v.file}: ${v.reason}`);
   }
-  const localFailures = toolViolations.length + hooksViolations.length;
+  for (const v of modelViolations) {
+    stderr.push(`agent-model: ${v.file}: ${v.reason}`);
+  }
+  for (const v of skillSizeViolations) {
+    stderr.push(`skill-size: ${v.file}: ${v.reason}`);
+  }
+  const localFailures =
+    toolViolations.length +
+    hooksViolations.length +
+    modelViolations.length +
+    skillSizeViolations.length;
 
   if (!agyResult.installed) {
     stderr.push(SKIP_NOTE);
@@ -365,7 +529,18 @@ function evaluate({ toolViolations, hooksViolations = [], agyResult }) {
     );
   }
 
-  const exitCode = !schemaOk || localFailures > 0 ? 1 : 0;
+  let warningsFailed = false;
+  if (strictWarnings) {
+    const warningLines = findAgyWarnings(agyResult);
+    if (warningLines.length > 0) {
+      warningsFailed = true;
+      stderr.push(
+        `validate-plugin-schema: agy plugin validate emitted ${warningLines.length} warning line(s) (--strict-warnings)`
+      );
+    }
+  }
+
+  const exitCode = !schemaOk || warningsFailed || localFailures > 0 ? 1 : 0;
   return { exitCode, stdout, stderr };
 }
 
@@ -387,10 +562,19 @@ function main() {
   // Contract: "tool-boundary assertion still runs").
   const toolViolations = checkToolBoundary(pluginDir);
   const hooksViolations = checkHooksShape(pluginDir);
+  const modelViolations = checkAgentModels(pluginDir);
+  const skillSizeViolations = flags.checkSkillSize ? checkSkillSize(pluginDir) : [];
 
   const agyResult = runAgyValidate(spawnSync, pluginDir);
 
-  const { exitCode, stdout, stderr } = evaluate({ toolViolations, hooksViolations, agyResult });
+  const { exitCode, stdout, stderr } = evaluate({
+    toolViolations,
+    hooksViolations,
+    modelViolations,
+    skillSizeViolations,
+    agyResult,
+    strictWarnings: flags.strictWarnings,
+  });
   writeLines(process.stdout, stdout);
   writeLines(process.stderr, stderr);
 
@@ -401,9 +585,15 @@ module.exports = {
   parseArgs,
   extractFrontmatter,
   readToolsValue,
+  readModelValue,
   checkToolBoundary,
+  checkAgentModels,
   checkHooksShape,
+  checkSkillSize,
+  findAgyWarnings,
   validateHooksDocument,
+  VALID_AGENT_MODELS,
+  MAX_SKILL_SIZE_BYTES,
   MATCHER_EVENTS,
   DIRECT_EVENTS,
   runAgyValidate,

@@ -15,9 +15,23 @@
 
 'use strict';
 
+const { readHookContext } = require('./lib/hook-context');
+
 try {
+  const { input, workspaceCwd } = readHookContext({ failClosed: false });
+
+  if (input.terminationReason && input.terminationReason !== 'NO_TOOL_CALL') {
+    process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
+    process.exit(0);
+  }
+
+  if (input.continuationActive === true) {
+    process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
+    process.exit(0);
+  }
+
   const { pipelineAdvancing } = require('../scripts/lib/state');
-  const adv = pipelineAdvancing();
+  const adv = pipelineAdvancing({ cwd: workspaceCwd });
 
   if (adv && adv.advancing) {
     if (adv.step) {

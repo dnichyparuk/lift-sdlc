@@ -8,7 +8,8 @@
  * Writes to: <mainWorktree>/.sdlc/execution/.compact-recovery-<branchSlug>.json
  * (per-branch filename — issue #256; see hooks/README.md)
  *
- * Does NOT read stdin (Stop provides no tool data).
+ * Reads stdin.cwd / stdin.workspacePaths[0] via hook-context.js to resolve
+ * the user's workspace directory.
  *
  * Exit codes:
  *   0 = always (graceful degradation on errors)
@@ -18,12 +19,14 @@
 
 const fs   = require('node:fs');
 const path = require('node:path');
+const { readHookContext } = require('./lib/hook-context');
 
 try {
-  const { findStateFile, readState, slugifyBranch, resolveStateDir, getRegisteredPrefixes } = require('../scripts/lib/state');
+  const { workspaceCwd } = readHookContext({ failClosed: false });
+  const { findStateFile, readState, slugifyBranch, resolveStateDir, getRegisteredPrefixes, discoverStatePrefixes } = require('../scripts/lib/state');
   const { exec } = require('../scripts/lib/git');
 
-  const branch = exec('git branch --show-current');
+  const branch = exec('git branch --show-current', { cwd: workspaceCwd });
   if (!branch) {
     process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
     process.exit(0);
@@ -31,12 +34,14 @@ try {
 
   const branchSlug = slugifyBranch(branch);
 
+  const discovered = typeof discoverStatePrefixes === 'function' ? discoverStatePrefixes(branchSlug, workspaceCwd) : [];
   const registered = typeof getRegisteredPrefixes === 'function' ? getRegisteredPrefixes() : ['ship', 'execute'];
-  const priorityOrder = ['ship', 'execute', ...registered.filter(p => p !== 'ship' && p !== 'execute')];
+  const allPrefixes = [...new Set([...discovered, ...registered])];
+  const priorityOrder = ['ship', 'execute', ...allPrefixes.filter(p => p !== 'ship' && p !== 'execute')];
 
   let activePrefix = null;
   for (const p of priorityOrder) {
-    if (findStateFile(p, branchSlug)) {
+    if (findStateFile(p, branchSlug, workspaceCwd)) {
       activePrefix = p;
       break;
     }
@@ -48,14 +53,14 @@ try {
     process.exit(0);
   }
 
-  const shipFound = activePrefix === 'ship' ? findStateFile('ship', branchSlug) : null;
-  const executeFound = activePrefix === 'execute' ? findStateFile('execute', branchSlug) : null;
+  const shipFound = activePrefix === 'ship' ? findStateFile('ship', branchSlug, workspaceCwd) : null;
+  const executeFound = activePrefix === 'execute' ? findStateFile('execute', branchSlug, workspaceCwd) : null;
 
   let recovery = null;
 
   // Ship state takes priority
   if (shipFound) {
-    const shipState = readState('ship', branchSlug);
+    const shipState = readState('ship', branchSlug, workspaceCwd);
     if (shipState && shipState.data) {
       const data = shipState.data;
       let currentStep = null;
@@ -98,7 +103,7 @@ try {
 
   // Fall back to execute state
   if (!recovery && executeFound) {
-    const executeState = readState('execute', branchSlug);
+    const executeState = readState('execute', branchSlug, workspaceCwd);
     if (executeState && executeState.data) {
       const data = executeState.data;
       let completedWaves = 0;
@@ -122,7 +127,7 @@ try {
 
   // Fall back to generic pipeline state
   if (!recovery && activePrefix) {
-    const pipeState = readState(activePrefix, branchSlug);
+    const pipeState = readState(activePrefix, branchSlug, workspaceCwd);
     if (pipeState && pipeState.data) {
       const data = pipeState.data;
       let currentStep = null;
@@ -154,7 +159,7 @@ try {
   }
 
   // Write recovery file (per-branch — issue #256)
-  const recoveryDir = resolveStateDir();
+  const recoveryDir = resolveStateDir(workspaceCwd);
   fs.mkdirSync(recoveryDir, { recursive: true });
 
   const recoveryPath = path.join(recoveryDir, `.compact-recovery-${branchSlug}.json`);

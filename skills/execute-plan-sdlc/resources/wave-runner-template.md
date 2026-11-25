@@ -16,11 +16,11 @@ The following fields are provided verbatim in the Agent prompt body by execute-p
 waveNumber       — integer (1-based)
 totalWaves       — integer
 qualityTier      — "full" | "balanced" | "minimal"
-escalationBudget — integer (max 2 retries per task; gemini-3.8-flash-low→gemini-3.8-flash-medium→gemini-3.8-flash-high→gemini-3.1-pro-low→gemini-3.1-pro-high)
+escalationBudget — integer (max 2 retries per task; failure-aware ladder: NEEDS_CONTEXT keeps same model, FAILED_TESTS/capability escalates Hydrogen -> Neon -> Argon -> Carbon; agy ladder: flash_lite -> flash -> pro)
 tasks            — array of task objects (see shape below)
 priorWaveSummary — context from completed waves (see shape below)
 perTaskTemplate  — full inline content of classifying-and-waving-tasks.md Agent Prompt Template
-                   (pasted verbatim at dispatch time — do NOT Read the file)
+                   (pasted verbatim at dispatch time — do NOT read_file the file)
 batchedTrivialTemplate — full inline content of classifying-and-waving-tasks.md Batched Trivial
                          Tasks Prompt Template (pasted verbatim; omitted when wave has < 2 Trivials)
 ```
@@ -32,7 +32,7 @@ batchedTrivialTemplate — full inline content of classifying-and-waving-tasks.m
   "complexity": "Trivial | Standard | Complex",
   "risk": "Low | Medium | High",
   "factSheetPath": "absolute path to the per-task fact sheet written by wave-start",
-  "assignedModel": "gemini-3.8-flash-low | gemini-3.8-flash-medium | gemini-3.8-flash-high | gemini-3.1-pro-low | gemini-3.1-pro-high",
+  "assignedModel": "any model in GEMINI4_MODELS (gemini-4-hydrogen-{low,medium,high,xhigh} | gemini-4-neon-{low,medium,high,xhigh} | gemini-4-argon-{low,medium,high} | gemini-4-carbon-{low,medium,high})",
   "verifyToken": "optional — symbol in file"
 }
 ```
@@ -66,7 +66,7 @@ Send all Agent dispatches in one message:
 - One per-task Agent per Standard/Complex task, using `perTaskTemplate`. Fill the template placeholders with `task.id`, `task.complexity`, `task.risk`, `task.factSheetPath`, `task.verifyToken`, and prior-wave context. Do NOT inline the full task body — the per-task Agent reads the fact sheet at `factSheetPath`.
 - One batch Agent for the trivial group (if 2+ Trivials), using `batchedTrivialTemplate`. Pass the `factSheetPath` for each trivial task; include ordering constraints if any trivials touch the same file.
 - A single Trivial task (no batch) is dispatched as an individual per-task Agent using `perTaskTemplate`, same as a Standard task.
-- Pass `mode: bypassPermissions` and `Model: ...` on every sub-Agent dispatch (map `task.assignedModel` to platform enum: contains "pro" → "pro", "flash-low" → "flash_lite", "flash" → "flash"). Keep the 5-level `task.assignedModel` for tracking in `attempts` and `WAVE_SUMMARY`. **`Model:` is required on every dispatch — no exceptions.**
+- Pass `Model: ...` on every subagent dispatch via `invoke_subagent` (map `task.assignedModel` via `toAgyModelEnum`: `*-hydrogen-low` → `"flash_lite"`, `*-hydrogen-medium/high/xhigh` → `"flash"`, `*-neon-*` / `*-argon-*` / `*-carbon-*` → `"pro"`). Keep the Gemini 4 `task.assignedModel` for tracking in `attempts` and `WAVE_SUMMARY`. **`Model:` is required on every dispatch — no exceptions.**
 - **DO NOT pass `isolation: "worktree"` (or any other `isolation` value) on any sub-Agent dispatch.** The SDLC `--workspace worktree` flag controls a separate concept (a sibling git worktree created via `util/worktree-create.js`). Adding `isolation` here creates ephemeral `.sdlc/worktrees/agent-<id>` paths that are not the intended SDLC worktree. (Mirrors ship-sdlc/SKILL.md anti-pattern section.)
 
 ### 3. Collect per-task results
@@ -82,23 +82,25 @@ For batch Agents, extract the per-task status from the batch output.
 
 ### 4. Retry per escalation budget
 
-On per-task `NEEDS_CONTEXT` or `BLOCKED` status, or on agent error:
+On per-task `NEEDS_CONTEXT`, `BLOCKED`, `FAILED_TESTS`, `FAILED_BUILD`, or agent error:
 
-1. Re-dispatch the failing task with full failure context added to the prompt and model escalated one step per the dynamic escalation path (`gemini-3.8-flash-low→gemini-3.8-flash-medium→gemini-3.8-flash-high→gemini-3.1-pro-low→gemini-3.1-pro-high`).
-2. Record the attempt in the `attempts` array.
-3. Maximum 2 retries per task (tracked across all attempts within this wave).
-4. After 2 retries with continued failure, mark the task `FAILED` in the summary and set `wave.status` to `partial` or `failed`.
+1. Apply **failure-aware routing** and re-dispatch with full failure context added to the prompt:
+   - **`NEEDS_CONTEXT`**: Re-dispatch on the **same** model (`assignedModel` / same `agy` enum) with the missing context supplied (do not waste a model escalation on a context gap).
+   - **`FAILED_TESTS` / `FAILED_BUILD` / `BLOCKED` / capability failure**: Escalate one step along the logical Gemini 4 ladder:
+     - Hydrogen (`gemini-4-hydrogen-low` → `gemini-4-hydrogen-medium`/`high` → `gemini-4-neon-low`)
+     - Coding/Reasoning (`gemini-4-neon-*` → `gemini-4-argon-*` → `gemini-4-carbon-*`)
+2. Record every attempt in the `attempts` array.
+3. Maximum **2 retries per task** (`escalationBudget: 2`, tracked across all attempts within this wave). Every starting tier — including `pro` — receives its full 2 retries before failing.
+4. Only after **2 retries** with continued failure (both Retry 1 and Retry 2 fail), mark the task `FAILED` in the summary and set `wave.status` to `partial` or `failed`.
 
-Model escalation uses `assignedModel` from the task manifest as the starting point, escalating one step per retry along the fixed ladder `gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high`:
-- If starting on `gemini-3.8-flash-low`: Retry 1 = `gemini-3.8-flash-medium`, Retry 2 = `gemini-3.8-flash-high`.
-- If starting on `gemini-3.8-flash-medium`: Retry 1 = `gemini-3.8-flash-high`, Retry 2 = `gemini-3.1-pro-low`.
-- If starting on `gemini-3.8-flash-high`: Retry 1 = `gemini-3.1-pro-low`, Retry 2 = `gemini-3.1-pro-high`.
-- If starting on `gemini-3.1-pro-low`: Retry 1 = `gemini-3.1-pro-high`, Retry 2 = `gemini-3.1-pro-high` (with failure context).
-- If starting on `gemini-3.1-pro-high`: Retry 1 = `gemini-3.1-pro-high` (with failure context), Retry 2 = FAILED (escalate to user, no further retry).
+Per-starting-tier retry chain (full 2-retry budget for all tiers):
+- If starting on `flash_lite` (`gemini-4-hydrogen-low`): Retry 1 = `flash` (`gemini-4-hydrogen-medium`), Retry 2 = `pro` (`gemini-4-neon-low`). (For `NEEDS_CONTEXT`, keep `flash_lite` on Retry 1.)
+- If starting on `flash` (`gemini-4-hydrogen-medium` / `gemini-4-hydrogen-high` / `gemini-4-hydrogen-xhigh`): Retry 1 = `pro` (`gemini-4-neon-low`), Retry 2 = `pro` (`gemini-4-argon-low` / `gemini-4-carbon-medium` with failure context). (For `NEEDS_CONTEXT`, keep `flash` on Retry 1.)
+- If starting on `pro` (`gemini-4-neon-*` / `gemini-4-argon-*` / `gemini-4-carbon-*`): **Retry 1 = `pro` (escalate Neon → Argon → Carbon with failure context), Retry 2 = `pro` (escalate further or retry Carbon with failure context)**. Only if Retry 2 also fails is the task marked `FAILED` and escalated to the user.
 
 Track every attempt in the `attempts` array regardless of outcome.
 
-**Guardrail invariance on retry:** When constructing the retry prompt, copy the wave manifest's `guardrails` array (and `expectedFiles`) **verbatim** into the new prompt — do NOT regenerate, filter, or omit any entry. Guardrails are wave-level invariants set by main context at wave-build time; the per-task retry inherits the same constraints as the original dispatch at every escalation tier (`gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high`).
+**Guardrail invariance on retry:** When constructing the retry prompt, copy the wave manifest's `guardrails` array (and `expectedFiles`) **verbatim** into the new prompt — do NOT regenerate, filter, or omit any entry. Guardrails are wave-level invariants set by main context at wave-build time; the per-task retry inherits the same constraints as the original dispatch at every escalation tier (`flash_lite -> flash -> pro`).
 
 ### 5. Produce WAVE_SUMMARY
 
@@ -199,7 +201,7 @@ The WAVE_SUMMARY schema is unchanged: main context handles the per-wave `expecte
 ## Example WAVE_SUMMARY (2 tasks, both complete)
 
 ```
-WAVE_SUMMARY: {"wave":2,"status":"completed","tasks":[{"id":"3","status":"DONE","sha":null,"filesTouched":["plugins/lift-sdlc/scripts/skill/ship.js"]},{"id":"4","status":"DONE","sha":null,"filesTouched":["plugins/lift-sdlc/skills/execute-plan-sdlc/wave-runner-template.md"]}],"escalationsUsed":0}
+WAVE_SUMMARY: {"wave":2,"status":"completed","tasks":[{"id":"3","status":"DONE","sha":null,"filesTouched":["scripts/skill/ship.js"]},{"id":"4","status":"DONE","sha":null,"filesTouched":["skills/execute-plan-sdlc/resources/wave-runner-template.md"]}],"escalationsUsed":0}
 ```
 
 Note: `name`, `complexity`, `risk`, `finalModel`, `attempts[]`, `filesChanged`, `verification` are **dropped** from the bounded schema. Main context re-reads these from state by task ID. Use `filesTouched` (not `filesChanged`) in per-task entries.

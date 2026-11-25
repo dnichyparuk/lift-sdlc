@@ -79,11 +79,11 @@ function slugifyBranch(branch) {
  * Always resolves relative to the main worktree so all worktrees share state.
  * @returns {string} Absolute path: `<mainWorktree>/.sdlc/execution/`
  */
-function resolveStateDir() {
+function resolveStateDir(cwd) {
   // SDLC_STATE_DIR_OVERRIDE lets test harnesses point at a fixture's .sdlc/execution/
   // without needing a real git repo in the fixture directory.
   if (process.env.SDLC_STATE_DIR_OVERRIDE) return process.env.SDLC_STATE_DIR_OVERRIDE;
-  const mainWorktree = resolveMainWorktree();
+  const mainWorktree = resolveMainWorktree(cwd);
   return path.join(mainWorktree, '.sdlc', 'execution');
 }
 
@@ -99,8 +99,8 @@ function resolveStateDir() {
  *   `file` is relative to the state directory parent (`".sdlc/execution/<filename>"`),
  *   `fullPath` is the absolute path.
  */
-function findStateFile(prefix, branchSlug) {
-  const stateDir = resolveStateDir();
+function findStateFile(prefix, branchSlug, cwd) {
+  const stateDir = resolveStateDir(cwd);
   if (!fs.existsSync(stateDir)) return null;
 
   let entries;
@@ -175,11 +175,11 @@ function findStateFile(prefix, branchSlug) {
  * @returns {{stateFile: string|null, fullPath: string|null, found: boolean,
  *           fresh: boolean, nextPendingStep: string|null}}
  */
-function detectResumeState({ prefix, branch } = {}) {
+function detectResumeState({ prefix, branch, cwd } = {}) {
   const empty = { stateFile: null, fullPath: null, found: false, fresh: false, nextPendingStep: null };
   if (!prefix) return empty;
 
-  const stateDir = resolveStateDir();
+  const stateDir = resolveStateDir(cwd);
   if (!fs.existsSync(stateDir)) return empty;
 
   let entries;
@@ -251,8 +251,8 @@ function detectResumeState({ prefix, branch } = {}) {
  * @param {string} branchSlug
  * @returns {{ data: object, filePath: string } | null}
  */
-function readState(prefix, branchSlug) {
-  const found = findStateFile(prefix, branchSlug);
+function readState(prefix, branchSlug, cwd) {
+  const found = findStateFile(prefix, branchSlug, cwd);
   if (!found) return null;
 
   try {
@@ -355,10 +355,10 @@ function deleteState(filePath) {
  * @param {string|undefined} argBranch  Explicit branch name from CLI args
  * @returns {string}
  */
-function resolveBranch(argBranch) {
+function resolveBranch(argBranch, cwd) {
   if (argBranch) return argBranch;
   if (process.env.SDLC_BRANCH_OVERRIDE) return process.env.SDLC_BRANCH_OVERRIDE;
-  const branch = exec('git branch --show-current');
+  const branch = exec('git branch --show-current', cwd ? { cwd } : undefined);
   if (!branch) {
     throw new Error('Could not determine current branch');
   }
@@ -419,8 +419,8 @@ function getRegisteredPrefixes() {
  * @param {string} branchSlug  Slugified branch name (via slugifyBranch)
  * @returns {string[]}  Distinct prefixes found, e.g. `["ship", "my-custom-id"]`
  */
-function discoverStatePrefixes(branchSlug) {
-  const stateDir = resolveStateDir();
+function discoverStatePrefixes(branchSlug, cwd) {
+  const stateDir = resolveStateDir(cwd);
   if (!fs.existsSync(stateDir)) return [];
 
   let entries;
@@ -476,7 +476,8 @@ function parseStateFilename(name) {
  */
 function pipelineAdvancing(opts = {}) {
   try {
-    const stateDir = resolveStateDir();
+    const cwd = opts.cwd;
+    const stateDir = resolveStateDir(cwd);
     if (!fs.existsSync(stateDir)) {
       return { advancing: false, prefix: null, step: null, auto: false, stateFile: null, data: null };
     }
@@ -484,19 +485,19 @@ function pipelineAdvancing(opts = {}) {
     let branch = opts.branch;
     if (!branch) {
       try {
-        branch = resolveBranch();
+        branch = resolveBranch(undefined, cwd);
       } catch (_) {
         return { advancing: false, prefix: null, step: null, auto: false, stateFile: null, data: null };
       }
     }
     const branchSlug = slugifyBranch(branch);
-    const prefixes = [...new Set([...discoverStatePrefixes(branchSlug), ...getRegisteredPrefixes()])];
+    const prefixes = [...new Set([...discoverStatePrefixes(branchSlug, cwd), ...getRegisteredPrefixes()])];
 
     for (const prefix of prefixes) {
-      const found = findStateFile(prefix, branchSlug);
+      const found = findStateFile(prefix, branchSlug, cwd);
       if (!found) continue;
 
-      const state = readState(prefix, branchSlug);
+      const state = readState(prefix, branchSlug, cwd);
       if (!state || !state.data) continue;
 
       const data = state.data;

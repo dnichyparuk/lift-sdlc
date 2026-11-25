@@ -5,8 +5,9 @@
  * Uses lib/openspec.js for detection and lib/config.js for guardrail loading.
  *
  * Usage:
- *   node plan-prepare.js [--from-openspec <change-name>] [--output-file]
- *   node plan-prepare.js --mark <name> [--path <abs>]
+ *   node plan.js [--from-openspec <change-name>] [--output-file]
+ *   node plan.js --mark <name> [--path <abs>]
+ *   node plan.js --critique-static --plan <path> [--project-root <path>]
  *
  * Options:
  *   --from-openspec <name>  Validate a specific OpenSpec change for direct bridging
@@ -14,6 +15,9 @@
  *   --mark <name>           Update the latest plan state file with a checkpoint marker.
  *                           Valid names: plan-file, guardrailsEvaluated, critiqueRan
  *   --path <abs>            Absolute path to the plan file (required when --mark plan-file)
+ *   --critique-static       Run deterministic G3, G4, G10, G12 checks on --plan <path> and emit JSON
+ *   --plan <path>           Plan file path (used with --critique-static)
+ *   --project-root <path>   Project root override (used with --critique-static; defaults to cwd)
  *
  * Exit codes: 0 = success, 1 = validation error, 2 = unexpected crash
  * Stdout: JSON (or file path with --output-file)
@@ -31,11 +35,12 @@ const LIB = path.join(__dirname, '..', 'lib');
 
 const { detectActiveChanges, validateChange, parseTasks } = require(path.join(LIB, 'openspec'));
 const { readSection, resolveSdlcRoot } = require(path.join(LIB, 'config'));
-const { writeOutput } = require(path.join(LIB, 'output'));
+const { writeOutput, writeJsonLine } = require(path.join(LIB, 'output'));
 const { resolveSkipConfigCheck, ensureConfigVersion } = require(path.join(LIB, 'config-version-prepare'));
 const { initState, findStateFile, readState, writeState, slugifyBranch, pruneStateFiles } = require(path.join(LIB, 'state'));
 const { exec, parseRemoteOwner } = require(path.join(LIB, 'git'));
 const { recordGuardrailEvaluation } = require(path.join(LIB, 'learnings'));
+const { toAgyModelEnum } = require(path.join(LIB, 'model-tiers'));
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,6 +65,9 @@ function parseArgs(argv) {
   let fromOpenspec = null;
   let markName = null;
   let markPath = null;
+  let critiqueStatic = false;
+  let planPath = null;
+  let projectRoot = null;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--from-openspec' && args[i + 1]) {
@@ -68,11 +76,60 @@ function parseArgs(argv) {
       markName = args[++i];
     } else if (args[i] === '--path' && args[i + 1]) {
       markPath = args[++i];
+    } else if (args[i] === '--critique-static') {
+      critiqueStatic = true;
+    } else if (args[i] === '--plan' && args[i + 1]) {
+      planPath = args[++i];
+    } else if (args[i] === '--project-root' && args[i + 1]) {
+      projectRoot = args[++i];
     }
     // --output-file is handled by writeOutput
   }
 
-  return { fromOpenspec, markName, markPath };
+  return { fromOpenspec, markName, markPath, critiqueStatic, planPath, projectRoot };
+}
+
+// ---------------------------------------------------------------------------
+// --critique-static mode: deterministic G3, G4, G10, G12 checks
+// ---------------------------------------------------------------------------
+
+function runCritiqueStaticMode(planPath, projectRootArg) {
+  // Lazy-require so isolated fixtures without scripts/ci/ can still run prepare/mark modes.
+  const { runStaticCritique } = require(path.join(LIB, 'plan-static-critique'));
+
+  if (!planPath) {
+    const msg = '--critique-static requires --plan <path>';
+    process.stderr.write(`[plan-prepare] ${msg}\n`);
+    writeJsonLine(
+      {
+        gateIds: ['G3', 'G4', 'G10', 'G12'],
+        issues: [{ gateId: 'lane-failure', severity: 'error', taskRef: null, message: msg, blocking: true }],
+        passes: [],
+        laneStatus: 'failed',
+      },
+      { exitCode: 1 },
+    );
+    return;
+  }
+
+  const resolvedPlan = path.resolve(planPath);
+  const projectRoot = projectRootArg ? path.resolve(projectRootArg) : process.cwd();
+
+  try {
+    const result = runStaticCritique(resolvedPlan, projectRoot);
+    writeJsonLine(result, { exitCode: 0 });
+  } catch (err) {
+    process.stderr.write(`[plan-prepare] --critique-static: ${err.message}\n`);
+    writeJsonLine(
+      {
+        gateIds: ['G3', 'G4', 'G10', 'G12'],
+        issues: [{ gateId: 'lane-failure', severity: 'error', taskRef: null, message: err.message, blocking: true }],
+        passes: [],
+        laneStatus: 'failed',
+      },
+      { exitCode: 1 },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -149,96 +206,67 @@ function buildGithubHosting(projectRoot) {
 }
 
 /**
- * Build P15 g17Dispatch metadata (R33).
- * Resolves the G17 prompt template path via find cascade:
- *   1. ~/.gemini/config/plugins (installed plugin path)
- *   2. workspace-relative (development / CI path)
- * Returns null promptTemplatePath and adds an error when the file cannot be found.
- * @returns {{ subagentType: string, model: string, promptTemplatePath: string|null, error?: string }}
- */
-function buildG17Dispatch() {
-  const templateName = 'g17-dimension-coverage-prompt.md';
-  const subagentType = 'research';
-  const model = 'gemini-3.8-flash-medium';
-
-  // 1. Try installed plugin path via find
-  const findResult = spawnSync(
-    'find',
-    [
-      `${process.env.HOME}/.gemini/config/plugins`,
-      '-name', templateName,
-      '-path', '*/plan-sdlc/*',
-    ],
-    { encoding: 'utf8' },
-  );
-  if (!findResult.error && findResult.status === 0) {
-    const lines = (findResult.stdout || '').trim().split('\n').filter(Boolean);
-    if (lines.length > 0) {
-      // sort -V semantics: pick the last (highest version) entry
-      const ver = p => { const m = p.match(/\/(\d+)\.(\d+)\.(\d+)\/skills/); return m ? [+m[1], +m[2], +m[3]] : [0, 0, 0]; };
-      const sorted = lines.slice().sort((a, b) => { const [a1, a2, a3] = ver(a); const [b1, b2, b3] = ver(b); return a1 - b1 || a2 - b2 || a3 - b3; });
-      return { subagentType, model, promptTemplatePath: sorted[sorted.length - 1] };
-    }
-  }
-
-  // 2. Workspace-relative fallback (development / CI)
-  const workspacePath = path.join(
-    __dirname,
-    '..', '..', 'skills', 'plan-sdlc', templateName,
-  );
-  if (fs.existsSync(workspacePath)) {
-    return { subagentType, model, promptTemplatePath: workspacePath };
-  }
-
-  // 3. Not found — surface as error; G17 cannot dispatch without a prompt template
-  return {
-    subagentType,
-    model,
-    promptTemplatePath: null,
-    error: `G17 prompt template not found: ${templateName}`,
-  };
-}
-
-/**
- * Resolve a skill/plan-sdlc template path via the same find cascade as buildG17Dispatch.
+ * Resolve a skill/plan-sdlc template path.
+ * Checks `skills/plan-sdlc/resources/<templateName>` relative to this script FIRST
+ * (cross-platform; works for global CLI installs, workspace installs, and source runs),
+ * then falls back to `skills/plan-sdlc/<templateName>`.
  * Returns the resolved absolute path, or null when not found.
  * @param {string} templateName
  * @returns {string|null}
  */
 function resolveSkillTemplate(templateName) {
-  // 1. Try installed plugin path via find
-  const findResult = spawnSync(
-    'find',
-    [
-      `${process.env.HOME}/.gemini/config/plugins`,
-      '-name', templateName,
-      '-path', '*/plan-sdlc/*',
-    ],
-    { encoding: 'utf8' },
+  const resourcesPath = path.resolve(
+    __dirname,
+    '..', '..', 'skills', 'plan-sdlc', 'resources', templateName,
   );
-  if (!findResult.error && findResult.status === 0) {
-    const lines = (findResult.stdout || '').trim().split('\n').filter(Boolean);
-    if (lines.length > 0) {
-      const ver = p => { const m = p.match(/\/(\d+)\.(\d+)\.(\d+)\/skills/); return m ? [+m[1], +m[2], +m[3]] : [0, 0, 0]; };
-      const sorted = lines.slice().sort((a, b) => { const [a1, a2, a3] = ver(a); const [b1, b2, b3] = ver(b); return a1 - b1 || a2 - b2 || a3 - b3; });
-      return sorted[sorted.length - 1];
-    }
+  if (fs.existsSync(resourcesPath)) {
+    return resourcesPath;
   }
 
-  // 2. Workspace-relative fallback (development / CI)
-  const workspacePath = path.join(__dirname, '..', '..', 'skills', 'plan-sdlc', templateName);
-  if (fs.existsSync(workspacePath)) {
-    return workspacePath;
+  const skillRootPath = path.resolve(
+    __dirname,
+    '..', '..', 'skills', 'plan-sdlc', templateName,
+  );
+  if (fs.existsSync(skillRootPath)) {
+    return skillRootPath;
   }
 
   return null;
 }
 
 /**
+ * Build P15 g17Dispatch metadata (R33).
+ * Resolves the G17 prompt template path via resolveSkillTemplate().
+ * Returns null promptTemplatePath and adds an error when the file cannot be found.
+ * @returns {{ subagentType: string, model: string, agyModel: string, promptTemplatePath: string|null, error?: string }}
+ */
+function buildG17Dispatch() {
+  const templateName = 'g17-dimension-coverage-prompt.md';
+  const subagentType = 'research';
+  const model = 'gemini-4-hydrogen-medium';
+  const agyModel = toAgyModelEnum(model);
+
+  const resolvedPath = resolveSkillTemplate(templateName);
+  if (resolvedPath) {
+    return { subagentType, model, agyModel, promptTemplatePath: resolvedPath };
+  }
+
+  // Not found — surface as error; G17 cannot dispatch without a prompt template
+  return {
+    subagentType,
+    model,
+    agyModel,
+    promptTemplatePath: null,
+    error: `G17 prompt template not found: ${templateName}`,
+  };
+}
+
+/**
  * Build P16 lanes[] metadata (R35).
- * Five entries per KD1 lane partitioning. Entry [4] mirrors g17Dispatch verbatim.
- * @param {{ subagentType: string, model: string, promptTemplatePath: string|null }} g17Dispatch
- * @returns {Array<{ name: string, subagentType: string, model: string, promptTemplatePath: string|null, gateIds: string[] }>}
+ * Up to four LLM lane entries (G3, G4, G10, G12 are evaluated deterministically via --critique-static).
+ * Final entry (when present) mirrors g17Dispatch verbatim.
+ * @param {{ subagentType: string, model: string, agyModel?: string, promptTemplatePath: string|null }} g17Dispatch
+ * @returns {Array<{ id: string, name: string, subagentType: string, model: string, agyModel: string, promptTemplatePath: string|null, gateIds: string[] }>}
  */
 function buildLanes(g17Dispatch, guardrails, projectRoot) {
   const { validateAll } = require(require('node:path').join(__dirname, '..', 'lib', 'dimensions'));
@@ -248,25 +276,19 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
   const laneDefs = [
     {
       name: 'static-structural',
-      model: 'gemini-3.8-flash-low',
+      model: 'gemini-4-hydrogen-medium',
       templateName: 'lane-static-structural-prompt.md',
-      gateIds: ['G1', 'G2', 'G3', 'G7', 'G12', ...(hasGuardrails ? [] : ['G14']), ...(hasDimensions ? [] : ['G17'])],
+      gateIds: ['G1', 'G2', 'G7', ...(hasGuardrails ? [] : ['G14']), ...(hasDimensions ? [] : ['G17'])],
     },
     {
       name: 'content-coverage',
-      model: 'gemini-3.8-flash-medium',
+      model: 'gemini-4-hydrogen-high',
       templateName: 'lane-content-coverage-prompt.md',
       gateIds: ['G5', 'G6', 'G8', 'G9', 'G11', 'G13', 'G15', 'G16'],
     },
-    {
-      name: 'file-existence',
-      model: 'gemini-3.8-flash-low',
-      templateName: 'lane-file-existence-prompt.md',
-      gateIds: ['G4', 'G10'],
-    },
-      ...(hasGuardrails ? [{
+    ...(hasGuardrails ? [{
       name: 'guardrail-compliance',
-      model: 'gemini-3.8-flash-medium',
+      model: 'gemini-4-hydrogen-medium',
       templateName: 'lane-guardrail-compliance-prompt.md',
       gateIds: ['G14'],
     }] : []),
@@ -277,13 +299,14 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
     name: def.name,
     subagentType: 'research',
     model: def.model,
+    agyModel: toAgyModelEnum(def.model),
     promptTemplatePath: resolveSkillTemplate(def.templateName),
     gateIds: def.gateIds,
   }));
 
   // dimension-coverage — mirrors g17Dispatch verbatim (backwards compatibility).
   // Pushed last, but its position is NOT fixed: guardrail-compliance above is
-  // itself conditional on hasGuardrails, so this lane can land at index 3 or 4
+  // itself conditional on hasGuardrails, so this lane can land at index 2 or 3
   // depending on which lanes were dropped. Select this lane by `id`, never by
   // position (see the `lane.id` filter in main()).
   if (hasDimensions) {
@@ -292,6 +315,7 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
       name: 'dimension-coverage',
       subagentType: g17Dispatch.subagentType,
       model: g17Dispatch.model,
+      agyModel: g17Dispatch.agyModel || toAgyModelEnum(g17Dispatch.model),
       promptTemplatePath: g17Dispatch.promptTemplatePath,
       gateIds: ['G17'],
     });
@@ -303,22 +327,25 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
 /**
  * Build P17 lensReviewers[] metadata (R36).
  * Three entries per KD3 lens partitioning.
- * @returns {Array<{ lens: string, subagentType: string, model: string, promptTemplatePath: string|null, focusCategories: string[] }>}
+ * @returns {Array<{ lens: string, subagentType: string, model: string, agyModel: string, promptTemplatePath: string|null, focusCategories: string[] }>}
  */
 function buildLensReviewers() {
   const lensDefs = [
     {
       lens: 'architecture',
+      model: 'gemini-4-neon-medium',
       templateName: 'lens-architecture-prompt.md',
       focusCategories: ['Buildability', 'Task descriptions', 'Decision documentation', 'Dependency accuracy'],
     },
     {
       lens: 'requirements',
+      model: 'gemini-4-argon-low',
       templateName: 'lens-requirements-prompt.md',
       focusCategories: ['Requirements coverage', 'Metadata completeness', 'Plan completeness', 'OpenSpec G16', 'Exploration provenance', 'Best-practice traceability'],
     },
     {
       lens: 'risk',
+      model: 'gemini-4-argon-low',
       templateName: 'lens-risk-prompt.md',
       focusCategories: ['File paths', 'Verification strategy', 'Scope discipline', 'Guardrail compliance'],
     },
@@ -327,7 +354,8 @@ function buildLensReviewers() {
   return lensDefs.map(def => ({
     lens: def.lens,
     subagentType: 'research',
-    model: 'gemini-3.8-flash-medium',
+    model: def.model,
+    agyModel: toAgyModelEnum(def.model),
     promptTemplatePath: resolveSkillTemplate(def.templateName),
     focusCategories: def.focusCategories,
   }));
@@ -417,10 +445,28 @@ function runExplorePack(fromOpenspec, userPrompt) {
 // ---------------------------------------------------------------------------
 
 function main() {
-  const { fromOpenspec, markName, markPath } = parseArgs(process.argv);
+  const {
+    fromOpenspec,
+    markName,
+    markPath,
+    critiqueStatic,
+    planPath,
+    projectRoot: projectRootArg,
+  } = parseArgs(process.argv);
+
+  // Short-circuit modes before reading stdin or running prepare flow
+  if (critiqueStatic) {
+    runCritiqueStaticMode(planPath, projectRootArg);
+    return;
+  }
+
+  if (markName !== null) {
+    runMarkMode(markName, markPath);
+    return; // runMarkMode calls process.exit(); this is a safeguard
+  }
 
   // Read user prompt from stdin (piped by SKILL.md). May be empty when
-  // invoked without stdin — e.g. from --mark mode or unit tests.
+  // invoked without stdin — e.g. from unit tests.
   // Passing via stdin avoids a new CLI surface (see Task 5 Key Decision).
   let userPrompt = '';
   try {
@@ -429,12 +475,6 @@ function main() {
     }
   } catch (_) {
     // Non-fatal — plan-explore will run with empty prompt
-  }
-
-  // --mark mode: short-circuit before normal prepare flow
-  if (markName !== null) {
-    runMarkMode(markName, markPath);
-    return; // runMarkMode calls process.exit(); this is a safeguard
   }
 
   const projectRoot = resolveSdlcRoot(); // issue #351: route to main worktree .sdlc/
@@ -604,7 +644,12 @@ function main() {
     guardrails,
     explorePack,
     githubHosting,
-    g17Dispatch: { subagentType: g17Dispatch.subagentType, model: g17Dispatch.model, promptTemplatePath: g17Dispatch.promptTemplatePath },
+    g17Dispatch: {
+      subagentType: g17Dispatch.subagentType,
+      model: g17Dispatch.model,
+      agyModel: g17Dispatch.agyModel,
+      promptTemplatePath: g17Dispatch.promptTemplatePath,
+    },
     lanes,
     lensReviewers,
     errors,
@@ -622,4 +667,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { main, runExplorePack, buildLanes };
+module.exports = { main, runExplorePack, buildLanes, parseArgs };

@@ -17,16 +17,11 @@
 
 'use strict';
 
-const fs = require('node:fs');
+const { readHookContext } = require('./lib/hook-context');
 
 // 1. Read stdin
-let input = {};
-try {
-  const raw = fs.readFileSync(0, 'utf8');
-  if (raw.trim()) {
-    input = JSON.parse(raw);
-  }
-} catch {
+const { ok, input, workspaceCwd } = readHookContext({ failClosed: true });
+if (!ok) {
   // Stdin unreadable or non-JSON — fail closed. An unparseable payload is
   // exactly the anomalous condition this guard must not treat as
   // "nothing to check here" (a malformed payload must not let
@@ -88,7 +83,7 @@ try {
   if (isMutating) {
     const { pipelineAdvancing } = require('../scripts/lib/state');
     const { exec } = require('../scripts/lib/git');
-    const adv = pipelineAdvancing();
+    const adv = pipelineAdvancing({ cwd: workspaceCwd });
 
     if (adv && adv.advancing) {
       // Q6 Safe Branch fallback for merge in auto mode
@@ -105,7 +100,7 @@ try {
       if (expectedBranch) {
         let currentBranch = null;
         try {
-          currentBranch = exec('git branch --show-current', { cwd: args.Cwd || process.cwd() });
+          currentBranch = exec('git branch --show-current', { cwd: args.Cwd || workspaceCwd });
         } catch (_) {}
 
         if (currentBranch && currentBranch !== expectedBranch) {

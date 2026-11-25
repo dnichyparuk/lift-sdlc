@@ -2,7 +2,7 @@
 
 ## Permissions
 
-Lift-SDLC runs internal helper scripts — Node.js utilities under the plugin's root `scripts/` folder and POSIX shell wrappers under `skills/<skill>/scripts/` — for planning, validation, and telemetry. Each invocation is a terminal `command`, so by default Antigravity prompts before running them. You can pre-approve them by adding `command(...)` rules to your **Allow** list.
+Lift-SDLC runs internal helper scripts — Node.js utilities under the plugin's root `scripts/` folder — for planning, validation, and telemetry. Each invocation is a terminal `command`, so by default Antigravity prompts before running them. You can pre-approve them by adding `command(...)` rules to your **Allow** list.
 
 Antigravity evaluates every sensitive operation as an `action(target)` resource across three lists, in strict priority **Deny > Ask > Allow** (see the [official Permissions docs](https://antigravity.google/docs/permissions)). For `command(...)`, each whitespace-separated token is matched as an *anchored* regex and the rule matches by token **prefix**, so trailing arguments are covered automatically. On Windows, Antigravity normalizes paths before matching (drive letter stripped, `\` → `/`), so the forward-slash rules below work cross-platform.
 
@@ -13,13 +13,11 @@ Antigravity evaluates every sensitive operation as an `action(target)` resource 
 The IDE manages permissions through its UI. Open **Settings → Global Permissions** (or a Project's **Permissions**) and add the entries that match where you installed the plugin to the **Allow** list:
 
 ```text
-# Global install (~/.gemini/config/plugins/sdlc)
-command(node .*/\.gemini/config/plugins/sdlc/.*)              # Node helper scripts
-command(.*/\.gemini/config/plugins/sdlc/skills/.*/scripts/.*) # Shell wrapper scripts
+# Global install (~/.gemini/antigravity-cli/plugins/sdlc)
+command(node .*/\.gemini/antigravity-cli/plugins/sdlc/.*)   # Node helper scripts
 
 # Workspace install (.agents/plugins/sdlc or _agents/plugins/sdlc)
 command(node .*/[._]agents/plugins/sdlc/.*)
-command(.*/[._]agents/plugins/sdlc/skills/.*/scripts/.*)
 ```
 
 You can also simply click **Allow** on the first permission card for each script; Antigravity caches the grant for subsequent identical invocations.
@@ -32,8 +30,7 @@ If you drive Lift-SDLC through the Antigravity CLI instead of the IDE, place the
 {
   "permissions": {
     "allow": [
-      "command(node .*/\\.gemini/config/plugins/sdlc/.*)",
-      "command(.*/\\.gemini/config/plugins/sdlc/skills/.*/scripts/.*)"
+      "command(node .*/\\.gemini/antigravity-cli/plugins/sdlc/.*)"
     ]
   }
 }
@@ -50,9 +47,8 @@ To do this, ensure your global `"toolPermission"` is set to `"request-review"` (
   "toolPermission": "request-review",
   "permissions": {
     "allow": [
-      "write_to_file(/home/<your-username>/.gemini/antigravity-ide/brain)",
-      "command(node .*/\\.gemini/config/plugins/sdlc/.*)",
-      "command(.*/\\.gemini/config/plugins/sdlc/skills/.*/scripts/.*)"
+      "write_to_file(/home/<your-username>/.gemini/antigravity-cli/brain)",
+      "command(node .*/\\.gemini/antigravity-cli/plugins/sdlc/.*)"
     ]
   }
 }
@@ -94,16 +90,20 @@ The plugin automatically creates the directory structure if it does not already 
 
 lift-sdlc keeps `.sdlc/` deny-all with an allowlist (`.gitignore`, `config.json`, `review-dimensions/`, `learnings/pending/`) in its managed block `# >>> lift-sdlc managed …` / `# <<< lift-sdlc managed`. When the Claude Code `sdlc` plugin's block (`# >>> sdlc-utilities managed …`) is also present, lift-sdlc writes only the patterns that block does not list (`!learnings/`, `!learnings/pending/`, `!learnings/pending/**`), leaves that block untouched and puts its own block right before it, so the file is byte-identical whichever plugin wrote it last: project lines, then the lift-sdlc block, then the `sdlc` block, then a final newline. Known limitation: both writers move project lines placed after the blocks to the top, and everything above the `sdlc` block's `*`, including the lift-sdlc negations, is shadowed by it for untracked files (a hand-written `!learnings/log.md`, new files under `learnings/pending/`). Tracked files are unaffected, so add such files once with `git add -f`.
 
-## Review & Execution Configuration (`.sdlc/local.json`)
+## Review & Execution Configuration (`.sdlc/config.json` & `.sdlc/local.json`)
 
-You can customize subagent defaults and review behavior on a per-workspace basis by creating or modifying `.sdlc/local.json` in your project root (local-only settings ignored by git):
+Project-wide settings live in `.sdlc/config.json` (committed, validated by [schemas/sdlc-config.schema.json](../schemas/sdlc-config.schema.json)) and workspace-local overrides live in `.sdlc/local.json` (git-ignored, validated by [schemas/sdlc-local.schema.json](../schemas/sdlc-local.schema.json)):
 
 ```json
 {
   "review": {
-    "subagent_model": "gemini-3.8-flash-medium"
+    "subagent_model": "gemini-4-hydrogen-medium"
+  },
+  "execute": {
+    "standardWorkerEnum": "pro"
   }
 }
 ```
 
-- **`review.subagent_model`**: Sets the default model for `/review-sdlc` subagents when a review dimension does not explicitly specify a `model:` override in its YAML frontmatter. Read from `.sdlc/local.json`.
+- **`review.subagent_model`**: Sets the default Gemini 4 model for `/review-sdlc` subagents when a review dimension does not explicitly specify a `model:` override in its YAML frontmatter. Read from `.sdlc/local.json`.
+- **`execute.standardWorkerEnum`**: Controls the `agy` runtime enum for Balanced-tier Standard tasks (`"pro"` default, or `"inherit"` for Neon-session users who want Standard tasks to inherit the active session model). Configurable in `.sdlc/config.json` or `.sdlc/local.json`.

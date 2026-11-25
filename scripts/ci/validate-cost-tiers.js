@@ -19,7 +19,7 @@
  *   2 — parse / IO error
  *
  * Reuses extractFrontmatter + parseSimpleYaml from
- * `plugins/lift-sdlc/scripts/lib/dimensions.js` per the dry guardrail.
+ * `scripts/lib/dimensions.js` per the dry guardrail.
  */
 
 'use strict';
@@ -30,6 +30,7 @@ const path = require('node:path');
 const LIB = path.join(__dirname, '..', 'lib');
 const { extractFrontmatter, parseSimpleYaml } = require(path.join(LIB, 'dimensions'));
 const { resolveSdlcRoot } = require(path.join(LIB, 'config'));
+const { GEMINI4_MODELS, VALID_AGY_ENUMS } = require(path.join(LIB, 'model-tiers'));
 
 // ---------------------------------------------------------------------------
 // CLI parsing
@@ -61,18 +62,12 @@ function parseArgs(argv) {
 // ---------------------------------------------------------------------------
 
 function resolveSkillsDir(root) {
-  // Real repo layout
-  const real = path.join(root, 'plugins', 'lift-sdlc', 'skills');
-  if (fs.existsSync(real)) return real;
-  // Fixture layout — flat <root>/skills
   const flat = path.join(root, 'skills');
   if (fs.existsSync(flat)) return flat;
   return null;
 }
 
 function resolveAgentsDir(root) {
-  const real = path.join(root, 'plugins', 'lift-sdlc', 'agents');
-  if (fs.existsSync(real)) return real;
   const flat = path.join(root, 'agents');
   if (fs.existsSync(flat)) return flat;
   return null;
@@ -174,10 +169,12 @@ function parseDocTables(root) {
   }
 
   function cleanCell(cell) {
-    // Strip markdown formatting: bold/italic (*, _), code backticks (`), links [text](url) -> text
+    // Strip markdown formatting: bold/italic (*, edge _), code backticks (`), links [text](url) -> text
+    // Preserve intra-word underscores (e.g., `flash_lite`).
     return cell
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/[*`_]/g, '')
+      .replace(/[*`]/g, '')
+      .replace(/(^|\s)_+|_+(\s|$)/g, '$1$2')
       .trim();
   }
 
@@ -274,6 +271,187 @@ function diffOne(actuals, docRows, kind, findings) {
   }
 }
 
+function validateAgentModels(agents, findings) {
+  for (const a of agents) {
+    if (a.model !== null && !VALID_AGY_ENUMS.includes(a.model)) {
+      findings.push({
+        kind: 'INVALID_AGENT_MODEL',
+        target: 'agent',
+        name: a.name,
+        frontmatter: a.model,
+        allowed: VALID_AGY_ENUMS,
+      });
+    }
+  }
+}
+
+function validatePipelineManifest(root, findings) {
+  const skillsDir = resolveSkillsDir(root);
+  if (!skillsDir) return;
+  const pipelinePath = path.join(skillsDir, 'ship-sdlc', 'pipeline.json');
+  if (!fs.existsSync(pipelinePath)) return;
+
+  const manifest = JSON.parse(fs.readFileSync(pipelinePath, 'utf8'));
+  const validPipelineModels = new Set([...GEMINI4_MODELS, 'inherit']);
+
+  if (manifest.orchestratorModel !== null && manifest.orchestratorModel !== undefined) {
+    if (!validPipelineModels.has(manifest.orchestratorModel)) {
+      findings.push({
+        kind: 'INVALID_PIPELINE_MODEL',
+        target: 'pipeline',
+        name: 'orchestratorModel',
+        model: manifest.orchestratorModel,
+      });
+    }
+  }
+
+  for (const step of manifest.steps || []) {
+    if (step.dispatchMode === null) {
+      if (step.defaultModel !== null && step.defaultModel !== undefined) {
+        if (!validPipelineModels.has(step.defaultModel)) {
+          findings.push({
+            kind: 'INVALID_PIPELINE_MODEL',
+            target: 'pipeline',
+            name: `steps.${step.id}.defaultModel`,
+            model: step.defaultModel,
+          });
+        }
+      }
+    } else if (step.defaultModel === null || step.defaultModel === undefined || !validPipelineModels.has(step.defaultModel)) {
+      findings.push({
+        kind: 'INVALID_PIPELINE_MODEL',
+        target: 'pipeline',
+        name: `steps.${step.id}.defaultModel`,
+        model: step.defaultModel ?? null,
+      });
+    }
+    if (step.loop && Array.isArray(step.loop.subDispatch)) {
+      for (const sd of step.loop.subDispatch) {
+        if (sd.model !== null && sd.model !== undefined && !validPipelineModels.has(sd.model)) {
+          findings.push({
+            kind: 'INVALID_PIPELINE_MODEL',
+            target: 'pipeline',
+            name: `steps.${step.id}.loop.subDispatch.${sd.skill}.model`,
+            model: sd.model,
+          });
+        }
+      }
+    }
+  }
+}
+
+function validateSkillCallerModels(root, agents, findings) {
+  const skillsDir = resolveSkillsDir(root);
+  if (!skillsDir) return;
+
+  const agentModelByName = new Map();
+  for (const a of agents) {
+    if (a.model !== null) {
+      agentModelByName.set(a.name, a.model);
+    }
+  }
+  if (agentModelByName.size === 0) return;
+
+  const typeNameRe = /(?:["']?TypeName["']?)\s*:\s*["']([a-z0-9-]+)["']/;
+  const modelRe = /(?:["']?Model["']?)\s*:\s*["'](inherit|flash_lite|flash|pro)["']/;
+
+  const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    const skillFile = path.join(skillsDir, ent.name, 'SKILL.md');
+    if (!fs.existsSync(skillFile)) continue;
+    const content = fs.readFileSync(skillFile, 'utf8');
+    if (!content.includes('invoke_subagent')) continue;
+
+    const lines = content.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const tm = lines[i].match(typeNameRe);
+      if (!tm) continue;
+      const agentName = tm[1];
+      if (!agentModelByName.has(agentName)) continue;
+
+      let callerModel = null;
+      // Scan forward within the same subagent block (up to 8 lines)
+      for (let j = i + 1; j <= Math.min(lines.length - 1, i + 8); j++) {
+        if (typeNameRe.test(lines[j])) break;
+        if (/^\s*\}/.test(lines[j])) break;
+        const mm = lines[j].match(modelRe);
+        if (mm) {
+          callerModel = mm[1];
+          break;
+        }
+      }
+      // Scan backward if Model preceded TypeName (up to 4 lines)
+      if (!callerModel) {
+        for (let j = i - 1; j >= Math.max(0, i - 4); j--) {
+          if (typeNameRe.test(lines[j])) break;
+          if (/^\s*\{/.test(lines[j])) break;
+          const mm = lines[j].match(modelRe);
+          if (mm) {
+            callerModel = mm[1];
+            break;
+          }
+        }
+      }
+
+      if (callerModel) {
+        const expectedModel = agentModelByName.get(agentName);
+        if (callerModel !== expectedModel) {
+          findings.push({
+            kind: 'CALLER_MODEL_MISMATCH',
+            target: 'skill-caller',
+            skill: ent.name,
+            agent: agentName,
+            callerModel,
+            agentModel: expectedModel,
+            line: i + 1,
+            file: skillFile,
+          });
+        }
+      }
+    }
+  }
+}
+
+function validateNoLegacyGemini3(root, findings) {
+  const skillsDir = resolveSkillsDir(root);
+  if (!skillsDir) return;
+
+  const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    const filesToCheck = [];
+    const skillFile = path.join(skillsDir, ent.name, 'SKILL.md');
+    if (fs.existsSync(skillFile)) {
+      filesToCheck.push(skillFile);
+    }
+    const resourcesDir = path.join(skillsDir, ent.name, 'resources');
+    if (fs.existsSync(resourcesDir) && fs.statSync(resourcesDir).isDirectory()) {
+      for (const rEnt of fs.readdirSync(resourcesDir, { withFileTypes: true })) {
+        if (rEnt.isFile() && rEnt.name.endsWith('.md')) {
+          filesToCheck.push(path.join(resourcesDir, rEnt.name));
+        }
+      }
+    }
+
+    for (const filePath of filesToCheck) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const lines = content.split(/\r?\n/);
+      const relPath = path.relative(root, filePath).replace(/\\/g, '/');
+      for (let i = 0; i < lines.length; i++) {
+        if (/gemini-3\./i.test(lines[i])) {
+          findings.push({
+            kind: 'LEGACY_GEMINI3_REF',
+            target: 'skill-doc',
+            name: relPath,
+            line: i + 1,
+          });
+        }
+      }
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Output
 // ---------------------------------------------------------------------------
@@ -290,6 +468,18 @@ function emitHuman(findings, strict) {
     } else if (f.kind === 'STALE_DOC') {
       process.stdout.write(`STALE_DOC: ${f.name}\n`);
       exitCode = 1;
+    } else if (f.kind === 'INVALID_AGENT_MODEL') {
+      process.stdout.write(`INVALID_AGENT_MODEL: ${f.name}=${f.frontmatter} (expected one of: ${VALID_AGY_ENUMS.join('|')})\n`);
+      exitCode = 1;
+    } else if (f.kind === 'INVALID_PIPELINE_MODEL') {
+      process.stdout.write(`INVALID_PIPELINE_MODEL: ${f.name}=${f.model} (expected Gemini 4 tier or inherit)\n`);
+      exitCode = 1;
+    } else if (f.kind === 'CALLER_MODEL_MISMATCH') {
+      process.stdout.write(`CALLER_MODEL_MISMATCH: ${f.skill} invokes ${f.agent} with Model=${f.callerModel}, but agents/${f.agent}.md declares model=${f.agentModel} (line ${f.line})\n`);
+      exitCode = 1;
+    } else if (f.kind === 'LEGACY_GEMINI3_REF') {
+      process.stdout.write(`LEGACY_GEMINI3_REF: ${f.name}:${f.line} contains legacy gemini-3. reference\n`);
+      exitCode = 1;
     } else if (f.kind === 'INHERITED') {
       process.stderr.write(`INHERITED: ${f.name}\n`);
       if (strict) exitCode = 1;
@@ -301,7 +491,15 @@ function emitHuman(findings, strict) {
 function emitJson(findings, strict) {
   let exitCode = 0;
   for (const f of findings) {
-    if (f.kind === 'DRIFT' || f.kind === 'MISSING_DOC' || f.kind === 'STALE_DOC') {
+    if (
+      f.kind === 'DRIFT' ||
+      f.kind === 'MISSING_DOC' ||
+      f.kind === 'STALE_DOC' ||
+      f.kind === 'INVALID_AGENT_MODEL' ||
+      f.kind === 'INVALID_PIPELINE_MODEL' ||
+      f.kind === 'CALLER_MODEL_MISMATCH' ||
+      f.kind === 'LEGACY_GEMINI3_REF'
+    ) {
       exitCode = 1;
     } else if (f.kind === 'INHERITED' && strict) {
       exitCode = 1;
@@ -325,6 +523,10 @@ try {
   const findings = [];
   diffOne(skills, doc.skills, 'skill', findings);
   diffOne(agents, doc.agents, 'agent', findings);
+  validateAgentModels(agents, findings);
+  validatePipelineManifest(root, findings);
+  validateSkillCallerModels(root, agents, findings);
+  validateNoLegacyGemini3(root, findings);
 
   const exitCode = json ? emitJson(findings, strict) : emitHuman(findings, strict);
   process.exit(exitCode);

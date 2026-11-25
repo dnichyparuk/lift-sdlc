@@ -3,7 +3,6 @@ name: verify-pipeline-sdlc
 description: "Use this skill to analyze a failed CI run on a PR and either apply a minimal fix or emit a proposal. Dispatched automatically by ship-sdlc's verify-pipeline step under --auto, or invoked standalone via /verify-pipeline-sdlc --pr <N>. Triggers on: analyze CI failure, fix failing checks, post-PR CI verification, verify-pipeline."
 user-invocable: true
 argument-hint: "[--pr <number>] [--logs <path-or-string>] [--auto]"
-model: gemini-3.8-flash-medium
 ---
 
 # Verify Pipeline (SDLC)

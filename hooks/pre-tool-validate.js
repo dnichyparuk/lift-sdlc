@@ -28,15 +28,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const os = require('node:os');
+const { readHookContext } = require('./lib/hook-context');
 
 // 1. Read stdin
-let input = {};
-try {
-  const raw = fs.readFileSync(0, 'utf8');
-  if (raw.trim()) {
-    input = JSON.parse(raw);
-  }
-} catch {
+const { ok, input } = readHookContext({ failClosed: true });
+if (!ok) {
   // Stdin unreadable or non-JSON — fail closed, consistent with the other
   // PreToolUse guard hook (pre-tool-git-guard.js).
   process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'pre-tool-validate.js: could not parse tool-call input as JSON (fail-closed). If this repeats for every command, the host is sending malformed payloads — inspect hooks.json or temporarily disable this hook.' }) + '\n');
@@ -45,7 +41,7 @@ try {
 
 const toolCall = input.toolCall || {};
 const args = toolCall.args || {};
-const targetFile = args.TargetFile || args.Target || null;
+const targetFile = args.TargetFile || args.Path || args.file_path || args.Target || null;
 
 if (!targetFile) {
   process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
@@ -54,11 +50,15 @@ if (!targetFile) {
 
 // Extract content based on tool
 let proposedContent = null;
-if (toolCall.name === 'write_to_file' || toolCall.name === 'write_file') {
-  proposedContent = args.CodeContent || args.Content || '';
-} else if (toolCall.name === 'replace_file_content' || toolCall.name === 'multi_replace_file_content') {
+if (toolCall.name === 'write_to_file' || toolCall.name === 'write_file' || toolCall.name === 'create_file') {
+  proposedContent = args.CodeContent || args.Content || args.content || '';
+} else if (
+  toolCall.name === 'replace_file_content' ||
+  toolCall.name === 'multi_replace_file_content' ||
+  toolCall.name === 'edit_file'
+) {
   // We can't perfectly reconstruct the file here without reading the original
-  // and applying patches. For simplicity in this port, we will allow it 
+  // and applying patches. For simplicity in this port, we will allow it
   // and rely on SKILL.md for deep replace validation, or we just validate what we can.
   // For now, allow replacements and only block full writes if they are invalid.
   process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\n');
@@ -69,7 +69,7 @@ if (toolCall.name === 'write_to_file' || toolCall.name === 'write_file') {
 }
 
 // 2. Pattern matching
-const DIMENSION_RE = /[/\\]\.(?:antigravity|sdlc)[/\\]review-dimensions[/\\][^/\\]+\.ya?ml$/;
+const DIMENSION_RE = /[/\\]\.(?:antigravity|sdlc)[/\\]review-dimensions[/\\][^/\\]+\.(?:md|ya?ml)$/;
 const PR_TEMPLATE_RE = /[/\\]\.(?:antigravity|sdlc)[/\\]pr-template\.md$/;
 const PLAN_RE = /[/\\]plans[/\\][^/\\]+\.md$/;
 
@@ -107,7 +107,7 @@ if (isPlan) {
 // 4. Locate validator scripts
 let validatorScript;
 if (isDimension) {
-  validatorScript = path.join(scriptsDir, 'ci', 'validate-dimensions.js');
+  validatorScript = path.join(scriptsDir, 'util', 'validate-dimension.js');
 } else if (isPrTemplate) {
   validatorScript = path.join(scriptsDir, 'ci', 'validate-pr-template.js');
 } else {
@@ -141,10 +141,25 @@ try {
       const findings = (stdout || stderr || err.message).split(tempFile).join(targetFile);
       decision = { decision: 'deny', reason: `Validation Failed:\n${findings}` };
     }
+  } else if (isDimension) {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'validate-'));
+    const tempFile = path.join(tempDir, path.basename(targetFile));
+    fs.writeFileSync(tempFile, proposedContent, 'utf8');
+    try {
+      execFileSync(process.execPath, [validatorScript, tempFile], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      decision = { decision: 'allow' };
+    } catch (err) {
+      const stdout = (err.stdout || '').trim();
+      const stderr = (err.stderr || '').trim();
+      const findings = (stderr || stdout || err.message).split(tempFile).join(targetFile);
+      decision = { decision: 'deny', reason: `Validation Failed:\n${findings}` };
+    }
   } else {
-    // validate-dimensions.js and validate-pr-template.js only support project-root validation, not
-    // single files. For dimensions and pr-template we fall back to allow. This is a known limitation
-    // of the Shift-Left port.
+    // validate-pr-template.js only supports project-root validation, not single files.
+    // For pr-template we fall back to allow. This is a known limitation of the Shift-Left port.
     decision = { decision: 'allow' };
   }
 } catch (err) {

@@ -56,10 +56,10 @@ Skills locate scripts using a two-step pattern:
 
 ```bash
 # 1. Installed plugin (find in plugin cache)
-SCRIPT=$(find ~/.gemini/config/plugins -name "<name>.js" -path "*/sdlc*/scripts/<subdir>/<name>.js" 2>/dev/null | sort -V | tail -1)
+SCRIPT=$(find ~/.gemini/antigravity-cli/plugins -name "<name>.js" -path "*/sdlc*/scripts/<subdir>/<name>.js" 2>/dev/null | sort -V | tail -1)
 
 # 2. Development fallback (relative to repo root)
-[ -z "$SCRIPT" ] && [ -f "plugins/lift-sdlc/scripts/<subdir>/<name>.js" ] && SCRIPT="plugins/lift-sdlc/scripts/<subdir>/<name>.js"
+[ -z "$SCRIPT" ] && [ -f "scripts/<subdir>/<name>.js" ] && SCRIPT="scripts/<subdir>/<name>.js"
 ```
 
 All scripts use `__dirname`-based resolution for `lib/` imports:
