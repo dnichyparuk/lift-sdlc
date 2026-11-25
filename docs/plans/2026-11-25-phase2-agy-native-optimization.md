@@ -41,9 +41,9 @@ Keep root `AGENTS.md` untouched for plugin contributors, and create a minimal co
 Update `readSection(root, 'execute')` in `scripts/lib/config.js` to merge `.sdlc/local.json`'s `execute` section over `.sdlc/config.json`, deep-merging nested `priorWaveContextCaps` so local caps do not erase sibling project caps or `guardrails[]`. Add a local-safe write path (`{ target: 'local' }` or `writeLocalSection`) so developer `standardWorkerEnum` never leaks into tracked `.sdlc/config.json`.
 
 **Acceptance criteria:**
-- [ ] `readSection(root, 'execute')` returns `.sdlc/local.json` `standardWorkerEnum` and deep-merged `priorWaveContextCaps` over `.sdlc/config.json` while preserving project `guardrails[]`
-- [ ] Writing local `execute` overrides updates `.sdlc/local.json` without mutating `.sdlc/config.json`
-- [ ] Unit tests in `scripts/lib/config.test.js` cover precedence, deep-merge, and local write isolation
+- [x] `readSection(root, 'execute')` returns `.sdlc/local.json` `standardWorkerEnum` and deep-merged `priorWaveContextCaps` over `.sdlc/config.json` while preserving project `guardrails[]`
+- [x] Writing local `execute` overrides updates `.sdlc/local.json` without mutating `.sdlc/config.json`
+- [x] Unit tests in `scripts/lib/config.test.js` cover precedence, deep-merge, and local write isolation
 
 ### Task 3: Replace pure-filesystem/graph plan critique lanes (`G3`, `G4`, `G10`, `G12`) with deterministic Node checks
 

@@ -156,45 +156,103 @@ function readLocalConfig(projectRoot) {
   return { config: config || null, sources: config ? [LOCAL_CONFIG_PATH] : [] };
 }
 
+/**
+ * Return true for plain JSON-object values (excludes null, arrays, and built-in prototypes).
+ */
+function isPlainObject(v) {
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Return a shallow copy of obj omitting keys whose value is undefined.
+ */
+function omitUndefinedEntries(obj) {
+  const out = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) out[key] = val;
+  }
+  return out;
+}
+
+/**
+ * Merge local `.sdlc/local.json` `execute` overrides over project
+ * `.sdlc/config.json` `execute` settings. Deep-merges `priorWaveContextCaps`
+ * so partial local caps preserve sibling project caps, and preserves project
+ * `guardrails[]` unless explicitly overridden in local config.
+ *
+ * @param {object|null} projectExec
+ * @param {object|null} localExec
+ * @returns {object|null}
+ */
+function mergeExecuteSections(projectExec, localExec) {
+  const hasProject = isPlainObject(projectExec);
+  const hasLocal = isPlainObject(localExec);
+  if (!hasProject && !hasLocal) {
+    return localExec ?? projectExec ?? null;
+  }
+
+  const proj = hasProject ? omitUndefinedEntries(projectExec) : {};
+  const loc = hasLocal ? omitUndefinedEntries(localExec) : {};
+  const merged = { ...proj, ...loc };
+
+  if (isPlainObject(proj.priorWaveContextCaps) || isPlainObject(loc.priorWaveContextCaps)) {
+    merged.priorWaveContextCaps = {
+      ...(isPlainObject(proj.priorWaveContextCaps) ? omitUndefinedEntries(proj.priorWaveContextCaps) : {}),
+      ...(isPlainObject(loc.priorWaveContextCaps) ? omitUndefinedEntries(loc.priorWaveContextCaps) : {}),
+    };
+  }
+
+  if (proj.guardrails !== undefined && loc.guardrails === undefined) {
+    merged.guardrails = proj.guardrails;
+  }
+
+  return merged;
+}
+
 // ---------------------------------------------------------------------------
 // readSection
 // ---------------------------------------------------------------------------
 
-/** Sections that live in the project config vs local config. */
+/** Sections that live in the project config vs local config vs both. */
 const PROJECT_SECTIONS = new Set(['version', 'jira', 'commit', 'pr', 'plan', 'execute', 'rejected_guardrails', 'learn']);
+const LOCAL_SECTIONS = new Set(['ship', 'review', 'receivedReview', 'workspace', 'state', 'hooks']);
+const DUAL_SECTIONS = new Set(['execute']);
 
 /**
  * Read a single config section by name.
+ * Dual sections (such as `execute`) merge `.sdlc/local.json` overrides over
+ * `.sdlc/config.json` defaults and return `null` when absent in both files.
  *
  * @param {string} projectRoot
- * @param {string} section — one of 'version', 'commit', 'jira', 'pr', 'ship', 'review', 'receivedReview'
- * @returns {object|null}
+ * @param {string} section — section name (e.g. 'version', 'execute', 'ship', 'review', 'receivedReview', 'workspace', 'state')
+ * @returns {object|Array|null}
  */
 function readSection(projectRoot, section) {
+  if (DUAL_SECTIONS.has(section)) {
+    const { config: projectConfig } = readProjectConfig(projectRoot);
+    const { config: localConfig } = readLocalConfig(projectRoot);
+    const projectVal = projectConfig?.[section] ?? null;
+    const localVal = localConfig?.[section] ?? null;
+    if (projectVal === null && localVal === null) return null;
+    if (section === 'execute') {
+      return mergeExecuteSections(projectVal, localVal);
+    }
+    return isPlainObject(projectVal) || isPlainObject(localVal)
+      ? {
+          ...(isPlainObject(projectVal) ? omitUndefinedEntries(projectVal) : {}),
+          ...(isPlainObject(localVal) ? omitUndefinedEntries(localVal) : {}),
+        }
+      : (localVal ?? projectVal ?? null);
+  }
   if (PROJECT_SECTIONS.has(section)) {
     const { config } = readProjectConfig(projectRoot);
     return config?.[section] ?? null;
   }
-  if (section === 'ship') {
+  if (LOCAL_SECTIONS.has(section)) {
     const { config } = readLocalConfig(projectRoot);
-    return config?.ship ?? null;
-  }
-  if (section === 'review') {
-    const { config } = readLocalConfig(projectRoot);
-    return config?.review ?? null;
-  }
-  if (section === 'receivedReview') {
-    const { config } = readLocalConfig(projectRoot);
-    return config?.receivedReview ?? null;
-  }
-  // issue #351: workspace and state sections live in local config
-  if (section === 'workspace') {
-    const { config } = readLocalConfig(projectRoot);
-    return config?.workspace ?? null;
-  }
-  if (section === 'state') {
-    const { config } = readLocalConfig(projectRoot);
-    return config?.state ?? null;
+    return config?.[section] ?? null;
   }
   return null;
 }
@@ -255,8 +313,6 @@ function writeProjectConfig(projectRoot, config) {
 function computeConfigDiff(before, after) {
   const changed = [];
   let unchanged = 0;
-  const isPlainObject = (v) =>
-    v !== null && typeof v === 'object' && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
 
   function walk(b, a, prefix) {
     const keys = new Set([
@@ -318,34 +374,56 @@ function writeLocalConfig(projectRoot, config) {
 }
 
 // ---------------------------------------------------------------------------
-// writeSection
+// writeSection / writeLocalSection
 // ---------------------------------------------------------------------------
 
 /**
- * Convenience: read config, update one section, write back.
+ * Write a section directly to `.sdlc/local.json` (`LOCAL_SCHEMA_URL`) without
+ * creating or mutating `.sdlc/config.json`.
  *
  * @param {string} projectRoot
- * @param {string} section — one of 'version', 'ship', 'jira', 'review'
- * @param {object} value
+ * @param {string} section — local-writable section (e.g. 'execute', 'ship', 'review', 'receivedReview', 'workspace', 'state', 'hooks')
+ * @param {*} value
  */
-function writeSection(projectRoot, section, value) {
+function writeLocalSection(projectRoot, section, value) {
+  if (!LOCAL_SECTIONS.has(section) && !DUAL_SECTIONS.has(section)) {
+    throw new Error(`Section "${section}" cannot be written to local config (${LOCAL_CONFIG_PATH})`);
+  }
+  writeLocalConfig(projectRoot, { [section]: value });
+}
+
+/**
+ * Convenience: read config, update one section, write back.
+ * Pass `{ target: 'local' }` or `{ local: true }` to write a dual section
+ * (such as `execute`) to `.sdlc/local.json` instead of `.sdlc/config.json`.
+ *
+ * @param {string} projectRoot
+ * @param {string} section — section name
+ * @param {*} value
+ * @param {{ target?: 'project'|'local', local?: boolean }} [opts]
+ */
+function writeSection(projectRoot, section, value, opts) {
+  const target = opts?.local === true ? 'local' : opts?.target;
+
+  if (target !== undefined) {
+    if (target === 'local') {
+      writeLocalSection(projectRoot, section, value);
+      return;
+    }
+    if (target === 'project') {
+      if (!PROJECT_SECTIONS.has(section)) {
+        throw new Error(`Section "${section}" cannot be written to project config (${PROJECT_CONFIG_PATH})`);
+      }
+      writeProjectConfig(projectRoot, { [section]: value });
+      return;
+    }
+    throw new Error(`Invalid writeSection target "${target}": expected "project" or "local"`);
+  }
+
   if (PROJECT_SECTIONS.has(section)) {
     writeProjectConfig(projectRoot, { [section]: value });
-  } else if (section === 'ship') {
-    writeLocalConfig(projectRoot, { ship: value });
-  } else if (section === 'review') {
-    writeLocalConfig(projectRoot, { review: value });
-  } else if (section === 'receivedReview') {
-    writeLocalConfig(projectRoot, { receivedReview: value });
-  } else if (section === 'workspace') {
-    // issue #351: workspace lives in local config
-    writeLocalConfig(projectRoot, { workspace: value });
-  } else if (section === 'state') {
-    // issue #351: state lives in local config
-    writeLocalConfig(projectRoot, { state: value });
-  } else if (section === 'hooks') {
-    // issue #370/#372: hooks lives in local config (per-developer override)
-    writeLocalConfig(projectRoot, { hooks: value });
+  } else if (LOCAL_SECTIONS.has(section)) {
+    writeLocalConfig(projectRoot, { [section]: value });
   }
 }
 
@@ -692,6 +770,7 @@ module.exports = {
   readSection,
   writeProjectConfig,
   writeLocalConfig,
+  writeLocalSection,
   writeSection,
   computeConfigDiff,
   ensureSdlcGitignore,
@@ -705,4 +784,6 @@ module.exports = {
   PROJECT_SCHEMA_URL,
   LOCAL_SCHEMA_URL,
   PROJECT_SECTIONS,
+  LOCAL_SECTIONS,
+  DUAL_SECTIONS,
 };
