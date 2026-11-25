@@ -255,9 +255,9 @@ Pass resolved `standard_worker_enum` / `prior_wave_context_caps` from `execute-c
 Keep `Primary Dispatch` (`verify.py`), `Step 0/1a`, `alwaysFixSeverities` / `alwaysHardenFromReview`, Steps 4–12 consent/apply/link/reply hard gates, and `DO NOT` inline; move Step 1b/3a/3b legacy verifier instructions and Step 7 pushback examples into `skills/received-review-sdlc/resources/verify-fallback-and-playbook.md`.
 
 **Acceptance criteria:**
-- [ ] `skills/received-review-sdlc/SKILL.md` is ≤ 18,432 bytes
-- [ ] All hard gates and `DO NOT` remain inline
-- [ ] `npm run check:refs` and `npm run check:discovery` pass
+- [x] `skills/received-review-sdlc/SKILL.md` is ≤ 18,432 bytes
+- [x] All hard gates and `DO NOT` remain inline
+- [x] `npm run check:refs` and `npm run check:discovery` pass
 
 ---
 
