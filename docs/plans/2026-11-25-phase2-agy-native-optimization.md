@@ -160,9 +160,9 @@ Move verbose bulk-op examples, `--init-templates` walkthroughs, and multi-site e
 Move `pr.labels` off/rules/llm mode tables and custom PR template edge rules to `skills/pr-sdlc/resources/label-inference-guide.md`, keeping the 8-section template, `pr.js` prepare/link-gate `VERBATIM` blocks, and `DO NOT` inline.
 
 **Acceptance criteria:**
-- [ ] `skills/pr-sdlc/SKILL.md` is ≤ 20,480 bytes
-- [ ] 8-section template, `VERBATIM` CLI blocks, and `DO NOT` remain inline
-- [ ] `npm run check:refs` and `npm run check:discovery` pass
+- [x] `skills/pr-sdlc/SKILL.md` is ≤ 20,480 bytes
+- [x] 8-section template, `VERBATIM` CLI blocks, and `DO NOT` remain inline
+- [x] `npm run check:refs` and `npm run check:discovery` pass
 
 ### Task 9: Trim `setup-sdlc/SKILL.md` and `version-sdlc/SKILL.md` below 20 KB
 
