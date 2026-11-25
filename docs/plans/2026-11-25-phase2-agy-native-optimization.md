@@ -23,9 +23,9 @@
 Keep root `AGENTS.md` untouched for plugin contributors, and create a minimal consumer-only `rules/AGENTS.md` (<1.5 KB, ~30 lines) enforcing strictly universal runtime invariants (Plan mode routes to `/plan-sdlc`, never autonomously add `- [~]` skipped checkboxes, never stage `.sdlc/` runtime artifacts, always pass explicit `--plan <path>` to `/execute-plan-sdlc` and `/ship-sdlc`). Add a clean SVG icon at `assets/logo.svg` and reference `"logo": "assets/logo.svg"` in `plugin.json`.
 
 **Acceptance criteria:**
-- [ ] `rules/AGENTS.md` exists, is ≤ 2,048 bytes, and contains zero contributor-only repo rules (`npm run check:all`, `docs/changes-log.md`, etc.)
-- [ ] `assets/logo.svg` exists as a valid SVG and is wired in `plugin.json`
-- [ ] `agy plugin validate .` reports `rules 1` and emits zero logo/rules warnings
+- [x] `rules/AGENTS.md` exists, is ≤ 2,048 bytes, and contains zero contributor-only repo rules (`npm run check:all`, `docs/changes-log.md`, etc.)
+- [x] `assets/logo.svg` exists as a valid SVG and is wired in `plugin.json`
+- [x] `agy plugin validate .` reports `rules 1` and emits zero logo/rules warnings
 
 ### Task 2: Wire `.sdlc/local.json` `execute` override precedence in `scripts/lib/config.js`
 
