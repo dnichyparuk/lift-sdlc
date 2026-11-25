@@ -142,9 +142,9 @@ Update `skills/plan-sdlc/SKILL.md` Step 3 to invoke `node "<PLUGIN_ROOT>/scripts
 Move verbose bulk-op examples, `--init-templates` walkthroughs, and multi-site edge cases to `skills/jira-sdlc/resources/operations-and-telemetry.md`, keeping cache lookup, write-guard artifact gate (`Step 2.5–2.7`), `Quality Gates`, and `DO NOT` inline.
 
 **Acceptance criteria:**
-- [ ] `skills/jira-sdlc/SKILL.md` is ≤ 20,480 bytes
-- [ ] Write-guard gate, `Quality Gates`, and `DO NOT` remain inline in `SKILL.md`
-- [ ] `npm run check:refs` and `npm run check:discovery` pass
+- [x] `skills/jira-sdlc/SKILL.md` is ≤ 20,480 bytes
+- [x] Write-guard gate, `Quality Gates`, and `DO NOT` remain inline in `SKILL.md`
+- [x] `npm run check:refs` and `npm run check:discovery` pass
 
 ### Task 8: Trim `pr-sdlc/SKILL.md` below 20 KB
 
