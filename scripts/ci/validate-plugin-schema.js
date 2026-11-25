@@ -42,10 +42,9 @@
  *   check:plugin`, not auto-triggered by anything. That is what "wired into
  *   CI" means by this repo's own existing standard for the phrase.
  *
- * @usage node scripts/ci/validate-plugin-schema.js [--plugin-dir <path>]
- * @exit 0 valid (schema + tool-boundary + hooks shape), or `agy` not
- *          installed (schema check skipped, the two hand-rolled assertions
- *          still run and must pass)
+ * @usage node scripts/ci/validate-plugin-schema.js [--plugin-dir <path>] [--no-check-skill-size] [--strict-warnings]
+ * @exit 0 valid (schema + tool-boundary + hooks shape + skill/rule size), or `agy` not
+ *          installed (schema check skipped, local assertions still run and must pass)
  * @exit 1 agy-reported schema violation, either read-only agent's `tools:`
  *          value is not exactly `view_file`, or hooks.json violates the
  *          official event-array shapes
@@ -89,7 +88,7 @@ const MAX_SKILL_SIZE_BYTES = 24000;
 function parseArgs(args) {
   const result = {
     pluginDir: REPO_ROOT,
-    checkSkillSize: false,
+    checkSkillSize: true,
     strictWarnings: false,
   };
   for (let i = 0; i < args.length; i++) {
@@ -98,6 +97,8 @@ function parseArgs(args) {
       i++;
     } else if (args[i] === '--check-skill-size') {
       result.checkSkillSize = true;
+    } else if (args[i] === '--no-check-skill-size') {
+      result.checkSkillSize = false;
     } else if (args[i] === '--strict-warnings') {
       result.strictWarnings = true;
     }
@@ -348,7 +349,7 @@ function checkHooksShape(pluginDir) {
 }
 
 // ---------------------------------------------------------------------------
-// Skill & rule size assertion (optional --check-skill-size flag)
+// Skill & rule size assertion (enabled by default; opt out via --no-check-skill-size)
 // ---------------------------------------------------------------------------
 
 /**
@@ -407,6 +408,9 @@ function checkSkillSize(pluginDir) {
 /**
  * Extract warning lines from `agy plugin validate` stdout/stderr.
  * Matches lines containing `⚠`, singular `warning`, or non-zero `<N> warnings`.
+ * Note: `--strict-warnings` remains opt-in because running inside the plugin
+ * source repo produces one expected warning for contributor-only root `AGENTS.md`
+ * (while consumer runtime rules live in `rules/AGENTS.md`).
  * @param {{stdout?: string, stderr?: string}} agyResult
  * @returns {string[]}
  */

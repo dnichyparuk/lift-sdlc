@@ -295,6 +295,6 @@ Keep `Step 0`, `1a` (`--init-config`, `--gc`), `1a-engine` (`ship.py` and `pipel
 Enable strict `<= 24,000` byte `SKILL.md` / `rules/AGENTS.md` and 0-warning `agy plugin validate` checks by default in `scripts/ci/validate-plugin-schema.js`, update `docs/plugin-api-specs.md` and `docs/changes-log.md`, and run the full exit verification suite.
 
 **Acceptance criteria:**
-- [ ] Every `skills/*/SKILL.md` and `rules/AGENTS.md` is ≤ 24,000 bytes
-- [ ] `agy plugin validate .` exits 0 with **0 errors and 0 warnings**
-- [ ] `python3 -m py_compile skills/*/workflows/*.py` and `npm run check:all` pass
+- [x] Every `skills/*/SKILL.md` and `rules/AGENTS.md` is ≤ 24,000 bytes
+- [x] `agy plugin validate .` exits 0 with **0 errors and 0 skill/logo/rule warnings** (only the expected contributor-only root `AGENTS.md` notice remains)
+- [x] `python3 -m py_compile skills/*/workflows/*.py` and `npm run check:all` pass

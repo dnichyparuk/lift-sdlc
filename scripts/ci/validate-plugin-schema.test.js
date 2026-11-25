@@ -66,18 +66,21 @@ function makePluginDir({ synthesisTools = '[view_file]', reviewTools = '[view_fi
 // parseArgs
 // ---------------------------------------------------------------------------
 
-test('parseArgs defaults --plugin-dir to REPO_ROOT and optional flags to false', () => {
+test('parseArgs defaults --plugin-dir to REPO_ROOT, checkSkillSize to true, and strictWarnings to false', () => {
   const parsed = parseArgs([]);
   assert.equal(parsed.pluginDir, REPO_ROOT);
-  assert.equal(parsed.checkSkillSize, false);
+  assert.equal(parsed.checkSkillSize, true);
   assert.equal(parsed.strictWarnings, false);
 });
 
-test('parseArgs reads --plugin-dir, --check-skill-size, and --strict-warnings', () => {
+test('parseArgs reads --plugin-dir, --check-skill-size, --no-check-skill-size, and --strict-warnings', () => {
   const parsed = parseArgs(['--plugin-dir', '/tmp/some-plugin', '--check-skill-size', '--strict-warnings']);
   assert.equal(parsed.pluginDir, '/tmp/some-plugin');
   assert.equal(parsed.checkSkillSize, true);
   assert.equal(parsed.strictWarnings, true);
+
+  const optedOut = parseArgs(['--no-check-skill-size']);
+  assert.equal(optedOut.checkSkillSize, false);
 });
 
 // ---------------------------------------------------------------------------
@@ -467,11 +470,19 @@ test('evaluate: --strict-warnings disabled by default allows agy warnings; enabl
   assert.equal(strictClean.exitCode, 0);
 });
 
-test('CLI: --check-skill-size exits 1 when a fixture SKILL.md exceeds 24000 bytes', () => {
+test('CLI: checkSkillSize runs by default and exits 1 when a fixture SKILL.md exceeds 24000 bytes', () => {
   const dir = makePluginDir();
   fs.mkdirSync(path.join(dir, 'skills', 'huge'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'skills', 'huge', 'SKILL.md'), 'x'.repeat(MAX_SKILL_SIZE_BYTES + 5), 'utf8');
-  const result = run(['--plugin-dir', dir, '--check-skill-size']);
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /skill-size: skills\/huge\/SKILL\.md/);
+
+  const defaultResult = run(['--plugin-dir', dir]);
+  assert.equal(defaultResult.status, 1);
+  assert.match(defaultResult.stderr, /skill-size: skills\/huge\/SKILL\.md/);
+
+  const compatFlagResult = run(['--plugin-dir', dir, '--check-skill-size']);
+  assert.equal(compatFlagResult.status, 1);
+  assert.match(compatFlagResult.stderr, /skill-size: skills\/huge\/SKILL\.md/);
+
+  const optOutResult = run(['--plugin-dir', dir, '--no-check-skill-size']);
+  assert.doesNotMatch(optOutResult.stderr, /skill-size:/);
 });

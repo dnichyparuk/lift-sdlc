@@ -21,7 +21,8 @@ Minimal marker file at the plugin root:
 {
   "name": "lift-sdlc",
   "description": "Skills and commands for software development lifecycle workflows",
-  "version": "0.21.0",
+  "version": "0.27.2",
+  "logo": "assets/logo.svg",
   "author": { "name": "dnichyparuk" }
 }
 ```
@@ -83,6 +84,7 @@ Plugins live under `~/.gemini/antigravity-cli/plugins/<plugin_name>/`:
 |---|---|---|---|
 | `name` | string | **Required** | Machine-readable identifier, pattern `^[a-zA-Z0-9-_]+$` |
 | `description` | string | Optional | Human-readable purpose |
+| `logo` | string | Optional | Relative path to plugin SVG icon (`"logo": "assets/logo.svg"` in `lift-sdlc`) |
 | `$schema` | string | Optional | Listed by the docs "for editor validation", but the documented URL `https://antigravity.google/schemas/v1/plugin.json` returns 404 (checked 2026-09-15); `lift-sdlc` omits it |
 
 Notably: **no `version` or `author` field is part of the documented schema.** The `lift-*`
@@ -229,6 +231,13 @@ Followed by explicit agent instructions in the body. Skills auto-convert to slas
    Native `run_workflow` scripts (`skills/{ship-sdlc,execute-plan-sdlc,review-sdlc,received-review-sdlc}/workflows/*.py`)
    flatten multi-level subagent trees to max depth 1 via `call_tool("run_command", ...)`,
    `asyncio.gather(..., return_exceptions=True)`, and JSON-schema-enforced `agent()`.
+   - **Depth-1 `ship.py` coroutine loading:** `skills/ship-sdlc/workflows/ship.py` loads `execute.py::run_execute`, `review.py::run_review`, and `verify.py::run_verify` in isolated Python namespaces via `exec()` so `execute`, `review`, and `received-review` verification run directly at Depth 1 without `agent(type_name="self", ...)` hops.
+   - **Deterministic plan static critique (`plan.js --critique-static`):** `node scripts/skill/plan.js --critique-static --plan <path>` runs `scripts/lib/plan-static-critique.js` to validate `G3` (DAG cycles), `G4` (unsequenced shared `Modify:` conflicts), `G10` (`Modify:` file existence on disk or from earlier `Create:`), and `G12` (missing `Depends on:` targets) deterministically with zero LLM calls.
+   - **`.sdlc/local.json` `execute` override precedence:** `readSection(root, 'execute')` in `scripts/lib/config.js` merges `.sdlc/local.json`'s `execute` section over `.sdlc/config.json` (deep-merging `priorWaveContextCaps` while preserving project `guardrails[]`), and `execute.py` reads `standardWorkerEnum` / `priorWaveContextCaps` via `scripts/util/execute-context-advisory.js --meta`.
+
+6. **Consumer Rules (`rules/AGENTS.md`) & 24,000-Byte Size Cap (`check:plugin`):**
+   - `rules/AGENTS.md` holds concise consumer-only runtime invariants loaded by `agy` plugins (`rules 1`), while root `AGENTS.md` remains untouched for plugin contributors (producing the single expected source-repo warning in `agy plugin validate .`; `--strict-warnings` in `scripts/ci/validate-plugin-schema.js` stays opt-in).
+   - `agy` silently truncates `SKILL.md` and `rules/AGENTS.md` files above `24,000` bytes. `npm run check:plugin` (`scripts/ci/validate-plugin-schema.js`) enforces `<= 24,000` bytes across all `skills/*/SKILL.md` and `rules/AGENTS.md` files by default (accepting `--check-skill-size` as a no-op compatibility flag and `--no-check-skill-size` to opt out), with cold reference tables extracted into `skills/*/resources/*.md`.
 
 ---
 
