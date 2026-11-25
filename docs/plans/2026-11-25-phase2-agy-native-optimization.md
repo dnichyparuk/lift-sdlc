@@ -124,9 +124,9 @@ Add a non-breaking `--meta` flag to `scripts/util/execute-context-advisory.js` r
 Update `skills/plan-sdlc/SKILL.md` Step 3 to invoke `node "<PLUGIN_ROOT>/scripts/skill/plan.js" --critique-static --plan "<PLAN_FILE_PATH>"` for `{G3, G4, G10, G12}` alongside the remaining semantic lanes covering `{G1..G17}`. Move cold OpenSpec/handoff edge matrices to `skills/plan-sdlc/resources/openspec-and-handoff-details.md` while keeping Steps 0–7 happy path and `DO NOT` inline.
 
 **Acceptance criteria:**
-- [ ] `skills/plan-sdlc/SKILL.md` is ≤ 20,480 bytes
-- [ ] Step 3 runs `plan.js --critique-static` and merges `{G1..G17}` by lane name
-- [ ] `npm run check:refs` and `npm run check:discovery` pass with 0 broken links
+- [x] `skills/plan-sdlc/SKILL.md` is ≤ 20,480 bytes
+- [x] Step 3 runs `plan.js --critique-static` and merges `{G1..G17}` by lane name
+- [x] `npm run check:refs` and `npm run check:discovery` pass with 0 broken links
 
 ### Task 7: Trim `jira-sdlc/SKILL.md` below 20 KB
 
