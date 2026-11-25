@@ -82,9 +82,9 @@ Share `extractTasks`, `extractField`, and `checkPF4` from `scripts/ci/validate-p
 Extend `checkPD5` in `scripts/lib/discovery.js` to validate lowercase `./resources/*.md` links so extracted skill resources cannot dangle. Add a `--check-skill-size` flag (checking `<= 24,000` bytes on `SKILL.md` and `rules/AGENTS.md`) and 0-warning `agy` output validation to `scripts/ci/validate-plugin-schema.js`. Create offline hermetic `hooks/hook-envelope-smoke.test.js` (spawning all 9 hooks with camelCase `agy` v1.5+ payloads) and `scripts/ci/workflow-smoke.test.js` (Python harness mocking `call_tool("run_command", ...)` and `agent()`).
 
 **Acceptance criteria:**
-- [ ] `checkPD5` validates `./resources/*.md` references across all skills
-- [ ] `hooks/hook-envelope-smoke.test.js` verifies all 9 `hooks.json` scripts emit valid `agy` v1.5+ JSON envelopes
-- [ ] `scripts/ci/workflow-smoke.test.js` verifies `py_compile` and mocked `call_tool("run_command", ...)` / `agent()` execution across all 4 workflows
+- [x] `checkPD5` validates `./resources/*.md` references across all skills
+- [x] `hooks/hook-envelope-smoke.test.js` verifies all 9 `hooks.json` scripts emit valid `agy` v1.5+ JSON envelopes
+- [x] `scripts/ci/workflow-smoke.test.js` verifies `py_compile` and mocked `call_tool("run_command", ...)` / `agent()` execution across all 4 workflows
 
 ---
 

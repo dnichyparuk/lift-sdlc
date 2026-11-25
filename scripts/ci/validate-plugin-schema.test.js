@@ -13,10 +13,13 @@ const {
   readToolsValue,
   checkToolBoundary,
   checkHooksShape,
+  checkSkillSize,
+  findAgyWarnings,
   validateHooksDocument,
   runAgyValidate,
   evaluate,
   REQUIRED_TOOLS_VALUE,
+  MAX_SKILL_SIZE_BYTES,
   AGENTS_TO_CHECK,
   SKIP_NOTE,
   REPO_ROOT,
@@ -32,26 +35,26 @@ const GOOD_AGENT_MD = `---
 name: learn-synthesis-orchestrator
 description: test fixture
 subagent: true
-tools: view_file
-model: gemini-3.8-flash-low
+tools: [view_file]
+model: flash_lite
 ---
 
 # Body
 `;
 
 /** Build a throwaway plugin-dir tree with both read-only agent files. */
-function makePluginDir({ synthesisTools = 'view_file', reviewTools = 'view_file', omitReview = false } = {}) {
+function makePluginDir({ synthesisTools = '[view_file]', reviewTools = '[view_file]', omitReview = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-schema-'));
   fs.mkdirSync(path.join(dir, 'agents'), { recursive: true });
   fs.writeFileSync(
     path.join(dir, 'agents', 'learn-synthesis-orchestrator.md'),
-    GOOD_AGENT_MD.replace('tools: view_file', `tools: ${synthesisTools}`)
+    GOOD_AGENT_MD.replace('tools: [view_file]', `tools: ${synthesisTools}`)
   );
   if (!omitReview) {
     fs.writeFileSync(
       path.join(dir, 'agents', 'learn-review-only.md'),
       GOOD_AGENT_MD.replace('name: learn-synthesis-orchestrator', 'name: learn-review-only').replace(
-        'tools: view_file',
+        'tools: [view_file]',
         `tools: ${reviewTools}`
       )
     );
@@ -63,14 +66,18 @@ function makePluginDir({ synthesisTools = 'view_file', reviewTools = 'view_file'
 // parseArgs
 // ---------------------------------------------------------------------------
 
-test('parseArgs defaults --plugin-dir to REPO_ROOT', () => {
+test('parseArgs defaults --plugin-dir to REPO_ROOT and optional flags to false', () => {
   const parsed = parseArgs([]);
   assert.equal(parsed.pluginDir, REPO_ROOT);
+  assert.equal(parsed.checkSkillSize, false);
+  assert.equal(parsed.strictWarnings, false);
 });
 
-test('parseArgs reads --plugin-dir', () => {
-  const parsed = parseArgs(['--plugin-dir', '/tmp/some-plugin']);
+test('parseArgs reads --plugin-dir, --check-skill-size, and --strict-warnings', () => {
+  const parsed = parseArgs(['--plugin-dir', '/tmp/some-plugin', '--check-skill-size', '--strict-warnings']);
   assert.equal(parsed.pluginDir, '/tmp/some-plugin');
+  assert.equal(parsed.checkSkillSize, true);
+  assert.equal(parsed.strictWarnings, true);
 });
 
 // ---------------------------------------------------------------------------
@@ -79,7 +86,7 @@ test('parseArgs reads --plugin-dir', () => {
 
 test('extractFrontmatter pulls the block between the first two --- lines', () => {
   const fm = extractFrontmatter(GOOD_AGENT_MD);
-  assert.match(fm, /tools: view_file/);
+  assert.match(fm, /tools: \[view_file\]/);
   assert.doesNotMatch(fm, /# Body/);
 });
 
@@ -88,11 +95,11 @@ test('extractFrontmatter returns null when there is no frontmatter block', () =>
 });
 
 test('readToolsValue reads the exact tools: value', () => {
-  assert.equal(readToolsValue(GOOD_AGENT_MD), 'view_file');
+  assert.equal(readToolsValue(GOOD_AGENT_MD), '[view_file]');
 });
 
 test('readToolsValue returns null when frontmatter has no tools: line', () => {
-  const noTools = GOOD_AGENT_MD.replace('tools: view_file\n', '');
+  const noTools = GOOD_AGENT_MD.replace('tools: [view_file]\n', '');
   assert.equal(readToolsValue(noTools), null);
 });
 
@@ -115,20 +122,20 @@ test('checkToolBoundary AGENTS_TO_CHECK names exactly the two read-only agents',
     'agents/learn-synthesis-orchestrator.md',
     'agents/learn-review-only.md',
   ]);
-  assert.equal(REQUIRED_TOOLS_VALUE, 'view_file');
+  assert.equal(REQUIRED_TOOLS_VALUE, '[view_file]');
 });
 
-test('checkToolBoundary passes when both agents declare exactly tools: view_file', () => {
+test('checkToolBoundary passes when both agents declare exactly tools: [view_file]', () => {
   const dir = makePluginDir();
   assert.deepEqual(checkToolBoundary(dir), []);
 });
 
 test('checkToolBoundary fails on a superset (an additional read-only tool is still a violation)', () => {
-  const dir = makePluginDir({ synthesisTools: 'view_file, grep_search' });
+  const dir = makePluginDir({ synthesisTools: '[view_file, grep_search]' });
   const violations = checkToolBoundary(dir);
   assert.equal(violations.length, 1);
   assert.equal(violations[0].file, 'agents/learn-synthesis-orchestrator.md');
-  assert.match(violations[0].reason, /expected exactly "view_file"/);
+  assert.match(violations[0].reason, /expected exactly "\[view_file\]"/);
 });
 
 test('checkToolBoundary fails when a write-capable tool is granted', () => {
@@ -215,11 +222,11 @@ test('validateHooksDocument rejects handlers without a command, bad type, non-in
   assert.ok(reasons.some((r) => /"timeout" must be an integer/.test(r)));
 });
 
-test('validateHooksDocument rejects unknown events (SessionStart is not an Antigravity event)', () => {
-  const doc = { g: { SessionStart: [{ command: 'x' }] } };
+test('validateHooksDocument rejects unknown events', () => {
+  const doc = { g: { UnknownEvent: [{ command: 'x' }] } };
   const reasons = validateHooksDocument(doc);
   assert.equal(reasons.length, 1);
-  assert.match(reasons[0], /unknown event "SessionStart"/);
+  assert.match(reasons[0], /unknown event "UnknownEvent"/);
 });
 
 test('validateHooksDocument rejects non-object top level and non-array event values', () => {
@@ -387,4 +394,84 @@ test('CLI: --plugin-dir with a bad tools: value exits 1', () => {
   const result = run(['--plugin-dir', dir]);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /tools-boundary: agents\/learn-synthesis-orchestrator\.md/);
+});
+
+// ---------------------------------------------------------------------------
+// --check-skill-size & --strict-warnings
+// ---------------------------------------------------------------------------
+
+test('checkSkillSize passes when SKILL.md and rules/AGENTS.md are <= 24000 bytes', () => {
+  const dir = makePluginDir();
+  fs.mkdirSync(path.join(dir, 'skills', 'demo'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'skills', 'demo', 'SKILL.md'), 'a'.repeat(MAX_SKILL_SIZE_BYTES), 'utf8');
+  fs.mkdirSync(path.join(dir, 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'rules', 'AGENTS.md'), 'b'.repeat(1024), 'utf8');
+  assert.deepEqual(checkSkillSize(dir), []);
+});
+
+test('checkSkillSize fails when a SKILL.md or rules/AGENTS.md exceeds 24000 bytes', () => {
+  const dir = makePluginDir();
+  fs.mkdirSync(path.join(dir, 'skills', 'big-skill'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'skills', 'big-skill', 'SKILL.md'), 'a'.repeat(MAX_SKILL_SIZE_BYTES + 1), 'utf8');
+  fs.mkdirSync(path.join(dir, 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'rules', 'AGENTS.md'), 'b'.repeat(MAX_SKILL_SIZE_BYTES + 10), 'utf8');
+
+  const violations = checkSkillSize(dir);
+  assert.equal(violations.length, 2);
+  assert.equal(violations[0].file, 'skills/big-skill/SKILL.md');
+  assert.match(violations[0].reason, /exceeds maximum 24000 bytes/);
+  assert.equal(violations[1].file, 'rules/AGENTS.md');
+  assert.match(violations[1].reason, /exceeds maximum 24000 bytes/);
+});
+
+test('findAgyWarnings detects ⚠ and warning lines while ignoring "0 warnings"', () => {
+  const withWarnings = findAgyWarnings({
+    stdout: '  ⚠ skills/x/SKILL.md: body is 30000 bytes\n✔ Validation passed with 1 warnings\n',
+    stderr: '',
+  });
+  assert.equal(withWarnings.length, 2);
+
+  const withWarningWord = findAgyWarnings({
+    stdout: '',
+    stderr: 'warning: deprecated field\n',
+  });
+  assert.equal(withWarningWord.length, 1);
+
+  const clean = findAgyWarnings({
+    stdout: '✔ Validation passed with 0 warnings\nskills 18 · agents 12\n',
+    stderr: '',
+  });
+  assert.deepEqual(clean, []);
+});
+
+test('evaluate: --strict-warnings disabled by default allows agy warnings; enabled fails on warnings', () => {
+  const warnResult = {
+    installed: true,
+    status: 0,
+    stdout: '  ⚠ skills/ship-sdlc/SKILL.md: body is 67000 bytes\n✔ Validation passed with 1 warnings\n',
+    stderr: '',
+  };
+
+  const nonStrict = evaluate({ toolViolations: [], agyResult: warnResult, strictWarnings: false });
+  assert.equal(nonStrict.exitCode, 0);
+
+  const strict = evaluate({ toolViolations: [], agyResult: warnResult, strictWarnings: true });
+  assert.equal(strict.exitCode, 1);
+  assert.ok(strict.stderr.some((l) => l.includes('--strict-warnings')));
+
+  const strictClean = evaluate({
+    toolViolations: [],
+    agyResult: { installed: true, status: 0, stdout: '✔ Validation passed\n', stderr: '' },
+    strictWarnings: true,
+  });
+  assert.equal(strictClean.exitCode, 0);
+});
+
+test('CLI: --check-skill-size exits 1 when a fixture SKILL.md exceeds 24000 bytes', () => {
+  const dir = makePluginDir();
+  fs.mkdirSync(path.join(dir, 'skills', 'huge'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'skills', 'huge', 'SKILL.md'), 'x'.repeat(MAX_SKILL_SIZE_BYTES + 5), 'utf8');
+  const result = run(['--plugin-dir', dir, '--check-skill-size']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /skill-size: skills\/huge\/SKILL\.md/);
 });
