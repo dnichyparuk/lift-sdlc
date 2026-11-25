@@ -237,9 +237,9 @@ Load `execute.py::run_execute`, `review.py::run_review`, and `verify.py::run_ver
 Pass resolved `standard_worker_enum` / `prior_wave_context_caps` from `execute-context-advisory.js --meta` into `execute.py`, and move manual fallback Steps 2–8 to `skills/execute-plan-sdlc/resources/manual-wave-fallback.md`. Preserve `Plan Mode Check`, `Plan-argument gate`, `Post-compact recovery`, `Step 9` report, `DO NOT`, and every verbatim regex asserted by `skills/execute-plan-sdlc/plan-source.test.js`.
 
 **Acceptance criteria:**
-- [ ] `skills/execute-plan-sdlc/SKILL.md` is ≤ 18,432 bytes
-- [ ] `skills/execute-plan-sdlc/plan-source.test.js` passes 100%
-- [ ] `npm run check:refs` and `npm run check:discovery` pass
+- [x] `skills/execute-plan-sdlc/SKILL.md` is ≤ 18,432 bytes
+- [x] `skills/execute-plan-sdlc/plan-source.test.js` passes 100%
+- [x] `npm run check:refs` and `npm run check:discovery` pass
 
 ### Task 13: Trim `received-review-sdlc/SKILL.md` below 18 KB
 
