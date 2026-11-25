@@ -22,8 +22,12 @@ Rules for agents (and people) changing this repository. Keep them short; follow 
   `replace_file_content`, `multi_replace_file_content`, `find_by_name`, `grep_search`,
   `run_command`, `ask_question`, `invoke_subagent`), never Claude Code ones (`Read`, `Edit`,
   `Write`, `Bash`, `Agent`, `AskUserQuestion`, ...).
-- Skill frontmatter: the spec documents `name` and `description`. Do not add new fields; the
-  existing `argument-hint` / `user-invocable` are a repo convention and must not be load-bearing.
+- Skill frontmatter: the spec documents `name` and `description`. Do not add `model:` to `SKILL.md`
+  (`agy` ignores it); the existing `argument-hint` / `user-invocable` are a repo convention and must
+  not be load-bearing.
+- Agent frontmatter (`agents/*.md`): `tools:` must use YAML array syntax (`tools: [view_file, ...]`)
+  with Antigravity native tool names, and `model:` must use strict `agy` runtime enums
+  (`inherit | flash_lite | flash | pro`).
 
 ## 2. Mandatory checks before every commit and PR
 
@@ -31,15 +35,14 @@ All must pass. Never weaken, skip or loosen a test or validator to make it pass.
 or raise the problem with the owner.
 
 ```bash
-npm ci                       # once per clone
-npm test                     # node --test over scripts/, skills/, hooks/
-npm run lint                 # eslint scripts skills — zero errors
-npm run check:refs           # skill → script references
-npm run check:plugin         # plugin.json / hooks.json / skills / agents schema
-npm run check:discovery
-agy plugin validate .        # official validator
-npm run test:learning-loop   # also required when learning-loop code changes
-                             # (skills/learn-sdlc, scripts/skill/learn-*.js, scripts/lib/learnings.js)
+npm ci                                        # once per clone
+npm test                                      # node --test over scripts/, skills/, hooks/
+npm run lint                                  # eslint scripts skills hooks — zero errors
+npm run check:all                             # check:refs + check:plugin + check:discovery + check:tiers
+python3 -m py_compile skills/*/workflows/*.py # syntax check native run_workflow scripts
+agy plugin validate .                         # official validator
+npm run test:learning-loop                    # also required when learning-loop code changes
+                                              # (skills/learn-sdlc, scripts/skill/learn-*.js, scripts/lib/learnings.js)
 ```
 
 - If `agy` is not installed or cannot run, say so in the PR's "Spec compliance" section and do
@@ -72,14 +75,14 @@ npm run test:learning-loop   # also required when learning-loop code changes
 
 | Path | What |
 |---|---|
-| `plugin.json`, `hooks.json` | Plugin manifest and hook registration |
-| `skills/<name>/SKILL.md` (+ `resources/`) | Skills |
-| `agents/*.md` | Registered subagents (dispatched with `invoke_subagent`) |
-| `hooks/*.js` | Hook handlers (stdin `toolCall` → stdout `{decision, reason}`) |
+| `plugin.json`, `hooks.json` | Plugin manifest and 9 hook registrations (`SessionStart`, `PreToolUse` ×4, `PostInvocation`, `Stop` ×3) |
+| `skills/<name>/SKILL.md` (+ `resources/`, `workflows/*.py`) | 18 skills (including `pipeline-sdlc`) and 4 native Python `run_workflow` scripts (`ship.py`, `execute.py`, `review.py`, `verify.py`) |
+| `agents/*.md` | 12 registered subagents (dispatched with `invoke_subagent`) |
+| `hooks/*.js`, `hooks/lib/hook-context.js` | Hook handlers using `stdin.cwd` / `stdin.workspacePaths[0]` and `{ injectSteps: [{ systemMessage: { systemMessage } }] }` |
 | `scripts/skill/` | Prepare/CLI scripts called by skills |
-| `scripts/lib/` | Shared libraries (e.g. `plan-checkboxes.js`, `plan-indexer/`) |
+| `scripts/lib/` | Shared libraries (e.g. `model-tiers.js`, `dispatch-budget.js`, `plan-checkboxes.js`, `plan-indexer/`) |
 | `scripts/ci/` | Validators and CI helpers (`validate-*.js`) |
-| `schemas/` | JSON schemas (e.g. `delivery-graph.schema.json`) |
+| `schemas/` | JSON schemas (`delivery-graph.schema.json`, `sdlc-config.schema.json`, `sdlc-local.schema.json`) |
 | `templates/` | Files deployed to user projects (plan guidelines, dashboard, workflows) |
 | `.sdlc/review-dimensions/`, `.github/instructions/` | Review criteria used by `review-sdlc` |
 | `docs/` | Specs, architecture and the changes log |

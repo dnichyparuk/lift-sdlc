@@ -1,0 +1,316 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/dnichyparuk/lift-sdlc/main/schemas/sdlc-config.schema.json",
+  "title": "SDLCProjectConfig",
+  "description": "Schema for .sdlc/config.json — project-shared configuration for Lift-SDLC",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "JSON Schema URL for editor validation"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Config schema version (current: 4)"
+    },
+    "project": {
+      "type": "object",
+      "description": "Optional project-level metadata",
+      "properties": {
+        "name": { "type": "string" },
+        "defaultBranch": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "version": {
+      "$ref": "#/definitions/versionSection"
+    },
+    "jira": {
+      "$ref": "#/definitions/jiraSection"
+    },
+    "github": {
+      "$ref": "#/definitions/githubSection"
+    },
+    "commit": {
+      "$ref": "#/definitions/commitSection"
+    },
+    "pr": {
+      "$ref": "#/definitions/prSection"
+    },
+    "plan": {
+      "$ref": "#/definitions/planSection"
+    },
+    "execute": {
+      "$ref": "#/definitions/executeSection"
+    },
+    "openspec": {
+      "$ref": "#/definitions/openspecSection"
+    },
+    "learn": {
+      "$ref": "#/definitions/learnSection"
+    },
+    "rejected_guardrails": {
+      "type": "array",
+      "description": "Learning signature IDs explicitly rejected by human PR review so learn-sdlc does not re-propose them",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ship": {
+      "type": "object",
+      "description": "Optional project-level ship defaults (developer overrides live in .sdlc/local.json)",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "versionSection": {
+      "type": "object",
+      "description": "Versioning and release configuration consumed by version-sdlc and ship-sdlc",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["file", "tag"],
+          "description": "Whether the canonical version lives in a manifest file or only in git tags"
+        },
+        "versionFile": {
+          "type": "string",
+          "description": "Relative path to the file holding the version (ignored when mode is tag)"
+        },
+        "fileType": {
+          "type": "string",
+          "enum": ["package.json", "cargo.toml", "pyproject.toml", "pubspec.yaml", "plugin.json", "version-file"],
+          "description": "Parser/writer format for versionFile"
+        },
+        "tagPrefix": {
+          "type": "string",
+          "description": "Prefix prepended to git release tags (e.g., v)"
+        },
+        "changelog": {
+          "type": "boolean",
+          "description": "Whether to append release entries to changelogFile"
+        },
+        "changelogFile": {
+          "type": "string",
+          "description": "Relative path to the changelog file"
+        },
+        "preRelease": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*$",
+          "description": "Default pre-release label (e.g., rc, beta, alpha)"
+        }
+      },
+      "required": ["mode"],
+      "additionalProperties": false
+    },
+    "jiraSection": {
+      "type": "object",
+      "description": "Jira integration settings consumed by jira-sdlc, commit-sdlc, and pr-sdlc",
+      "properties": {
+        "defaultProject": {
+          "type": "string",
+          "pattern": "^$|^[A-Z][A-Z0-9]{1,9}$",
+          "description": "Default Jira project key (2-10 uppercase alphanumeric characters)"
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]{1,9}$"
+          },
+          "description": "Allowed Jira project keys for multi-project repositories"
+        },
+        "site": {
+          "type": "string",
+          "description": "Default Atlassian Cloud site hostname"
+        }
+      },
+      "additionalProperties": false
+    },
+    "githubSection": {
+      "type": "object",
+      "description": "GitHub repository and account settings",
+      "properties": {
+        "owner": { "type": "string" },
+        "repo": { "type": "string" },
+        "expectedAccount": { "type": "string" },
+        "defaultBranch": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "commitSection": {
+      "type": "object",
+      "description": "Commit message validation rules consumed by commit-sdlc",
+      "properties": {
+        "subjectPattern": { "type": "string" },
+        "subjectPatternError": { "type": "string" },
+        "ticketPattern": { "type": "string" },
+        "allowedTypes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowedScopes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requiresBody": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "trailers": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "prLabelRule": {
+      "type": "object",
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "when": {
+          "type": "object",
+          "properties": {
+            "branchPrefix": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "commitType": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "pathGlob": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "jiraType": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "diffSizeUnder": { "type": "integer", "minimum": 1 }
+          },
+          "minProperties": 1,
+          "maxProperties": 1,
+          "additionalProperties": false
+        }
+      },
+      "required": ["label", "when"],
+      "additionalProperties": false
+    },
+    "prLabelsSection": {
+      "type": "object",
+      "description": "PR auto-labeling policy consumed by pr-sdlc",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["off", "rules", "llm"]
+        },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/prLabelRule" }
+        }
+      },
+      "required": ["mode"],
+      "additionalProperties": false
+    },
+    "prSection": {
+      "type": "object",
+      "description": "Pull request settings and title rules consumed by pr-sdlc",
+      "properties": {
+        "defaultBranch": { "type": "string" },
+        "expectedAccount": { "type": "string" },
+        "titlePattern": { "type": "string" },
+        "titlePatternError": { "type": "string" },
+        "ticketPattern": { "type": "string" },
+        "allowedTypes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowedScopes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requiresBody": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "trailers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "labels": {
+          "$ref": "#/definitions/prLabelsSection"
+        }
+      },
+      "additionalProperties": false
+    },
+    "guardrailItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning"]
+        }
+      },
+      "required": ["id", "description"],
+      "additionalProperties": false
+    },
+    "planSection": {
+      "type": "object",
+      "description": "Plan critique guardrails consumed by plan-sdlc",
+      "properties": {
+        "guardrails": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/guardrailItem" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "executeSection": {
+      "type": "object",
+      "description": "Execution guardrails, worker model routing, and wave context caps consumed by execute-plan-sdlc",
+      "properties": {
+        "guardrails": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/guardrailItem" }
+        },
+        "standardWorkerEnum": {
+          "type": "string",
+          "enum": ["pro", "inherit"],
+          "description": "Worker model enum for Balanced Standard tasks (pro for Hydrogen sessions, inherit for Neon sessions)"
+        },
+        "priorWaveContextCaps": {
+          "type": "object",
+          "properties": {
+            "maxFiles": { "type": "integer", "minimum": 1 },
+            "maxDecisions": { "type": "integer", "minimum": 1 },
+            "maxInterfaces": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "openspecSection": {
+      "type": "object",
+      "description": "OpenSpec integration preferences",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "autoArchive": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "learnSection": {
+      "type": "object",
+      "description": "Self-learning loop configuration consumed by learn-sdlc",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "recurrenceThreshold": { "type": "integer", "minimum": 1 },
+        "staleAfterCycles": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

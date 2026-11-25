@@ -3,7 +3,6 @@ name: received-review-sdlc
 description: "Use this skill when responding to code review feedback on a pull request or inline reviewer comments. Covers reading, verifying, evaluating, and responding to reviewer comments with a dual self-critique gate — prevents performative agreement and ensures technical rigor. Can be launched manually or automatically after /review-sdlc. Triggers on: process review feedback, respond to review, handle review comments, address PR feedback, fix review findings, received-review."
 user-invocable: true
 argument-hint: "[--pr <number>] [--auto]"
-model: gemini-3.8-flash-high
 ---
 
 # Responding to Code Review Feedback
@@ -14,6 +13,25 @@ self-critique gates ensure quality. No changes are made until the user explicitl
 the proposed action plan.
 
 **Announce at start:** "I'm using received-review-sdlc (sdlc v{sdlc_version})." — extract the version from the `sdlc:` line in the session-start system-reminder. If no version is in context, omit the parenthetical.
+
+---
+
+## Primary Dispatch — Native `run_workflow` (`workflows/verify.py`)
+
+After Step 0 (Plan Mode Check) and Step 1a (or when a PR exists and `run_workflow` is available), dispatch `skills/received-review-sdlc/workflows/verify.py` as the primary depth-1 verification engine for Step 3 (keeping Step 3a `received-review-orchestrator` and Step 3b inline verification below as fallback when `run_workflow` is unavailable or no PR manifest exists):
+
+- `Description`: `"Verify received PR review threads"`
+- `Cwd`: current working directory
+- `Args`: `{ "manifest_file": "<MANIFEST_FILE_or_omit>", "received_review_args": "$ARGUMENTS", "plugin_root": "<PLUGIN_ROOT>", "cwd": "<cwd>" }`
+- `Script`:
+  ```python
+  exec(open("<PLUGIN_ROOT>/skills/received-review-sdlc/workflows/verify.py").read(), globals())
+  await main()
+  ```
+
+Handle the structured JSON returned by `verify.py`:
+- `status === "failed"` with `exit_code === 1` (no PR found) → fall back to Step 1b + Step 3b; `exit_code === 2` → invoke `error-report-sdlc` and stop.
+- `status === "completed"` or `"partial"` — map `findings[]` (`verificationStatus`, `evidence`, `rippleEffects`, `reasoning`) and `reportFile` (marking any `missingIds` as `cannot-verify`), then proceed directly to Steps 4–12 (Evaluate, Critique, Draft Responses, Present/Consent, Implement, Meta-Analyze, Link Verification, Reply & Resolve).
 
 ---
 
@@ -205,7 +223,7 @@ Dispatch a single Subagent using `invoke_subagent`:
     {
       "TypeName": "received-review-orchestrator",
       "Role": "Received-Review Verification Orchestrator",
-      "Model": "flash_lite",
+      "Model": "flash",
       "Prompt": "MANIFEST_FILE: {MANIFEST_FILE from Step 1a}\nPROJECT_ROOT: {current working directory}\nPLUGIN_ROOT: {PLUGIN_ROOT}\nONLY_IDS: none"
     }
   ]

@@ -52,26 +52,46 @@ const { gcStateFiles, gcTempdirs } = require(path.join(LIB, 'state'));
 const { detectActiveChanges, isArchived } = require(path.join(LIB, 'openspec'));
 const { getAdvisory } = require(path.join(LIB, 'context-advisory'));
 const { PRE_RELEASE_LABEL_RE } = require(path.join(LIB, 'version'));
+const { toAgyModelEnum } = require(path.join(LIB, 'model-tiers'));
 
-// R-postgates: pipeline.json is the declarative source of truth for which
-// steps carry postGates (e.g. execute's completeness halt, version's
-// ancestry check). computeSteps() builds its own steps[] independently of
-// pipeline.json, so postGates must be merged in explicitly or run-workflow's
-// Step 4c.3 gate check silently never sees them.
-function loadPipelineGates() {
+// R-postgates / R-manifest-meta: pipeline.json is the declarative source of truth
+// for which steps carry postGates, loop blocks (verify-pipeline, await-remote-review),
+// and defaultModel. computeSteps() builds its own steps[] independently of
+// pipeline.json, so these fields must be merged in explicitly or run-workflow's
+// gate/loop handlers silently never see them.
+function loadPipelineManifestMeta() {
   try {
     const pipelineJsonPath = path.join(__dirname, '..', '..', 'skills', 'ship-sdlc', 'pipeline.json');
     const manifest = JSON.parse(fs.readFileSync(pipelineJsonPath, 'utf8'));
-    const gates = {};
+    const metaByStepId = {};
     for (const step of manifest.steps || []) {
+      const entry = {};
       if (Array.isArray(step.postGates) && step.postGates.length > 0) {
-        gates[step.id] = step.postGates;
+        entry.postGates = step.postGates;
       }
+      if (step.loop && typeof step.loop === 'object') {
+        entry.loop = step.loop;
+      }
+      if (step.defaultModel !== undefined) {
+        entry.defaultModel = step.defaultModel;
+      }
+      metaByStepId[step.id] = entry;
     }
-    return gates;
+    return metaByStepId;
   } catch (_) {
     return {};
   }
+}
+
+function loadPipelineGates() {
+  const metaByStepId = loadPipelineManifestMeta();
+  const gates = {};
+  for (const [id, meta] of Object.entries(metaByStepId)) {
+    if (meta.postGates) {
+      gates[id] = meta.postGates;
+    }
+  }
+  return gates;
 }
 
 const VALID_QUALITY = ['full', 'balanced', 'minimal'];
@@ -478,7 +498,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'execute',
       skill: 'execute-plan-sdlc',
-      model: 'gemini-3.8-flash-medium',
+      model: 'inherit',
       status: (!flags.hasPlan || !isIn('execute')) ? 'skipped' : 'will_run',
       skipSource: !flags.hasPlan && isIn('execute')
         ? 'none'
@@ -515,7 +535,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'commit',
       skill: 'commit-sdlc',
-      model: 'gemini-3.8-flash-medium',
+      model: 'gemini-4-hydrogen-medium',
       status: isIn('commit') ? 'will_run' : 'skipped',
       skipSource: skipSource('commit'),
       args: [
@@ -530,7 +550,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'review',
       skill: 'review-sdlc',
-      model: 'gemini-3.8-flash-medium',
+      model: 'gemini-4-hydrogen-medium',
       status: isIn('review') ? 'will_run' : 'skipped',
       skipSource: skipSource('review'),
       args: '--committed',
@@ -542,7 +562,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'received-review',
       skill: 'received-review-sdlc',
-      model: 'gemini-3.8-flash-high',
+      model: 'gemini-4-neon-low',
       status: 'conditional',
       skipSource: 'none',
       args: flags.auto ? '--auto' : '',
@@ -554,7 +574,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'commit-fixes',
       skill: 'commit-sdlc',
-      model: 'gemini-3.8-flash-medium',
+      model: 'gemini-4-hydrogen-medium',
       status: 'conditional',
       skipSource: 'none',
       args: [
@@ -569,7 +589,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'version',
       skill: 'version-sdlc',
-      model: 'gemini-3.8-flash-medium',
+      model: 'gemini-4-hydrogen-medium',
       status: (!isIn('version') || flags.workspace === 'worktree') ? 'skipped' : 'will_run',
       skipSource: !isIn('version')
         ? skipSource('version')
@@ -604,7 +624,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
         return {
           name: 'archive-openspec',
           skill: null,
-          model: 'gemini-3.8-flash-medium',
+          model: null,
           status: 'skipped',
           skipSource: skipSource('archive-openspec'),
           args: '',
@@ -618,7 +638,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
         return {
           name: 'archive-openspec',
           skill: null,
-          model: 'gemini-3.8-flash-medium',
+          model: null,
           status: 'skipped',
           skipSource: 'condition',
           args: '',
@@ -633,7 +653,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
       return {
         name: 'archive-openspec',
         skill: null,
-        model: 'gemini-3.8-flash-medium',
+        model: null,
         status: 'conditional',
         skipSource: 'none',
         args: `--change ${changeName}${flags.auto ? ' --auto' : ''}`,
@@ -646,7 +666,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'pr',
       skill: 'pr-sdlc',
-      model: 'gemini-3.8-flash-high',
+      model: 'gemini-4-hydrogen-high',
       status: isIn('pr') ? 'will_run' : 'skipped',
       skipSource: skipSource('pr'),
       args: [
@@ -758,10 +778,9 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     {
       name: 'learnings-commit',
       // No dispatched skill — this is a deterministic shell step the
-      // orchestrator runs inline (see ship-sdlc SKILL.md). The model field
-      // is unused but kept for table-rendering consistency.
+      // orchestrator runs inline (see ship-sdlc SKILL.md).
       skill: null,
-      model: 'gemini-3.8-flash-medium',
+      model: null,
       status: isIn('learnings-commit') ? 'will_run' : 'skipped',
       skipSource: skipSource('learnings-commit'),
       args: '',
@@ -794,7 +813,7 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
   steps.push({
     name: 'cleanup',
     skill: null,
-    model: 'gemini-3.8-flash-medium',
+    model: null,
     status: 'will_run',
     skipSource: 'none',
     args: '',
@@ -812,11 +831,31 @@ function computeSteps(flags, flagSources, { openspecContext, expectedBranch, pla
     dispatchMode: null,
   });
 
-  const postGatesByStepId = loadPipelineGates();
+  const manifestMetaByStepId = loadPipelineManifestMeta();
   for (const step of steps) {
-    if (postGatesByStepId[step.name]) {
-      step.postGates = postGatesByStepId[step.name];
+    const meta = manifestMetaByStepId[step.name];
+    if (meta) {
+      if (meta.postGates) {
+        step.postGates = meta.postGates;
+      }
+      if (meta.loop) {
+        step.loop = {
+          ...meta.loop,
+          ...(Array.isArray(meta.loop.subDispatch)
+            ? {
+                subDispatch: meta.loop.subDispatch.map(sd => ({
+                  ...sd,
+                  agyModel: sd.model ? toAgyModelEnum(sd.model) : null,
+                })),
+              }
+            : {}),
+        };
+      }
+      if (meta.defaultModel !== undefined && step.model === undefined) {
+        step.model = meta.defaultModel;
+      }
     }
+    step.agyModel = step.model ? toAgyModelEnum(step.model) : null;
   }
 
   return steps;

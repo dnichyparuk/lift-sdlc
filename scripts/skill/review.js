@@ -49,6 +49,7 @@ const { writeOutput } = require(path.join(LIB, 'output'));
 const { resolveSkipConfigCheck, ensureConfigVersion } = require(path.join(LIB, 'config-version-prepare'));
 const { getPluginVersion } = require(path.join(LIB, 'config-version'));
 const { truncateDiff } = require(path.join(LIB, 'diff-truncate'));
+const { toAgyModelEnum } = require(path.join(LIB, 'model-tiers'));
 
 // Warning threshold only — never cuts content. A dimension whose joined diff
 // exceeds this gets a warning suggesting narrower triggers or an opt-in
@@ -487,6 +488,7 @@ function loadAndMatchDimensions(projectRoot, changedFiles, dimensionFilter) {
       severity:          fm.severity || 'medium',
       requires_full_diff: fm['requires-full-diff'] || false,
       model:             fm.model || null,
+      agyModel:          fm.model ? toAgyModelEnum(fm.model) : null,
       status:            effectiveMatched.length === 0 ? 'SKIPPED' : (effectiveTruncated ? 'TRUNCATED' : 'ACTIVE'),
       matched_files:     effectiveMatched,
       matched_count:     effectiveMatched.length,
@@ -617,12 +619,13 @@ function main() {
   const pr = !isLocalScope ? fetchPrMetadata() : { exists: false };
 
   const reviewSection = readSection(projectRoot, 'review') || {};
-  const configuredModel = reviewSection.subagent_model || 'gemini-3.8-flash-medium';
+  const configuredModel = reviewSection.subagent_model || 'gemini-4-hydrogen-medium';
 
   const manifest = {
     version:        1,
     timestamp:      new Date().toISOString(),
     subagent_model: configuredModel,
+    agyModel:       toAgyModelEnum(configuredModel),
     plugin_version: getPluginVersion(),
     scope,
     base_branch:    base || null,

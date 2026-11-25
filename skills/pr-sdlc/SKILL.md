@@ -3,7 +3,6 @@ name: pr-sdlc
 description: "Use this skill when creating or updating a pull request, updating a PR description, or generating PR content from commits and diffs. Handles the full PR workflow: consumes pre-computed context from skill/pr.js, generates description with plan-critique-improve-do-critique-improve, user review, and gh CLI execution. Auto-labels PRs based on context signals (branch, commits, diff, Jira) with mandatory approval. Arguments: [--draft] [--update] [--base <branch>] [--auto] [--label <name>]. Use --auto to skip interactive approval. Triggers on: create PR, open pull request, update PR, write PR description, PR summary, describe changes for a pull request."
 user-invocable: true
 argument-hint: "[--draft] [--update] [--base <branch>] [--auto] [--label <name>]"
-model: gemini-3.8-flash-medium
 ---
 
 # Creating Pull Requests
@@ -99,14 +98,14 @@ EXIT_CODE=$?
 > - **Input**: `$ARGUMENTS` (the skill's own arguments), forwarded verbatim.
 > - **Output**: Prints the path of a temp file holding the PR context JSON on stdout — capture it into `PR_CONTEXT_FILE`. Its exit code is `EXIT_CODE`.
 
-Read and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. Run `rm -f "$PR_CONTEXT_FILE"` on every terminal branch (success, cancel, error) — there is no trap to rely on for cleanup.
+Read (`read_file`) and parse `PR_CONTEXT_FILE` as `PR_CONTEXT_JSON`. Run `rm -f "$PR_CONTEXT_FILE"` on every terminal branch (success, cancel, error) — there is no trap to rely on for cleanup.
 
 **On non-zero `EXIT_CODE`:**
 
 - Exit code 1: The JSON still contains an `errors` array. Show each error to the user and stop.
 - Exit code 2: Show `Script error — see output above` and stop.
 
-**On script crash (exit 2):** Invoke error-report-sdlc — Glob `**/error-report-sdlc/REFERENCE.md`, follow with skill=pr-sdlc, step=Step 0 — skill/pr.js execution, error=stderr.
+**On script crash (exit 2):** Invoke error-report-sdlc — search via `find_by_name` (or read via `read_file`) for `**/error-report-sdlc/REFERENCE.md`, follow with skill=pr-sdlc, step=Step 0 — skill/pr.js execution, error=stderr.
 
 **If `PR_CONTEXT_JSON.errors` is non-empty**, show each error message and stop.
 
@@ -415,7 +414,7 @@ Title: <title>
 <description>
 ```
 
-**On script crash (exit 2):** Invoke error-report-sdlc — Glob `**/error-report-sdlc/REFERENCE.md`, follow with skill=pr-sdlc, step=Step 6 — Create or Update PR, error=gh CLI failure message.
+**On script crash (exit 2):** Invoke error-report-sdlc — search via `find_by_name` for `**/error-report-sdlc/REFERENCE.md`, follow with skill=pr-sdlc, step=Step 6 — Create or Update PR, error=gh CLI failure message.
 
 ---
 
@@ -434,7 +433,7 @@ Title: <title>
 - Fabricate a JIRA ticket, business reason, or technical claim
 - Execute `gh pr create` or `gh pr edit` without explicit user approval (unless `--auto` was passed)
 - Skip the plan-critique-improve-do-critique-improve cycle before presenting to the user
-- Run git or gh bash commands to gather data — all context comes from `PR_CONTEXT_JSON`
+- Run git or gh `run_command` calls to gather data — all context comes from `PR_CONTEXT_JSON`
 
 ## Error Recovery
 

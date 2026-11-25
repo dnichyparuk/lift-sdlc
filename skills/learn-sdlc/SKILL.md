@@ -3,7 +3,6 @@ name: learn-sdlc
 description: "Use this skill to assimilate recurring learning changesets into new plan/execute guardrails — a human-gated loop that reads the pending changesets under .sdlc/learnings/pending/, proposes guardrail additions only for signatures that met the recurrence threshold, applies them to .sdlc/config.json on a throwaway assimilation branch behind a strengthen-only regression gate, attaches a read-only pre-screen assessment, and opens a PR for a human to merge or reject. Strengthen-only: never relaxes, rewrites, or removes an existing guardrail. Arguments: [--reject <pr>] [--stale]. Triggers on: assimilate learnings, learn from learnings, promote learnings to guardrails, run the self-learning loop, reject an assimilation PR, stale guardrail report, learn-sdlc."
 user-invocable: true
 argument-hint: "[--reject <pr>] [--stale]"
-model: gemini-3.8-flash-medium
 ---
 
 # Assimilating Learnings Into Guardrails
@@ -154,7 +153,7 @@ Use `invoke_subagent` with:
     {
       "TypeName": "learn-synthesis-orchestrator",
       "Role": "Guardrail synthesis",
-      "Model": "flash_lite",
+      "Model": "pro",
       "Prompt": "MANIFEST_FILE: <FILE>\nPROJECT_ROOT: <cwd>"
     }
   ]
@@ -277,7 +276,7 @@ Use `invoke_subagent` with:
     {
       "TypeName": "learn-review-only",
       "Role": "Guardrail assessment",
-      "Model": "flash_lite",
+      "Model": "flash",
       "Prompt": "MANIFEST_FILE: <FILE>\nPROJECT_ROOT: <cwd>"
     }
   ]
@@ -525,6 +524,6 @@ property of the tool grant, not of anything written in their prompts.
 - `scripts/ci/validate-guardrail-regression.js` — the strengthen-only diff `--validate` runs
 - `agents/learn-synthesis-orchestrator.md` — Step 3's proposal agent
 - `agents/learn-review-only.md` — Step 6's pre-screen agent
-- `docs/self-learning-adr.md` — architecture decisions for this loop
+- `docs/self-learning/self-learning-adr.md` — architecture decisions for this loop
 - [`/harden-sdlc`](../harden-sdlc/SKILL.md) — the single-failure, user-approved sibling of this loop
 - [`/setup-sdlc`](../setup-sdlc/SKILL.md) — initial guardrail authoring and `learn.*` configuration

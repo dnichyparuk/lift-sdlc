@@ -44,8 +44,9 @@ test('stop-state-save: saves compact recovery for active custom pipeline', () =>
       ],
     });
 
-    // Move or verify inside tempDir
     const res = spawnSync(process.execPath, [HOOK_PATH], {
+      cwd: os.tmpdir(),
+      input: JSON.stringify({ cwd: process.cwd() }),
       encoding: 'utf8',
       env: { ...process.env, SDLC_STATE_DIR_OVERRIDE: tempDir },
     });
@@ -54,12 +55,11 @@ test('stop-state-save: saves compact recovery for active custom pipeline', () =>
     assert.strictEqual(json.decision, 'allow');
 
     const recoveryFile = path.join(tempDir, `.compact-recovery-${branchSlug}.json`);
-    if (fs.existsSync(recoveryFile)) {
-      const rec = JSON.parse(fs.readFileSync(recoveryFile, 'utf8'));
-      assert.strictEqual(rec.pipeline, 'run-workflow');
-      assert.strictEqual(rec.currentStep, 'execute');
-      assert.strictEqual(rec.flags.auto, true);
-    }
+    assert.ok(fs.existsSync(recoveryFile), 'expected compact recovery file to be written via stdin.cwd');
+    const rec = JSON.parse(fs.readFileSync(recoveryFile, 'utf8'));
+    assert.strictEqual(rec.pipeline, 'run-workflow');
+    assert.strictEqual(rec.currentStep, 'execute');
+    assert.strictEqual(rec.flags.auto, true);
   } finally {
     if (prevOverride !== undefined) {
       process.env.SDLC_STATE_DIR_OVERRIDE = prevOverride;

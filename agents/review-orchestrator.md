@@ -2,8 +2,8 @@
 name: review-orchestrator
 description: Orchestrates multi-dimension code review. Reads manifest from a temp file, resolves REFERENCE.md, dispatches dimension review subagents in parallel, critiques and deduplicates findings, and persists the consolidated comment body to disk for the skill to post.
 subagent: true
-tools: view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command, invoke_subagent
-model: gemini-3.8-flash-low
+tools: [view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command, invoke_subagent]
+model: flash
 ---
 
 # Code Review Orchestrator
@@ -20,8 +20,8 @@ Your job: run the full review pipeline in isolation so the user's main context s
 
 Read the manifest JSON from `MANIFEST_FILE`.
 
-Resolve REFERENCE.md: search via `find_by_name` with `SearchDirectory: ~/.gemini/config/plugins` and `Pattern: **/review-sdlc/REFERENCE.md`.
-If not found, retry `find_by_name` with `SearchDirectory: PROJECT_ROOT`. Store the resolved absolute path as
+Resolve REFERENCE.md: if `PLUGIN_ROOT` was provided in your prompt, read `<PLUGIN_ROOT>/skills/review-sdlc/REFERENCE.md` directly.
+Otherwise, search via `find_by_name` with `SearchDirectory: PROJECT_ROOT` and `Pattern: **/review-sdlc/REFERENCE.md`. Store the resolved absolute path as
 `REFERENCE_MD_PATH`. Read REFERENCE.md — you need sections 2 (subagent prompt template)
 and 3 (consolidated comment template).
 
@@ -112,10 +112,10 @@ For each dimension with `status: "ACTIVE"` or `status: "TRUNCATED"`:
 
 3. Dispatch via `invoke_subagent` with `Subagents` array (each with `TypeName: "research"`, `Role: "<dimension.name> reviewer"`, `Model: ...`, `Prompt: ...`):
    - Model enum mapping: `invoke_subagent` accepts ONLY `inherit`, `flash_lite`, `flash`, or `pro`.
-     Map `dimension.model || manifest.subagent_model` accordingly:
-     - Contains "pro" -> "pro"
-     - Contains "flash-low" or "flash_lite" -> "flash_lite"
-     - Contains "flash" -> "flash"
+     Map `dimension.model || manifest.subagent_model` accordingly (or use `dimension.agyModel || manifest.agyModel` when present):
+     - Contains "neon", "argon", "carbon", or "pro" -> "pro"
+     - Contains "hydrogen-low", "flash-low", or "flash_lite" -> "flash_lite"
+     - Contains "hydrogen" or "flash" -> "flash"
      - Otherwise -> "inherit"
    - Large diff optimization: When diffs are large, pass the file path `dimension.diff_file` in the prompt and instruct the subagent to read it using `view_file` rather than inlining hundreds of kilobytes directly into the prompt payload.
 

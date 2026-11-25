@@ -1,5 +1,30 @@
 # SDLC Plugin Changes Log
 
+## `agy` v1.5+ Alignment, Native `run_workflow` Flattening & Gemini 4 Remapping
+
+**Date:** 2026-11-25
+**Version:** 0.27.2
+
+### Overview
+Aligned Lift-SDLC with Antigravity (`agy`) v1.5+ hook/agent contracts, flattened multi-level orchestration into native Python `run_workflow` scripts, renamed `run-workflow` to `pipeline-sdlc` to avoid shadowing `agy`'s built-in `/run-workflow`, and migrated all model routing, quality tiers, and escalation ladders to the Gemini 4 family (Hydrogen, Neon-for-Coding, Argon, Carbon).
+
+### Changes Made
+
+#### 1. `agy` v1.5+ Hooks & Agent Contracts
+- **`hooks.json` & `hooks/lib/hook-context.js`**: Moved `session-context` (`hooks/session-start.js`) to `SessionStart`; added `plan-integrity-guard` (`hooks/stop-plan-integrity.js` on `Stop`) and `jira-write-guard` (`hooks/pre-tool-jira-write-guard.js` on `PreToolUse`), bringing the registry to 9 hooks (`SessionStart`, `PreToolUse` ×4, `PostInvocation`, `Stop` ×3). Standardized workspace resolution via `stdin.cwd` / `stdin.workspacePaths[0]` and system message output via `{ injectSteps: [{ systemMessage: { systemMessage } }] }`. Updated `stop-block.js` and `stop-plan-integrity.js` to guard on `terminationReason !== 'NO_TOOL_CALL'` and `continuationActive === true`.
+- **`agents/*.md` & `skills/*/SKILL.md`**: Standardized all 12 registered agents (including `task-implementer` and `spec-compliance-reviewer`) on YAML array `tools: [...]` syntax with Antigravity native tool names and strict `agy` `model:` enums (`inherit | flash_lite | flash | pro`). Removed `model:` frontmatter from all 18 `skills/*/SKILL.md` files (`agy` ignores it).
+
+#### 2. Native `run_workflow` Flattening & `pipeline-sdlc`
+- **`skills/pipeline-sdlc/`**: Renamed from `run-workflow` to avoid shadowing `agy`'s built-in `/run-workflow`.
+- **Native Python workflow scripts**: Added `skills/ship-sdlc/workflows/ship.py`, `skills/execute-plan-sdlc/workflows/execute.py`, `skills/review-sdlc/workflows/review.py`, and `skills/received-review-sdlc/workflows/verify.py`, flattening subagent depth to max 1 with `call_tool("run_command", ...)`, `asyncio.gather(..., return_exceptions=True)`, and JSON-schema-enforced `agent()`.
+
+#### 3. Gemini 4 Model Routing, Schemas & CI
+- **`scripts/lib/model-tiers.js` & `scripts/lib/dispatch-budget.js`**: Remapped all agents, `ship-sdlc/pipeline.json` steps, and quality presets (`minimal`, `balanced` with Neon-for-Coding + `execute.standardWorkerEnum`, `full`) to Gemini 4 profiles; added failure-aware `escalateLogicalModel` (`NEEDS_CONTEXT` keeps tier, `SPEC_GAP` jumps to Argon `pro`, `FAILED_TESTS`/`BLOCKED` steps `hydrogen → neon → argon → carbon`) and 35% output reserve for `-xhigh` / `gemini-4-carbon-high`.
+- **Schemas & CI**: Added `schemas/sdlc-config.schema.json`, `schemas/sdlc-local.schema.json`, `.github/workflows/ci.yml`, `npm run check:tiers`, and `npm run check:all`.
+
+### Impact
+Lift-SDLC now validates cleanly against `agy` v1.5+, keeps orchestration depth flat (≤ 1), enforces strict schema and tier checks in CI, and routes every SDLC stage across Gemini 4 tiers with failure-aware escalation.
+
 ## ship-sdlc: explicit plan path only (#16)
 
 **Date:** 2026-10-07

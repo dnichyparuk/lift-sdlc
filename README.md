@@ -58,7 +58,7 @@ mkdir -p .agents/plugins
 git clone https://github.com/dnichyparuk/lift-sdlc.git .agents/plugins/sdlc
 ```
 
-> **Configuration note:** Permissions, plans directory, and other settings are documented in the [Appendix: Configuration](#appendix-configuration) section below.
+> **Configuration note:** Permissions, plans directory, and other settings are documented in the [Configuration](#configuration) section below.
 
 ## Quick Start
 
@@ -69,7 +69,7 @@ Once installed, the SDLC skills are automatically registered with your Antigravi
 - `/review-sdlc` — Review changes
 - `/ship-sdlc` — Ship a release
 
-See the [Skills Reference](#skills-reference) for the full catalog of 14 skills.
+See the [Skills Reference](#skills-reference) for the full catalog of 18 skills.
 
 ## SDLC Pipeline Structure
 
@@ -117,58 +117,65 @@ flowchart TD
 
 ## Skills Reference
 
-The plugin exposes the following skills for managing your workflows:
+The plugin exposes 18 skills (17 user-invocable slash commands plus 1 internal skill) for managing your workflows. Skills inherit the active session model (`SKILL.md` omits `model:` frontmatter because `agy` ignores it) and pass explicit `Model` enums (`flash_lite`, `flash`, `pro`, `inherit`) when dispatching subagents via `invoke_subagent`.
 
-| Skill | Model | Description |
+| Skill | Default / Subagent Model | Description |
 |---|---|---|
-| `/setup-sdlc` | flash-medium | Initializes guardrails, code review dimensions, and templates for a project. |
-| `/plan-sdlc` | flash-medium | Scopes requirements and generates structured implementation plans. |
-| `/execute-plan-sdlc` | flash-medium | Executes implementation plans systematically while adhering to guardrails. |
-| `/commit-sdlc` | flash-medium | Generates smart, conventional commit messages and executes commits. |
-| `/review-sdlc` | flash-medium | Performs automated code review against project-specific dimensions. |
-| `/pr-sdlc` | flash-high | Generates descriptions and creates pull requests. |
-| `/received-review-sdlc` | flash-high | Analyzes and processes code review feedback received on an open PR. |
-| `/verify-pipeline-sdlc` | flash-high | Monitors and diagnoses CI/CD pipeline runs for your PRs. |
-| `/version-sdlc` | flash-medium | Manages semantic versioning and changelog generation. |
-| `/ship-sdlc` | flash-medium | Orchestrates the end-to-end shipping process (review, verify, merge, release). |
-| `/error-report-sdlc` | flash-medium | Reports complex failures or plugin defects for tracking. |
-| `/harden-sdlc` | flash-high | Analyzes pipeline failures to strengthen guardrails and prevent regressions. |
-| `/github-sdlc` | flash-medium | Integrates with GitHub Issues for ticket tracking and updates. |
-| `/jira-sdlc` | flash-medium | Integrates with Jira for ticket tracking and updates. |
+| `/setup-sdlc` | `inherit` | Initializes guardrails, code review dimensions, and templates for a project. |
+| `/plan-sdlc` | `inherit` (`flash` / `pro` subagents) | Scopes requirements and generates structured implementation plans. |
+| `/plan-guide-sdlc` | `inherit` | Deploys canonical `PLAN_GUIDELINES.md` and links it in `AGENTS.md`. |
+| `/catalog-sdlc` | `inherit` | Indexes delivery plans and generates `delivery-graph.json` and the HTML delivery dashboard. |
+| `/execute-plan-sdlc` | `inherit` (`flash_lite` / `flash` / `pro` subagents) | Executes implementation plans systematically while adhering to guardrails. |
+| `/commit-sdlc` | `inherit` (`flash_lite` orchestrator) | Generates smart, conventional commit messages and executes commits. |
+| `/review-sdlc` | `inherit` (`flash_lite` / `flash` / `pro` subagents) | Performs automated code review against project-specific dimensions. |
+| `/pr-sdlc` | `inherit` | Generates descriptions and creates pull requests. |
+| `/received-review-sdlc` | `inherit` (`flash_lite` / `flash` / `pro` subagents) | Analyzes and processes code review feedback received on an open PR. |
+| `/verify-pipeline-sdlc` | `inherit` | Monitors and diagnoses CI/CD pipeline runs for your PRs. |
+| `/version-sdlc` | `inherit` | Manages semantic versioning and changelog generation. |
+| `/ship-sdlc` | `inherit` (`flash` / `pro` pipeline steps) | Orchestrates the end-to-end shipping process via `pipeline-sdlc`, `pipeline.json`, and native `run_workflow` (`workflows/ship.py`). |
+| `/pipeline-sdlc` | `inherit` | Executes declarative workflow manifests (`pipeline.json`) with state transitions and flattened `invoke_subagent` / `run_workflow` dispatch (replaces `run-workflow` to avoid shadowing `agy`'s built-in `/run-workflow`). |
+| `/learn-sdlc` | `inherit` (`flash` / `pro` subagents) | Assimilates recurring learnings into strengthened plan/execute guardrails via PR. |
+| `/error-report-sdlc` *(internal)* | `inherit` (`flash` orchestrator) | Reports complex failures or plugin defects for upstream tracking. |
+| `/harden-sdlc` | `inherit` (`pro` orchestrator) | Analyzes pipeline failures to strengthen guardrails and prevent regressions. |
+| `/github-sdlc` | `inherit` | Integrates with GitHub Issues for ticket tracking and updates. |
+| `/jira-sdlc` | `inherit` | Integrates with Jira for ticket tracking and updates. |
 
 ## Agents Reference
 
 Skills delegate isolated, context-clean subtasks to specialized agents. There are two categories:
 
-### Registered Plugin Agents
+### Registered Plugin Agents (12)
 
-These agents are defined in `agents/*.md` (frontmatter `subagent: true`) and dispatched by `name` through the native `invoke_subagent` tool. They inherit no conversation context — all inputs arrive through a prepared manifest file.
+These 12 agents are defined in `agents/*.md` (frontmatter `subagent: true`) and dispatched by `name` through the native `invoke_subagent` tool. They inherit no conversation context — inputs arrive through a prepared manifest file or task fact sheet.
 
-> **Host support.** A plugin-bundled `agents/` directory is documented for the [Antigravity CLI](https://antigravity.google/docs/cli/plugins/) and on the [Subagents](https://antigravity.google/docs/subagents/) page (`plugins/<plugin_name>/agents/`), and `agy plugin validate` discovers all of them. The [IDE plugin page](https://antigravity.google/docs/plugins/) lists only skills, rules, MCP servers and hooks, so agent discovery under the IDE is not officially confirmed. Skills that depend on these agents (`/review-sdlc`, `/plan-sdlc`, `/commit-sdlc`, `/harden-sdlc`, `/received-review-sdlc`, `/learn-sdlc`) are verified under the CLI.
+> **Host support.** A plugin-bundled `agents/` directory is documented for the [Antigravity CLI](https://antigravity.google/docs/cli/plugins/) and on the [Subagents](https://antigravity.google/docs/subagents/) page (`plugins/<plugin_name>/agents/`), and `agy plugin validate` discovers all of them. The [IDE plugin page](https://antigravity.google/docs/plugins/) lists only skills, rules, MCP servers and hooks, so agent discovery under the IDE is not officially confirmed. Skills that depend on these agents (`/review-sdlc`, `/plan-sdlc`, `/execute-plan-sdlc`, `/commit-sdlc`, `/harden-sdlc`, `/received-review-sdlc`, `/learn-sdlc`) are verified under the CLI.
 
-| Agent | Dispatched by | Model | Role |
+| Agent | Dispatched by | Model (`agy` enum / Gemini 4) | Role |
 |---|---|---|---|
-| **Plan explore orchestrator** | `/plan-sdlc` | flash-low | Derives 3–7 task-specific discovery dimensions and fans out parallel code/web/hybrid sub-agents to produce `discovery-brief.md`. |
-| **Plan generation orchestrator** | `/plan-sdlc` | pro-high | Receives the exploration brief and writes the structured `implementation_plan.md` file. |
-| **Plan execution validator** | `/execute-plan-sdlc` | pro-low | Validates plan integrity (circular deps, vague deliverables) and wave structure (file conflicts, risk clustering). Called twice per execution run. |
-| **Commit orchestrator** | `/commit-sdlc` | flash-low | Reads the staged diff and commit history from a prepared manifest and returns a single, self-critiqued commit message string. |
-| **Review orchestrator** | `/review-sdlc` | flash-low | Reads the review manifest, dispatches dimension sub-agents in parallel, deduplicates and critiques findings, and persists `review-comment.md`. |
-| **Harden orchestrator** | `/harden-sdlc` | flash-low | Classifies a pipeline failure as `user-code`, `plugin-defect`, or `ambiguous`, then emits strengthen-only hardening proposals as JSON. |
-| **Error report orchestrator** | `/error-report-sdlc` | flash-low | Fills the `ToolingError.md` issue template from a prepared manifest and returns `{title, body}` JSON for posting to the plugin tracker. |
-| **Received-review orchestrator** | `/received-review-sdlc` | flash-low | Reads the received-review manifest, fans out per-file verifier sub-agents, persists the verification report, and returns a bounded VERIFY_SUMMARY token. |
+| **Plan explore orchestrator** | `/plan-sdlc` | `flash` (`gemini-4-hydrogen-high`) | Derives 3–7 task-specific discovery dimensions and fans out parallel code/web/hybrid sub-agents to produce `discovery-brief.md`. |
+| **Plan generation orchestrator** | `/plan-sdlc` | `pro` (`gemini-4-carbon-medium` / `carbon-high` / `argon-medium`) | Receives the exploration brief and writes the structured `implementation_plan.md` file. |
+| **Plan execution validator** | `/execute-plan-sdlc` | `pro` (`gemini-4-argon-low`) | Validates plan integrity (circular deps, vague deliverables) and wave structure (file conflicts, risk clustering). Called twice per execution run. |
+| **Task implementer** | `/execute-plan-sdlc` | `flash` / `pro` (tier-routed) | Implements a single plan task from its fact sheet, runs verification, and returns a structured completion checklist. |
+| **Spec compliance reviewer** | `/execute-plan-sdlc` | `pro` (`gemini-4-argon-low` / `argon-medium`) | Reviews wave or cross-wave implementations directly against plan tasks and OpenSpec delta specs. |
+| **Commit orchestrator** | `/commit-sdlc` | `flash_lite` (`gemini-4-hydrogen-low`) | Reads the staged diff and commit history from a prepared manifest and returns a single, self-critiqued commit message string. |
+| **Review orchestrator** | `/review-sdlc` | `flash` (`gemini-4-hydrogen-high`) | Reads the review manifest, dispatches dimension sub-agents in parallel, deduplicates and critiques findings, and persists `review-comment.md`. |
+| **Received-review orchestrator** | `/received-review-sdlc` | `flash` (`gemini-4-hydrogen-medium`) | Reads the received-review manifest, fans out per-file verifier sub-agents, persists the verification report, and returns a bounded `VERIFY_SUMMARY` token. |
+| **Harden orchestrator** | `/harden-sdlc` | `pro` (`gemini-4-argon-low`) | Classifies a pipeline failure as `user-code`, `plugin-defect`, or `ambiguous`, then emits strengthen-only hardening proposals as JSON. |
+| **Error report orchestrator** | `/error-report-sdlc` | `flash` (`gemini-4-hydrogen-medium`) | Fills the `ToolingError.md` issue template from a prepared manifest and returns `{title, body}` JSON for posting to the plugin tracker. |
+| **Learn synthesis orchestrator** | `/learn-sdlc` | `pro` (`gemini-4-argon-medium`) | Synthesizes candidate strengthen-only guardrail additions from recurring pending learning signatures. |
+| **Learn review-only** | `/learn-sdlc` | `flash` (`gemini-4-hydrogen-high`) | Read-only pre-screen assessment checking synthesized guardrails for soundness and regression risks. |
 
-### Ad-hoc Agents (prompt-template driven)
+### Ad-hoc Subagents (`self` / `research`)
 
-These agents have no file in `agents/` and are dispatched as `general-purpose` using inline prompt templates. They are implementation details of their parent agents.
+These subagents have no file in `agents/` and are dispatched via `invoke_subagent` with `TypeName: "self"` or `"research"` using inline prompt templates. They are implementation details of their parent orchestrators.
 
-| Agent | Model | Role |
+| Subagent | Model | Role |
 |---|---|---|
-| **Plan execution orchestrator** | flash-low (locked) | Executes one wave: fans out per-task coding agents in parallel, handles per-task retries with model escalation, and emits a bounded `WAVE_SUMMARY` token. |
-| **Per-task coding agent** | flash (low/mid/high) / pro-low *(depends on complexity, retries and tier)* | Implements a single plan task: reads its fact sheet, writes files, runs verification, and returns a structured completion token. |
-| **Review sub-agent** | Configured in `.sdlc/config.json` (`review.subagent_model`), default: flash-medium; supports per-dimension `model:` override | Reviews the diff for one code review dimension and returns a structured findings list. |
-| **Discovery sub-agent** | flash-low / flash-medium / pro-low (per dimension) | Explores code or web sources for one planning dimension and returns `F-<DIM>-<n>` tagged findings. |
+| **Wave runner** | `flash` (`gemini-4-hydrogen-medium`) | Executes one wave: fans out `task-implementer` agents in parallel, handles per-task retries along `flash_lite → flash → pro`, and emits a bounded `WAVE_SUMMARY` token. |
+| **Review sub-agent** | Configured in `.sdlc/local.json` (`review.subagent_model`), fallback: `gemini-4-hydrogen-medium` (`flash`); supports per-dimension `model:` override | Reviews the diff for one code review dimension and returns a structured findings list. |
+| **Discovery sub-agent** | `flash` / `pro` (per dimension) | Explores code or web sources for one planning dimension and returns `F-<DIM>-<n>` tagged findings. |
 
-> **Model escalation (coding agents):** On failure, the wave-runner escalates the task's model one tier per retry, up to 2 retries, along the fixed ladder `flash-low → flash-medium → flash-high → pro-low → pro-high`: `flash-low → flash-medium → flash-high`, `flash-medium → flash-high → pro-low`, `flash-high → pro-low → pro-high`, `pro-low → pro-high → pro-high + context`.
+> **Model escalation (coding agents):** On failure, the wave-runner escalates the task's `agy` model enum one step per retry, up to 2 retries, along the fixed ladder `flash_lite → flash → pro`: `flash_lite → flash → pro`, `flash → pro → pro (+ failure context)`, `pro → pro (+ failure context) → FAILED`.
 
 ## Multi-Dimension Code Review
 
@@ -206,7 +213,7 @@ flowchart TD
 ```
 
 - **Project-Defined Dimensions:** Code reviews are driven by project-specific dimensions (e.g., Security, Performance, API Contracts). Each dimension specifies file-matching globs and exact review instructions.
-- **Configurable & Dimension-Scoped Models:** Subagents default to the model configured in `.sdlc/config.json` (`review.subagent_model`, fallback `gemini-3.8-flash-medium`). Individual dimension files can specify an explicit `model:` override (e.g., `model: gemini-3.1-pro-low` for critical security or database migration reviews).
+- **Configurable & Dimension-Scoped Models:** Subagents default to the model configured in `.sdlc/local.json` (`review.subagent_model`, fallback `gemini-4-hydrogen-medium` / `flash`). Individual dimension files can specify an explicit `model:` override (e.g., `model: gemini-4-neon-low` / `pro` for critical security or database migration reviews).
 - **Parallel Dispatch:** For a given diff, the orchestrator concurrently spawns multiple specialized subagents. This parallelization significantly reduces overall review time.
 - **Targeted Diff Scoping:** A subagent does not read the entire codebase or even the full PR diff. It is strictly scoped to receive only the diff hunks for files matching its dimension's triggers. This precise scoping prevents subagents from getting distracted by unrelated changes.
 - **Orchestrator Deduplication:** Once subagents complete, a central orchestrator merges the findings. It intelligently deduplicates issues flagged on the same line across different dimensions (keeping the highest severity) and catches contradictory recommendations.
@@ -224,40 +231,41 @@ Each task is classified as **Trivial**, **Standard**, or **Complex** based on sc
 
 | Flag | Display name | Use case | Trivial | Standard | Complex |
 |---|---|---|---|---|---|
-| `--quality minimal` | **Speed** | Fast iteration, drafts, low-stakes changes | flash-low | flash-medium | flash-high |
-| `--quality balanced` | **Balanced** *(default)* | Everyday feature work — best cost/quality trade-off | flash-medium | flash-high | pro-low |
-| `--quality full` | **Quality** | Architectural changes, high-risk tasks, production releases | flash-medium | pro-low | pro-high |
+| `--quality minimal` | **Speed** | Fast iteration, drafts, low-stakes changes | `flash` (`gemini-4-hydrogen-medium`) | `flash` (`gemini-4-hydrogen-medium`) | `flash` (`gemini-4-hydrogen-high`) |
+| `--quality balanced` | **Balanced** *(default)* | Everyday feature work — Hydrogen trivials, Neon-for-Coding Standard & Complex | `flash` (`gemini-4-hydrogen-medium`) | `pro` (`gemini-4-neon-low`, or `inherit` via `execute.standardWorkerEnum`) | `pro` (`gemini-4-neon-medium`) |
+| `--quality full` | **Quality** | Architectural changes, high-risk tasks, production releases | `flash` (`gemini-4-hydrogen-medium`) | `pro` (`gemini-4-neon-medium`) | `pro` (`gemini-4-carbon-medium`) |
 
-> **Trivial batching:** when 2 or more Trivial tasks land in the same wave they are batched into a single agent dispatch running at the tier's Trivial model (e.g. flash-medium in Balanced, flash-low in Speed). A lone Trivial task runs as an individual agent at the tier's Trivial model.
+> **Trivial batching:** when 2 or more Trivial tasks land in the same wave they are batched into a single agent dispatch running at the tier's Trivial model (`flash` / `gemini-4-hydrogen-medium`). A lone Trivial task runs as an individual agent at the tier's Trivial model.
 
 **Specialized verification & routing agents:**
 
 | Agent | Model | Notes |
 |---|---|---|
-| **Plan execution orchestrator** | flash-low | Permanently locked — performs routing only. |
-| **Spec compliance reviewer** | Dynamic (`flash-high` / `pro-low`) | Uses `gemini-3.1-pro-low` if the wave contains `Complex` tasks or `--quality full` was selected; otherwise `gemini-3.8-flash-high`. **Skipped on Speed tier** (`--quality minimal`) and trivial-only waves. |
-| **Plan execution validator** | pro-low | Always pro-low. |
+| **Wave runner** | `flash` (`gemini-4-hydrogen-medium`) | Locked — performs strict routing, verification parsing, and failure-aware retry escalation. |
+| **Spec compliance reviewer** | `pro` (`gemini-4-argon-low` / `argon-medium`) | Verifies wave and cross-wave implementations against plan specs and OpenSpec deltas. **Skipped on Speed tier** (`--quality minimal`) and trivial-only waves. |
+| **Plan execution validator** | `pro` (`gemini-4-argon-low`) | Validates plan integrity and wave structure. |
 
 ### Feature Differences by Tier
 
 | Feature | Speed (`--quality minimal`) | Balanced | Quality (`--quality full`) |
 |---|---|---|---|
-| Per-wave spec compliance review | ❌ Skipped | ✅ After each non-trivial wave (`flash-high`, or `pro-low` for `Complex` waves) | ✅ After each non-trivial wave (`pro-low`) |
-| Final cross-wave spec review | ❌ Skipped | ✅ When >3 waves or issue found (`flash-high`, or `pro-low` if any `Complex` tasks) | ✅ When >3 waves or issue found (`pro-low`) |
+| Per-wave spec compliance review | ❌ Skipped | ✅ After each non-trivial wave (`pro` / Argon) | ✅ After each non-trivial wave (`pro` / Argon) |
+| Final cross-wave spec review | ❌ Skipped | ✅ When >3 waves or issue found (`pro` / Argon) | ✅ When >3 waves or issue found (`pro` / Argon) |
 | Tier selection prompt | ✅ Shown (unless `--quality` passed) | ✅ | ✅ |
 | Custom per-task model override | ✅ (`custom` option) | ✅ | ✅ |
 
-### Retry Escalation Ladder
+### Failure-Aware Retry Escalation Ladder
 
-When a coding agent fails, the wave-runner escalates one model tier per retry (max 2 retries per task). Failure context is always added to the retry prompt.
+When a coding agent fails, `escalateLogicalModel` (`scripts/lib/model-tiers.js`) routes retries based on the failure signal (max 2 retries per task, with failure context added):
+- **`NEEDS_CONTEXT`**: Keeps the current tier and injects the missing context.
+- **`SPEC_GAP`**: Jumps directly to Argon (`gemini-4-argon-low` / `pro`, or `gemini-4-carbon-medium` if already Argon/Neon-high/Carbon).
+- **`FAILED_TESTS` / `FAILED_BUILD` / `BLOCKED`**: Steps along `hydrogen → neon → argon → carbon` (mapped to `agy` runtime enums `flash_lite → flash → pro`).
 
-| Starting model | Retry 1 | Retry 2 | After Retry 2 |
+| Starting `agy` enum | Retry 1 | Retry 2 | After Retry 2 |
 |---|---|---|---|
-| flash-low | flash-medium | flash-high | FAILED → user |
-| flash-medium | flash-high | pro-low | FAILED → user |
-| flash-high | pro-low | pro-high | FAILED → user |
-| pro-low | pro-high | pro-high + failure context | FAILED → user |
-| pro-high | pro-high + failure context | — | FAILED → user |
+| `flash_lite` | `flash` | `pro` | FAILED → user |
+| `flash` | `pro` | `pro` + failure context | FAILED → user |
+| `pro` | `pro` + failure context | `pro` + failure context (logical step) | FAILED → user |
 
 > **Partial batch failure:** if a batch of Trivial tasks partially fails, only the failed tasks are re-dispatched individually with escalation. Completed tasks in the batch are final.
 
@@ -281,13 +289,13 @@ When a coding agent fails, the wave-runner escalates one model tier per retry (m
 
 ## Model Legend
 
-| Token | Full model name |
-|---|---|
-| flash-low | Gemini 3.5 Flash Low |
-| flash-medium | Gemini 3.5 Flash Medium |
-| flash-high | Gemini 3.5 Flash High |
-| pro-low | Gemini 3.1 Pro Low |
-| pro-high | Gemini 3.1 Pro High |
+| Gemini 4 Profile | `agy` Runtime Enum | Role |
+|---|---|---|
+| `gemini-4-hydrogen-low` | `flash_lite` | Fast mechanical routing, manifest parsing, lightweight orchestrators |
+| `gemini-4-hydrogen-medium` / `high` / `xhigh` | `flash` | Standard implementation, discovery, code review, plan gate validation |
+| `gemini-4-neon-*` | `pro` | Complex implementation, high-risk tasks, spec compliance, critical review dimensions |
+| `gemini-4-argon-*` | `pro` | Specialized deep reasoning |
+| `gemini-4-carbon-*` | `pro` | Flagship architectural plan generation and Quality-tier Complex tasks |
 
 ---
 

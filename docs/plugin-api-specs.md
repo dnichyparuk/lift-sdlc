@@ -50,9 +50,10 @@ statement plus a bulleted "Rules" list. Agents are narrow-scope specialist worke
 
 ### `hooks.json` + `hooks/`
 
-Named hook groups keyed by event, following the official Antigravity shape (see §2 item 5 for
-the two array forms). Events in use: `PreToolUse`, `PreInvocation`, `PostInvocation`, `Stop`.
-Hooks are plain Node scripts, each with a `*.test.js` sibling in `lift-sdlc`'s convention.
+Named hook groups keyed by event, following the official Antigravity `agy` v1.5+ shape (see §2 item 5 for
+the two array forms). `lift-sdlc` registers 9 hooks across `SessionStart` (×1), `PreToolUse` (×4),
+`PostInvocation` (×1), and `Stop` (×3). Hooks are plain Node scripts using `hooks/lib/hook-context.js`
+for `stdin.cwd` / `stdin.workspacePaths[0]` resolution and official `{ injectSteps: [{ systemMessage: { systemMessage } }] }` output formatting.
 
 ### Scripts convention (not a Claude Code requirement, but the `lift-*` house style)
 
@@ -109,15 +110,15 @@ Followed by explicit agent instructions in the body. Skills auto-convert to slas
 
 ### Confirmed Antigravity Schemas and Conventions (verified via `agy plugin validate` & binary inspection)
 
-1. **`agents/` directory specification:**
-   Each agent is a `.md` file with YAML frontmatter:
+1. **`agents/` directory specification (`agy` v1.5+):**
+   Each agent is a `.md` file with YAML frontmatter. `tools:` uses YAML array syntax with Antigravity native tool names, and `model:` uses strict `agy` runtime enums (`inherit | flash_lite | flash | pro`). (`skills/*/SKILL.md` omits `model:` frontmatter because `agy` ignores it.)
    ```yaml
    ---
    name: my-orchestrator
    description: Brief role summary
    subagent: true
-   tools: view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command, invoke_subagent
-   model: gemini-3.8-flash-low
+   tools: [view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command, invoke_subagent]
+   model: flash_lite   # gemini-4-hydrogen-low
    ---
    ```
    Validated by `agy plugin validate <dir>` (reports `✔ agents: N processed`).
@@ -165,18 +166,19 @@ Followed by explicit agent instructions in the body. Skills auto-convert to slas
    }
    ```
 
-5. **`hooks.json` schema** (source: `https://antigravity.google/docs/hooks`, fetched directly):
+5. **`hooks.json` schema** (source: `https://antigravity.google/docs/hooks` & `agy` v1.5+ schema validation):
    Top level maps a hook-group name to an event map. Optional `"enabled": false` disables the
-   group. Supported events (exact spelling): `PreToolUse`, `PostToolUse`, `PreInvocation`,
-   `PostInvocation`, `Stop`. There is **no** `SessionStart` or `UserPromptSubmit` event.
+   group. Supported events (exact spelling): `SessionStart` (`agy` v1.5+), `PreToolUse`,
+   `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`. There is **no** `UserPromptSubmit` event.
 
    The array element shape differs by event:
    - `PreToolUse` / `PostToolUse` → `{ "matcher": "<regex>", "hooks": [ <handler>, ... ] }`
      wrapper objects. Matcher: `""`/`"*"` = all tools, `"run_command"` exact, `"a|b"` alternation,
      `"browser_.*"` regex.
-   - `PreInvocation` / `PostInvocation` / `Stop` → handler objects **directly** in the array.
+   - `SessionStart` / `PreInvocation` / `PostInvocation` / `Stop` → handler objects **directly** in the array.
      The official text: "For `PreInvocation`, `PostInvocation`, and `Stop`, the structure is
      simpler (a list of handlers directly under the event key) and the matcher is ignored."
+     `SessionStart` (`agy` v1.5+) uses the same direct handler-list structure.
 
    Handler: `{ "type": "command" (optional, default), "command": "<shell>" (required),
    "timeout": <seconds> (optional, default 30) }`.
@@ -189,7 +191,7 @@ Followed by explicit agent instructions in the body. Skills auto-convert to slas
        ]
      },
      "session-context": {
-       "PreInvocation": [
+       "SessionStart": [
          { "type": "command", "command": "node ./hooks/session-start.js" }
        ]
      }
@@ -203,20 +205,30 @@ Followed by explicit agent instructions in the body. Skills auto-convert to slas
    `agy plugin validate` still prints `✔ hooks : N processed`. `npm run check:plugin` now
    asserts the correct shapes (`scripts/ci/validate-plugin-schema.js`).
 
-   Stdin/stdout contracts (camelCase). Common stdin fields on every event: `conversationId`,
-   `workspacePaths`, `transcriptPath`, `artifactDirectoryPath`, `modelName`.
+   Stdin/stdout contracts (camelCase). Common stdin fields on every event: `cwd`, `conversationId`,
+   `workspacePaths`, `transcriptPath`, `artifactDirectoryPath`, `modelName`. Antigravity executes
+   plugin hooks with OS `cwd` set to the directory containing `hooks.json`, so `hooks/lib/hook-context.js`
+   resolves the user workspace from `stdin.cwd` / `stdin.workspacePaths[0]`.
+   - `SessionStart` (`agy` v1.5+) in: `{ source, cwd, workspacePaths, ... }`; out:
+     `{ injectSteps: [ { systemMessage: { systemMessage: "..." } } ] }`. Used by `session-context`
+     (`hooks/session-start.js`).
    - `PreToolUse` in: `{ toolCall: { name, args }, stepIdx, ... }`; out:
      `{ decision: "allow|deny|ask|force_ask|deny_unless_prior_grant", reason?, permissionOverrides? }`.
+     Used by `git-guard`, `question-suppression`, `jira-write-guard` (`hooks/pre-tool-jira-write-guard.js`),
+     and `validation-guard`.
    - `PostToolUse` in: `{ stepIdx, error?, ... }`; out: `{}`.
    - `PreInvocation` in: `{ invocationNum, initialNumSteps, ... }`; out:
-     `{ injectSteps: [ { toolCall } | { userMessage } | { ephemeralMessage } ] }`. Fires before
-     **every** model invocation — gate on `invocationNum` for once-per-session behaviour.
+     `{ injectSteps: [ { toolCall } | { userMessage } | { systemMessage: { systemMessage: "..." } } ] }`.
    - `PostInvocation` in: same as PreInvocation; out: `{ injectSteps?, terminationBehavior?: "force_continue|terminate|" }`.
-   - `Stop` in: `{ executionNum, terminationReason, error?, fullyIdle, ... }`; out:
-     `{ decision: "continue" }` re-enters the loop; any other value lets the run stop.
+     Used by `drift-nudge` (`hooks/post-tool-nudge.js`).
+   - `Stop` in: `{ executionNum, terminationReason, continuationActive, error?, fullyIdle, ... }`; out:
+     `{ decision: "continue", reason? }` re-enters the loop; `{ decision: "allow" }` lets the run stop.
+     `stop-block.js` and `stop-plan-integrity.js` check `terminationReason !== 'NO_TOOL_CALL'` and
+     `continuationActive === true` before blocking, allowing clean aborts/continuations.
 
-   Undocumented: which shell runs `command`, the working directory for relative paths, env
-   vars available to the hook process, and stderr/exit-code handling.
+   Native `run_workflow` scripts (`skills/{ship-sdlc,execute-plan-sdlc,review-sdlc,received-review-sdlc}/workflows/*.py`)
+   flatten multi-level subagent trees to max depth 1 via `call_tool("run_command", ...)`,
+   `asyncio.gather(..., return_exceptions=True)`, and JSON-schema-enforced `agent()`.
 
 ---
 

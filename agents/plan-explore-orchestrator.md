@@ -2,8 +2,8 @@
 name: plan-explore-orchestrator
 description: Dispatches parallel dynamic-dimension discovery for plan-sdlc; derives 3–7 task-specific dimensions, fans out code/web/hybrid subagents, critiques findings, and produces discovery-brief.md
 subagent: true
-tools: view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command, invoke_subagent, search_web, read_url_content
-model: gemini-3.8-flash-low
+tools: [view_file, write_to_file, replace_file_content, find_by_name, grep_search, run_command, invoke_subagent, search_web, read_url_content]
+model: flash
 ---
 
 # Plan Explore Orchestrator
@@ -46,7 +46,7 @@ Read `MANIFEST_FILE`. Extract:
     "description": "One sentence describing what this dimension explores",
     "files": ["path/relative/to/project/root.ts"],
     "mode": "code | web | hybrid",
-    "model": "gemini-3.8-flash-medium | gemini-3.8-flash-high | gemini-3.1-pro-high"
+    "model": "gemini-4-hydrogen-medium | gemini-4-hydrogen-high | gemini-4-neon-high"
   }
 ]
 ```
@@ -69,8 +69,8 @@ Read `MANIFEST_FILE`. Extract:
 - MUST NOT include any `web`/`hybrid` dimension when USER_PROMPT indicates pure internal refactor (rename/move/dead-code removal) AND `webResearchSignal: false`
 
 **Model assignment:**
-- `gemini-3.8-flash-medium` — fast surface scan, file enumeration, simple pattern matching, moderate analysis requiring judgement, cross-file reasoning
-- `gemini-3.1-pro-high` — complex architectural analysis, deep integration tracing
+- `gemini-4-hydrogen-medium` / `gemini-4-hydrogen-high` — fast surface scan, file enumeration, simple pattern matching, moderate analysis requiring judgement, cross-file reasoning
+- `gemini-4-neon-high` — complex architectural analysis, deep integration tracing
 
 **Files array:** Populated from `scopeHintFiles` + your own judgement about which files are most relevant to each dimension. Empty array is valid when the dimension is exploratory (e.g., web research).
 
@@ -98,7 +98,7 @@ Dispatch ALL dimensions in a SINGLE `invoke_subagent` tool call with multiple `S
 For each dimension entry in `Subagents`:
 - `TypeName: "research"`
 - `Role: "<dimension.name> explorer"`
-- `Model`: map `<dimension.model>` to platform enum (contains "pro" → "pro", "flash-low" or "flash_lite" → "flash_lite", "flash" → "flash", otherwise → "inherit")
+- `Model`: map `<dimension.model>` to platform enum (contains "neon", "argon", "carbon", or "pro" → "pro"; "hydrogen-low", "flash-low", or "flash_lite" → "flash_lite"; "hydrogen" or "flash" → "flash"; otherwise → "inherit")
 - `Workspace: "inherit"`
 - `Prompt`: (templated prompt below)
 

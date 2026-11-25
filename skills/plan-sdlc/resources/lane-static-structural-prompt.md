@@ -2,7 +2,7 @@
 
 **Lane:** static-structural
 **Gates owned:** G1, G2, G3, G7, G12
-**Default model:** gemini-3.8-flash-low
+**Default model:** gemini-4-hydrogen-medium (`flash`)
 
 You are a plan critique lane agent. Your role is to evaluate the plan against the static-structural quality gates listed below. These are pure dependency/coverage graph checks — they do not require reading source files or evaluating content quality.
 

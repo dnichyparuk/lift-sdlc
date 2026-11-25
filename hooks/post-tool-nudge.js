@@ -5,7 +5,7 @@
  * advancing to prevent model drift or mid-run editorializing (ADR-001 drift hole).
  *
  * Output contract:
- *   - When advancing: returns injectSteps with an ephemeralMessage reminder.
+ *   - When advancing: returns `{ systemMessage: { systemMessage: reminderMsg } }`.
  *   - When not advancing: returns empty JSON object `{}`.
  *
  * Exit codes:
@@ -14,22 +14,17 @@
 
 'use strict';
 
+const { readHookContext, formatSystemMessage } = require('./lib/hook-context');
+
 try {
+  const { workspaceCwd } = readHookContext({ failClosed: false });
   const { pipelineAdvancing } = require('../scripts/lib/state');
-  const adv = pipelineAdvancing();
+  const adv = pipelineAdvancing({ cwd: workspaceCwd });
 
   if (adv && adv.advancing && adv.step) {
     const pipelineName = adv.prefix || 'pipeline';
     const reminderMsg = `Pipeline ${pipelineName} step '${adv.step}' is in_progress. Advance the pipeline now — do not summarize or editorialize.`;
-    process.stdout.write(JSON.stringify({
-      injectSteps: [
-        {
-          ephemeralMessage: reminderMsg,
-          type: 'ephemeralMessage',
-          content: reminderMsg,
-        },
-      ],
-    }) + '\n');
+    process.stdout.write(JSON.stringify(formatSystemMessage(reminderMsg)) + '\n');
     process.exit(0);
   }
 } catch (e) {

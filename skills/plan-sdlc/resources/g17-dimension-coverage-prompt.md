@@ -4,12 +4,12 @@ Use this template in plan-sdlc Step 3 when dispatching the G17 Dimension Coverag
 
 **Purpose:** Detect coverage gaps in the active review-dimension catalog and in the Copilot mirror at `.github/instructions/`, given a finalized plan file. Emit structured findings for Step 4 to splice as a `## Suggested Review Dimensions` advisory block.
 
-**Model:** gemini-3.8-flash-medium (from `g17Dispatch.model` in prepare output — do NOT hardcode)
+**Model:** gemini-4-hydrogen-medium / `flash` (from `g17Dispatch.model` / `g17Dispatch.agyModel` in prepare output — do NOT hardcode)
 
 **Dispatch parameters (from prepare output — `agent-dispatch-script-driven` guardrail):**
 - `TypeName`: `g17Dispatch.subagentType`
 - `Role`: `"Dimension Coverage Analysis"`
-- `Model`: `g17Dispatch.model`
+- `Model`: `g17Dispatch.agyModel`
 - prompt body: fill the template variables below from prepare output and plan context
 
 ```yaml
@@ -17,7 +17,7 @@ invoke_subagent:
   Subagents:
     - TypeName: <g17Dispatch.subagentType from prepare output>
       Role: "Dimension Coverage Analysis"
-      Model: <g17Dispatch.model from prepare output>
+      Model: <g17Dispatch.agyModel from prepare output>
       Prompt: |
         You are the Dimension Coverage subagent (G17). Your job is to detect coverage
     gaps in the active review-dimension catalog AND in the Copilot mirror at
@@ -94,7 +94,7 @@ invoke_subagent:
     - **U5**: Trigger glob uses `**` but new files are outside the wildcard scope. Severity: medium.
     - **U6**: Plan adds ≥3 files to a path family where the dimension's trigger is a specific filename (not a glob). Severity: medium.
 
-    Suppression rule: do NOT fire UPDATE criteria for doc-only diffs where ALL plan paths match `docs/**`, `README*`, or `*.md` files outside the `plugins/lift-sdlc/skills/` directory.
+    Suppression rule: do NOT fire UPDATE criteria for doc-only diffs where ALL plan paths match `docs/**`, `README*`, or `*.md` files outside the `skills/` directory.
 
     ### Step G — Evaluate UPDATE-behavior criteria (B1–B4)
 

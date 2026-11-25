@@ -3,7 +3,6 @@ name: review-sdlc
 description: "Use this skill when reviewing code changes across project-defined dimensions (security, performance, docs, concurrency, etc.). Runs skill/review.js to pre-compute all git data, then delegates to the review-orchestrator agent. Arguments: [--base <branch>] [--committed] [--staged] [--working] [--worktree] [--set-default] [--dimensions <name,...>] [--dry-run]. Triggers on: review changes, code review, review PR, multi-dimension review, run review."
 user-invocable: true
 argument-hint: "[--base <branch>] [--committed] [--staged] [--working] [--worktree] [--set-default] [--dimensions <name,...>] [--dry-run]"
-model: gemini-3.8-flash-medium
 ---
 
 # Reviewing Changes
@@ -12,6 +11,23 @@ Thin dispatcher — runs the prepare script, then delegates everything to the
 `review-orchestrator` agent (which spawns dimension subagents in parallel).
 
 **Announce at start:** "I'm using review-sdlc (sdlc v{sdlc_version})." — extract the version from the `sdlc:` line in the session-start system-reminder. If no version is in context, omit the parenthetical.
+
+## Primary Dispatch — Native `run_workflow` (`workflows/review.py`)
+
+When `--dry-run` is NOT set and `run_workflow` is available, dispatch `skills/review-sdlc/workflows/review.py` as the primary depth-1 review orchestrator (keeping Steps 0–2 below as fallback when `run_workflow` is unavailable or `--dry-run` is passed):
+
+- `Description`: `"Run multi-dimension code review"`
+- `Cwd`: current working directory
+- `Args`: `{ "review_args": "$ARGUMENTS", "plugin_root": "<PLUGIN_ROOT>", "cwd": "<cwd>" }` (optionally pass `"manifest_file": "<MANIFEST_FILE>"` if Step 0 already ran)
+- `Script`:
+  ```python
+  exec(open("<PLUGIN_ROOT>/skills/review-sdlc/workflows/review.py").read(), globals())
+  await main()
+  ```
+
+Handle the structured JSON returned by `review.py`:
+- `status === "failed"` — show `error` and invoke `error-report-sdlc` if `exit_code === 2`, then stop.
+- `status === "completed"` — proceed directly to Step 3 (emit `comment_file` verbatim in main context), Step 4 (Posting), Step 5 (Offer Self-Fix), and Step 6 (Cleanup) using `verdict`, `counts`, `not_reviewed`, `comment_file`, `diff_dir`, `manifest_file`, `scope`, `branch`, and `pr` from the returned JSON.
 
 ## Step 0 — Resolve and Run skill/review.js
 
@@ -67,7 +83,7 @@ Spawn a single Subagent using `invoke_subagent`:
     {
       "TypeName": "review-orchestrator",
       "Role": "Review Orchestrator",
-      "Model": "flash_lite",
+      "Model": "flash",
       "Prompt": "MANIFEST_FILE: {the temp file path from Step 0}\nPROJECT_ROOT: {current working directory}"
     }
   ]

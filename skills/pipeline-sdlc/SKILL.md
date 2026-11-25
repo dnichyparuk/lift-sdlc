@@ -1,12 +1,11 @@
 ---
-name: run-workflow
+name: pipeline-sdlc
 description: "Generic workflow engine that executes declarative pipeline manifests. Dispatches sub-skills as isolated Agents with per-step model selection and manages deterministic state machine transitions."
 user-invocable: true
 argument-hint: "--manifest <path> [--auto] [--dry-run] [--resume] [pipeline-flags]"
-model: gemini-3.8-flash-medium
 ---
 
-# Generic Workflow Engine
+# Generic Pipeline Engine (`pipeline-sdlc`)
 
 Executes structured SDLC pipelines defined by declarative manifests and prepare scripts. Manages state machine transitions, `invoke_subagent` dispatches, inline execution steps, and verification gates.
 
@@ -54,8 +53,8 @@ Format and display the pipeline table:
 ━━━━━━━━━━━━━━━━━━━━ Pipeline Plan: <pipeline> ━━━━━━━━━━━━━━━━━━━━
   #   Step                 Skill                   Mode    Status      Model
 ──────────────────────────────────────────────────────────────────
-  1   execute              execute-plan-sdlc       agent   will_run    gemini-3.8-flash-medium
-  2   commit               commit-sdlc             agent   will_run    gemini-3.8-flash-medium
+  1   execute              execute-plan-sdlc       agent   will_run    flash
+  2   commit               commit-sdlc             agent   will_run    flash
   ...
 ```
 
@@ -121,7 +120,12 @@ If `step.status === "conditional"`:
    Dispatch via `invoke_subagent` with:
    - `TypeName: "self"`
    - `Role: step.name + " executor"`
-   - `Model`: `step.model` mapped to platform enum (contains 'pro' → 'pro', 'flash-low' or 'flash_lite' → 'flash_lite', 'flash' → 'flash', otherwise → 'inherit')
+   - `Model`: `step.model` mapped to `agy` enum (`flash_lite|flash|pro|inherit`):
+     - If already `flash_lite`, `flash`, `pro`, or `inherit` → pass verbatim
+     - Ends with `-hydrogen-low` or `-flash-low` → `flash_lite`
+     - Contains `pro`, `neon`, `argon`, or `carbon` → `pro`
+     - Contains `hydrogen` or `flash` → `flash`
+     - Otherwise → `inherit`
    - `Workspace: step.isolation === "worktree" || step.isolation === "branch" ? "branch" : "inherit"`
    - `Prompt`:
      ```text
@@ -145,7 +149,7 @@ If `step.status === "conditional"`:
 3. **Post-Gates Verification**:
    If `step.postGates` is defined, execute each gate command sequentially, interpolating `$STATE_FILE` and `$PLAN_FILE`:
    ```shell
-   # Example: scripts/util/verify-completeness.js --state-file $STATE_FILE --plan-file $PLAN_FILE
+   # Example: node "<PLUGIN_ROOT>/scripts/util/verify-completeness.js" --state-file "$STATE_FILE" --plan-file "$PLAN_FILE"
    ```
    If any gate script exits with its configured `haltExitCode` (e.g. 65 for completeness check):
    - Record step failure via `node "<PLUGIN_ROOT>/scripts/state/pipeline.js" --pipeline "<statePrefix>" fail --step <step.name> --error "Post-gate failed"`
@@ -232,7 +236,7 @@ Print the final execution summary to the user:
 
 Third-party manifests (a `prepareScript`'s emitted `steps[]`, e.g. a plugin's own `pipelines/*.json`) rely on this engine to execute specific step fields. This section documents which fields Step 4 above actually reads and acts on, versus fields that only pass through for the step's own handler to interpret. Where the engine has no defined behavior for a field, that is called out explicitly rather than assumed — a manifest author should not build on undocumented behavior.
 
-**`dispatchMode`** — `"agent"` or `null` (Step 4c.2). `"agent"` dispatches the step via `invoke_subagent` with `model: step.model` and `workspace: step.isolation` (omitted when null), running `<step.skill> <step.args>`. `null` (or omitted) runs the step inline in the orchestrator's own context (Case B).
+**`dispatchMode`** — `"agent"` or `null` (Step 4c.2). `"agent"` dispatches the step via `invoke_subagent` with `Model` mapped to `flash_lite|flash|pro|inherit` from `step.model` and `Workspace` mapped from `step.isolation` (`"branch"` or `"inherit"`), running `<step.skill> <step.args>`. `null` (or omitted) runs the step inline in the orchestrator's own context (Case B).
 
 **`inlineHandler` + `handlerSpec`** — For a `dispatchMode: null` step, Case B names four built-in handlers with concrete, engine-defined execution:
 - `archive-openspec` — `ARCHIVED_PATH=$(node "<PLUGIN_ROOT>/scripts/util/openspec-archive.js" '<name>')`

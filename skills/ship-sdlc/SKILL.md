@@ -3,7 +3,6 @@ name: ship-sdlc
 description: "Use this skill when shipping a feature end-to-end after plan acceptance: executing, committing, reviewing, fixing critical issues, versioning, and opening a PR in one flow. Dispatches every sub-skill (including execute-plan-sdlc) as an Agent for context isolation, with structured return values driving the pipeline state machine. Arguments: [--auto] [--steps <csv>] [--quick] [--quality full|balanced|minimal] [--bump patch|minor|major|<label>] [--draft] [--dry-run] [--resume] [--plan <path>] [--workspace branch|worktree|prompt] [--branch | --tree] [--openspec-change <name>] [--init-config] [--gc] [--ttl-days <N>]. The `<label>` form for --bump (e.g. `--bump rc`) is forwarded to version-sdlc, where it is interpreted as `--bump patch --pre <label>`; labels must match `^[a-z][a-z0-9]*$`. Triggers on: ship it, ship this, full pipeline, execute to PR, ship feature, run the whole thing."
 user-invocable: true
 argument-hint: "[--auto] [--steps <csv>] [--quick] [--quality full|balanced|minimal] [--bump patch|minor|major|<label>] [--draft] [--dry-run] [--resume] [--plan <path>] [--workspace branch|worktree|prompt] [--branch | --tree] [--openspec-change <name>] [--init-config] [--gc] [--ttl-days <N>]"
-model: gemini-3.8-flash-medium
 ---
 
 # Ship Pipeline
@@ -92,18 +91,36 @@ Print one line per file:
 
 Run `rm -f "$PREPARE_OUTPUT_FILE"` to clean up the temp output file. Then stop. Do not proceed to step 1b. The pipeline does not run.
 
-### 1a-engine. Generic Workflow Engine Delegation
+### 1a-engine. Native `run_workflow` & Pipeline Engine Delegation
 
-Unless `ship.engine` is explicitly set to `"legacy"` in `.sdlc/local.json`, `ship-sdlc` delegates pipeline execution directly to the generic workflow engine:
+Unless `ship.engine` is explicitly set to `"legacy"` in `.sdlc/local.json`, `ship-sdlc` delegates pipeline execution to `agy`'s native `run_workflow` tool via `skills/ship-sdlc/workflows/ship.py` (or to `/pipeline-sdlc` when `ship.engine === "pipeline-sdlc"`):
 
-1. Check `.sdlc/local.json` for `ship.engine === "legacy"`.
-2. If `ship.engine !== "legacy"`:
+1. Check `.sdlc/local.json` for `ship.engine`.
+2. **If `ship.engine === "pipeline-sdlc"`:**
    Announce:
-   > Delegating to generic workflow engine (`run-workflow`) with manifest `skills/ship-sdlc/pipeline.json`.
+   > Delegating to pipeline engine (`/pipeline-sdlc`) with manifest `skills/ship-sdlc/pipeline.json`.
 
-   Invoke `/run-workflow --manifest skills/ship-sdlc/pipeline.json $ARGUMENTS` using the Skill tool.
-   Stop here — `run-workflow` executes the pipeline steps, manages state, and renders summary reports.
-3. If `ship.engine === "legacy"`:
+   Invoke `/pipeline-sdlc --manifest skills/ship-sdlc/pipeline.json $ARGUMENTS` using the Skill tool. Stop here — `/pipeline-sdlc` executes the pipeline steps, manages state, and renders summary reports.
+3. **If `ship.engine !== "legacy"` (default — native `run_workflow`):**
+   Announce:
+   > Delegating to native `run_workflow` orchestrator (`skills/ship-sdlc/workflows/ship.py`).
+
+   Execute `skills/ship-sdlc/workflows/ship.py` via `run_workflow`:
+   - `Description`: `"Execute ship-sdlc pipeline"`
+   - `Cwd`: current repository working directory
+   - `Args`: `{ "raw_args": "$ARGUMENTS", "plugin_root": "<PLUGIN_ROOT>" }`
+   - `Script`:
+     ```python
+     exec(open("<PLUGIN_ROOT>/skills/ship-sdlc/workflows/ship.py").read(), globals())
+     await main()
+     ```
+   Handle the structured JSON returned by `ship.py`:
+   - `status === "dry_run"` — display the pipeline table, validation summary, and stop.
+   - `status === "blocked"` — surface `errors[]` (including `implicitResumeNoState` prompt via `ask_question` if applicable) and stop.
+   - `status === "needs_consent"` when `gate === "workspace_mode"` (pre-init consent — no state file exists yet) — present the workspace selection prompt via `ask_question`; if approved, re-invoke `ship.py` **WITHOUT `--resume`** and pass the selected consent flag in `Args` (e.g. `workspace_flag: "branch"|"worktree"|"continue"`).
+   - `status === "paused_conflicts"` or `"paused_gate"` or post-init `status === "needs_consent"` (`received_review`, `rebase_conflicts`, `openspec_archive`, `verify_pipeline`, `await_remote_review`) — present the consent/resolution prompt for `gate` via `ask_question`; if approved, re-invoke `ship.py` **WITH `--resume`** in `raw_args` and the corresponding approval flag in `Args` (e.g. `approve_openspec_archive: true`, `approve_received_review: true`, `approve_ci_fix: true`, `approve_remote_review: true`, `rebase_conflict_action: "skip"|"merge"`).
+   - `status === "completed"` or `"failed"` — render the Step 6 summary report from the returned JSON (and prompt for worktree keep/remove when interactive and a linked worktree is active). Stop here.
+4. **If `ship.engine === "legacy"`:**
    Proceed to legacy step 1b below.
 
 ### 1b. Load ship config
@@ -148,7 +165,7 @@ echo "STATUS: $EXIT_CODE"
 
 Parse the output JSON from `$PREPARE_OUTPUT_FILE`. If `errors` is non-empty, display them and stop. The parsed output replaces manual computation in subsequent sub-steps (1d–1g).
 
-**Context-heaviness advisory:** If the parsed output's top-level `contextAdvisory` field is a non-empty string, print it verbatim before continuing. The advisory recommends `/compact` and notes that pipeline state is preserved across compaction (PreCompact + SessionStart hooks). Sourced from `$TMPDIR/sdlc-context-stats.json`, intended to be written by a `UserPromptSubmit` hook at `hooks/context-stats.js` — that hook **does not exist and is not registered in `hooks.json`**, so the sidecar is never written today and `contextAdvisory` is always `null` in practice. Reader helper at `scripts/lib/context-advisory.js`. When `contextAdvisory` is `null`, emit nothing.
+**Context-heaviness advisory:** If the parsed output's top-level `contextAdvisory` field is a non-empty string, print it verbatim before continuing (the advisory recommends `/compact` and notes that pipeline state is preserved across compaction). Reader helper at `scripts/lib/context-advisory.js`. When `contextAdvisory` is `null`, emit nothing.
 
 **Gitignore warning:** If `context.sdlcGitignored` is `false` in the output, print:
 ```
@@ -365,7 +382,7 @@ For each step that will run, apply the dispatch protocol based on `step.dispatch
 3. **Dispatch Subagent** via `invoke_subagent` with:
    - `TypeName`: `"self"` (or orchestrator agent name if specialized)
    - `Role`: `"Ship Pipeline - " + step.skill`
-   - `Model`: `step.model` (which natively carries the correctly mapped suffix from ship.js)
+   - `Model`: `step.model` mapped to `agy` enum (`flash_lite|flash|pro|inherit`): valid `agy` enums pass verbatim; `*-hydrogen-low` / `*-flash-low` → `flash_lite`; `*-hydrogen-*` / `*-flash-*` → `flash`; `*-neon-*` / `*-argon-*` / `*-carbon-*` / `*-pro-*` → `pro`; otherwise → `inherit`
    - `Workspace`: `step.isolation === 'worktree' ? 'branch' : 'inherit'`
    - `Prompt`: fill prompt template below with step arguments and brief pipeline context (branch, previous step results needed for this step).
 
@@ -593,7 +610,7 @@ If the step has `status: "skipped"`, print the skip reason from `step.reason`.
 
 Both are optional inline steps (no Agent dispatch — deterministic polling scripts), gated by step membership in `flags.steps` (cite `step.status === "will_run"` from the prepare output, not `$ARGUMENTS`). If a step's `status` is `"skipped"`, print `step.reason` and do nothing.
 
-Each wrapper below takes the args from `step.args` plus `--state-file <ship-state-path>` — there is no separate path-resolution step; the wrapper locates its underlying `scripts/skill/*.js` script and forwards every argument to it unchanged, then prints a single JSON line on stdout. Exit 2 (with a locate error on stderr) only if the underlying script is missing; otherwise the wrapped script's own exit code. Do NOT replicate polling, log fetching, or fix-application logic in this prose — that lives in the wrapped scripts and the `verify-pipeline-sdlc` skill.
+Each wrapper below takes the args from `step.args` plus `--state-file <ship-state-path>` — there is no separate path-resolution step; the wrapper locates its underlying `scripts/skill/verify-pipeline.js` or `scripts/skill/await-remote-review.js` script and forwards every argument to it unchanged, then prints a single JSON line on stdout. Exit 2 (with a locate error on stderr) only if the underlying script is missing; otherwise the wrapped script's own exit code. Do NOT replicate polling, log fetching, or fix-application logic in this prose — that lives in the wrapped scripts and the `verify-pipeline-sdlc` skill.
 
 #### verify-pipeline
 
@@ -609,11 +626,11 @@ Parse the JSON line. Branch on `status`:
    > Wave verify-pipeline failed for PR #N. <X> failed checks: <names>.
    >
    > Options: **analyze** (Recommended) | **skip** | **abort**
-   - **analyze**: dispatch `verify-pipeline-sdlc` subagent (via `invoke_subagent`, Model gemini-3.8-flash-high) with `--pr <N>` and `--logs <inline-log-excerpt-from-failedChecks>`. On verdict `fix-applied`, dispatch `commit-sdlc` (via `invoke_subagent`, Model gemini-3.8-flash-medium, `--auto`) directly to commit and push. Then re-run verify-pipeline (loop). Iteration cap = `flags.verifyPipelineMaxIterations` (default 3); after cap, log warning and proceed to `await-remote-review`. The pre-existing `commit-fixes` step entry (already visited before `pr`) is NOT involved — this dispatch is direct via `invoke_subagent`.
+   - **analyze**: dispatch `verify-pipeline-sdlc` subagent (via `invoke_subagent`, `Model: "pro"`) with `--pr <N>` and `--logs <inline-log-excerpt-from-failedChecks>`. On verdict `fix-applied`, dispatch `commit-sdlc` (via `invoke_subagent`, `Model: "flash"`, `--auto`) directly to commit and push. Then re-run verify-pipeline (loop). Iteration cap = `flags.verifyPipelineMaxIterations` (default 3); after cap, log warning and proceed to `await-remote-review`. The pre-existing `commit-fixes` step entry (already visited before `pr`) is NOT involved — this dispatch is direct via `invoke_subagent`.
    - **skip**: log warning, proceed to `await-remote-review`.
    - **abort**: write `verifyPipelineExhausted: true` to the ship state file, exit pipeline 1.
 
-   **`status === "failed"`** AND `flags.auto === true` — non-interactive. Directly dispatch `verify-pipeline-sdlc` subagent (via `invoke_subagent`, Model gemini-3.8-flash-high) with `--pr <N> --logs <excerpt> --auto`. On `fix-applied`, dispatch `commit-sdlc --auto` directly (via `invoke_subagent`, Model gemini-3.8-flash-medium). Loop with the same iteration cap (`flags.verifyPipelineMaxIterations`). On cap exhaustion, log warning and proceed.
+   **`status === "failed"`** AND `flags.auto === true` — non-interactive. Directly dispatch `verify-pipeline-sdlc` subagent (via `invoke_subagent`, `Model: "pro"`) with `--pr <N> --logs <excerpt> --auto`. On `fix-applied`, dispatch `commit-sdlc --auto` directly (via `invoke_subagent`, `Model: "flash"`). Loop with the same iteration cap (`flags.verifyPipelineMaxIterations`). On cap exhaustion, log warning and proceed.
 
    **`status === "timeout"`** — log warning `verify-pipeline: timeout after Ns`. The script has already written `verifyPipelineExhausted: true` to the state file. Proceed to `await-remote-review`.
 
@@ -629,7 +646,7 @@ node "<PLUGIN_ROOT>/scripts/util/await-review.js" $STEP_ARGS --state-file "$SHIP
 
 Parse the JSON line. Branch on `status`:
 
-   **`status === "actionable"`** — directly dispatch `received-review-sdlc` (via `invoke_subagent`, Model gemini-3.8-flash-high) with `--pr <verdict.prNumber>` (and `--auto` when `flags.auto === true`). After the subagent completes, run `git status --porcelain` in the main context; if there are working-tree changes, directly dispatch `commit-sdlc` (via `invoke_subagent`, Model gemini-3.8-flash-medium, `--auto`) to commit and push. The pre-existing `received-review` and `commit-fixes` step entries (already visited before `pr`) are NOT involved — these dispatches are direct via `invoke_subagent`.
+   **`status === "actionable"`** — directly dispatch `received-review-sdlc` (via `invoke_subagent`, `Model: "pro"`) with `--pr <verdict.prNumber>` (and `--auto` when `flags.auto === true`). After the subagent completes, run `git status --porcelain` in the main context; if there are working-tree changes, directly dispatch `commit-sdlc` (via `invoke_subagent`, `Model: "flash"`, `--auto`) to commit and push. The pre-existing `received-review` and `commit-fixes` step entries (already visited before `pr`) are NOT involved — these dispatches are direct via `invoke_subagent`.
 
    **`status === "approved-clean"`** — log `await-remote-review: APPROVED by <reviewer>` and proceed. Do NOT dispatch received-review-sdlc.
 
@@ -853,7 +870,7 @@ Each sub-skill has its own error recovery. ship-sdlc does not duplicate their re
 - Skip a step marked `will_run` in the confirmed pipeline plan — it is a contract with the user; only skill/ship.js's skip set and auto-skip rules decide which steps run.
 - Copy example args from this document when dispatching sub-skill Agents — always use `step.invocation`.
 - Add `--steps` flags not present in the user's original invocation, or resurrect the hard-removed legacy `--preset`/`--skip` flags.
-- Dispatch pipeline step Agents without `model: step.model`, or add/remove/change the `isolation` parameter from `step.isolation` verbatim (§Dispatch protocol) — a stray `isolation: "worktree"` when `step.isolation` is null causes hidden Agent SDK worktrees that conflict with `--workspace branch`.
+- Dispatch pipeline step Agents without mapping `step.model` to a valid `agy` `Model` enum (`flash_lite|flash|pro|inherit`), or add/remove/change the `Workspace` parameter from `step.isolation` verbatim (§Dispatch protocol) — a stray `Workspace: "branch"` when `step.isolation` is null causes hidden Agent SDK worktrees that conflict with `--workspace branch`.
 - Ignore a cleanup contract violation (`state/ship.js cleanup` exit 1) — surface it and preserve state, do not proceed to the success summary.
 - Skip the post-version ancestry HARD GATE — the only safeguard against tags landing on orphaned commits (it is already a no-op when `NEW_TAG` is unset, so there is nothing to pre-empt).
 - Exit the plan-mode-blocked path (Step 0) without running `rm -f "$PLAN_MODE_OUTPUT_FILE"` on every exit branch.

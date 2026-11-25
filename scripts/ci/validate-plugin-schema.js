@@ -60,7 +60,7 @@ const { spawnSync } = require('node:child_process');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 
 /** The one and only permitted `tools:` value for these two agents (allowlist, not denylist — see header). */
-const REQUIRED_TOOLS_VALUE = 'view_file';
+const REQUIRED_TOOLS_VALUE = '[view_file]';
 
 /** The read-only self-learning agents this script mechanically asserts on. Fixed list (per Contract's `sync: none`) — not derived from docs/plugin-api-specs.md. */
 const AGENTS_TO_CHECK = [
@@ -157,6 +157,61 @@ function checkToolBoundary(pluginDir) {
   return violations;
 }
 
+/** Valid `agy` enum values for `model:` in `agents/*.md` frontmatter. */
+const VALID_AGENT_MODELS = new Set(['inherit', 'flash_lite', 'flash', 'pro']);
+
+/**
+ * Read the `model:` frontmatter value from one agent file's content.
+ * @param {string} text
+ * @returns {string|null} the trimmed value, or `null` when no `model:` line
+ *   is found in the frontmatter block.
+ */
+function readModelValue(text) {
+  const frontmatter = extractFrontmatter(text);
+  if (frontmatter === null) return null;
+  const m = /^model:\s*(.*)$/m.exec(frontmatter);
+  if (!m) return null;
+  return m[1].trim();
+}
+
+/**
+ * Assert that every `agents/*.md` file's `model:` frontmatter value (when
+ * present) is a valid `agy` enum (`inherit`, `flash_lite`, `flash`, `pro`).
+ *
+ * @param {string} pluginDir
+ * @returns {Array<{file: string, reason: string}>} violations, empty when all pass
+ */
+function checkAgentModels(pluginDir) {
+  const agentsDir = path.join(pluginDir, 'agents');
+  if (!fs.existsSync(agentsDir)) return [];
+  let entries;
+  try {
+    entries = fs.readdirSync(agentsDir).filter((f) => f.endsWith('.md')).sort();
+  } catch (err) {
+    return [{ file: 'agents', reason: `cannot read agents directory: ${err.message}` }];
+  }
+  const violations = [];
+  for (const name of entries) {
+    const rel = `agents/${name}`;
+    const abs = path.join(agentsDir, name);
+    let text;
+    try {
+      text = fs.readFileSync(abs, 'utf8');
+    } catch (err) {
+      violations.push({ file: rel, reason: `cannot read file: ${err.message}` });
+      continue;
+    }
+    const value = readModelValue(text);
+    if (value !== null && !VALID_AGENT_MODELS.has(value)) {
+      violations.push({
+        file: rel,
+        reason: `model: value is "${value}", expected one of: ${Array.from(VALID_AGENT_MODELS).join(', ')}`,
+      });
+    }
+  }
+  return violations;
+}
+
 // ---------------------------------------------------------------------------
 // hooks.json shape assertion (official contract — see header)
 // ---------------------------------------------------------------------------
@@ -164,7 +219,7 @@ function checkToolBoundary(pluginDir) {
 /** Events whose array elements are `{ matcher?, hooks: [handler, ...] }` wrappers. */
 const MATCHER_EVENTS = ['PreToolUse', 'PostToolUse'];
 /** Events whose array elements are handler objects directly (matcher ignored). */
-const DIRECT_EVENTS = ['PreInvocation', 'PostInvocation', 'Stop'];
+const DIRECT_EVENTS = ['SessionStart', 'PreInvocation', 'PostInvocation', 'Stop'];
 const ALL_EVENTS = [...MATCHER_EVENTS, ...DIRECT_EVENTS];
 
 function isPlainObject(v) {
@@ -336,7 +391,7 @@ function runAgyValidate(spawnFn, pluginDir) {
  * @param {{toolViolations: Array<{file: string, reason: string}>, hooksViolations?: Array<{file: string, reason: string}>, agyResult: object}} input
  * @returns {{exitCode: 0|1, stdout: string[], stderr: string[]}}
  */
-function evaluate({ toolViolations, hooksViolations = [], agyResult }) {
+function evaluate({ toolViolations, hooksViolations = [], modelViolations = [], agyResult }) {
   const stdout = [];
   const stderr = [];
 
@@ -346,7 +401,10 @@ function evaluate({ toolViolations, hooksViolations = [], agyResult }) {
   for (const v of hooksViolations) {
     stderr.push(`hooks-shape: ${v.file}: ${v.reason}`);
   }
-  const localFailures = toolViolations.length + hooksViolations.length;
+  for (const v of modelViolations) {
+    stderr.push(`agent-model: ${v.file}: ${v.reason}`);
+  }
+  const localFailures = toolViolations.length + hooksViolations.length + modelViolations.length;
 
   if (!agyResult.installed) {
     stderr.push(SKIP_NOTE);
@@ -387,10 +445,11 @@ function main() {
   // Contract: "tool-boundary assertion still runs").
   const toolViolations = checkToolBoundary(pluginDir);
   const hooksViolations = checkHooksShape(pluginDir);
+  const modelViolations = checkAgentModels(pluginDir);
 
   const agyResult = runAgyValidate(spawnSync, pluginDir);
 
-  const { exitCode, stdout, stderr } = evaluate({ toolViolations, hooksViolations, agyResult });
+  const { exitCode, stdout, stderr } = evaluate({ toolViolations, hooksViolations, modelViolations, agyResult });
   writeLines(process.stdout, stdout);
   writeLines(process.stderr, stderr);
 
@@ -401,9 +460,12 @@ module.exports = {
   parseArgs,
   extractFrontmatter,
   readToolsValue,
+  readModelValue,
   checkToolBoundary,
+  checkAgentModels,
   checkHooksShape,
   validateHooksDocument,
+  VALID_AGENT_MODELS,
   MATCHER_EVENTS,
   DIRECT_EVENTS,
   runAgyValidate,

@@ -18,13 +18,20 @@ Quality tiers allow you to control which model preset is used for these categori
 
 ## 2. Available Quality Tiers
 
-There are three predefined quality tiers available:
+There are three predefined quality tiers available, built on the **Gemini 4** model family (*Hydrogen Hands, Neon-for-Coding, Argon Verification, Carbon Flagship*) mapped to Antigravity (`agy`) runtime enums (`inherit | flash_lite | flash | pro`):
 
-| Tier | Name | Dynamic Routing Behavior | Use Case |
-|---|---|---|---|
-| **`minimal`** | Speed | Forces `gemini-3.8-flash` for all tasks, but dynamically allocates reasoning budgets: `-medium` (Trivial), `-medium` (Standard), `-high` (Complex). | Rapid prototyping, mechanical refactoring, or low-cost runs. |
-| **`balanced`** | Balanced (Default — Hybrid) | Hybrid routing (*Flash Hands, Pro Brain & Eyes*). Trivial: `gemini-3.8-flash-medium`, Standard: `gemini-3.8-flash-medium`, Complex: `gemini-3.8-flash-high` (auto-escalates to `gemini-3.1-pro-low` on verification failure). High-risk tasks override directly to `gemini-3.1-pro-low`. Security/concurrency review on `gemini-3.1-pro-low`; architecture/contracts on `gemini-3.8-flash-high`. | General day-to-day development with maximum throughput and automated Pro escalation. |
-| **`full`** | Quality | Forces `gemini-3.1-pro` for non-trivial tasks (`-low` for Standard, `-high` for Complex) and routes Trivial to `gemini-3.8-flash-medium`. Runs a spec-compliance review. | Critical code paths, production deployments, or complex features requiring maximum reasoning capability. |
+| Tier | Name | Trivial | Standard | Complex | Use Case |
+|---|---|---|---|---|---|
+| **`minimal`** | Speed | `gemini-4-hydrogen-medium` (`flash`) | `gemini-4-hydrogen-medium` (`flash`) | `gemini-4-hydrogen-high` (`flash`) | Rapid prototyping, mechanical refactoring, 100% Hydrogen throughput (skips per-wave spec review). |
+| **`balanced`** | Balanced *(Default)* | `gemini-4-hydrogen-medium` (`flash`) | `gemini-4-neon-low` (`pro`, or `inherit` via `execute.standardWorkerEnum`) | `gemini-4-neon-medium` (`pro`) | Everyday feature work — Hydrogen trivials, Neon-for-Coding Standard & Complex execution, Argon (`pro`) spec compliance review. |
+| **`full`** | Quality | `gemini-4-hydrogen-medium` (`flash`) | `gemini-4-neon-medium` (`pro`) | `gemini-4-carbon-medium` (`pro`) | Critical code paths, production releases, architectural work requiring flagship Carbon reasoning and Argon (`pro`) spec compliance review. |
+
+- **`wave-runner` orchestrator:** Locked to `flash` (`gemini-4-hydrogen-medium`) across all tiers.
+- **High-risk override:** Tasks tagged `Risk: High` override to Neon (`pro`) regardless of complexity.
+- **Failure-aware escalation (`escalateLogicalModel` in `scripts/lib/model-tiers.js`):**
+  - `NEEDS_CONTEXT` keeps the current tier and injects missing context.
+  - `SPEC_GAP` jumps directly to Argon (`gemini-4-argon-low` / `pro`, or `gemini-4-carbon-medium` if already Argon/Neon-high/Carbon).
+  - `FAILED_TESTS` / `FAILED_BUILD` / `BLOCKED` steps along `hydrogen → neon → argon → carbon` (`agy` enums `flash_lite → flash → pro`).
 
 ---
 
@@ -54,10 +61,16 @@ Add the `quality` property under the `ship` section in your `.sdlc/config.json`:
 ```json
 {
   "ship": {
-    "quality": "full"
+    "quality": "balanced"
+  },
+  "execute": {
+    "standardWorkerEnum": "pro"
   }
 }
 ```
+
+> [!NOTE]
+> `execute.standardWorkerEnum` accepts `"pro"` (default, ensures Hydrogen sessions still route Balanced Standard tasks to Neon) or `"inherit"` (allows Neon-session users to inherit their active session model). Both `.sdlc/config.json` and `.sdlc/local.json` are validated against [schemas/sdlc-config.schema.json](../schemas/sdlc-config.schema.json) and [schemas/sdlc-local.schema.json](../schemas/sdlc-local.schema.json).
 
 ### C. Developer/Local Configuration (`.sdlc/local.json`)
 If you want to customize the quality tier for your local environment only (e.g., to use `minimal` during testing to save costs/time), you can set it in `.sdlc/local.json`. This file is git-ignored and overrides the project-wide `.sdlc/config.json`.
@@ -95,8 +108,9 @@ Selecting an option will automatically save it to your local config file.
 
 If you are developing Lift-SDLC or updating the model definitions, refer to the following source files:
 
-*   **Configuration Schema**: [scripts/lib/ship-fields.js](../scripts/lib/ship-fields.js) is the single source of truth defining the `quality` config field schema, option validations, and description text.
+*   **Configuration Schema**: [scripts/lib/ship-fields.js](../scripts/lib/ship-fields.js), [schemas/sdlc-config.schema.json](../schemas/sdlc-config.schema.json), and [schemas/sdlc-local.schema.json](../schemas/sdlc-local.schema.json) define the `quality` and `execute.standardWorkerEnum` fields and validations.
+*   **Model Tiers & Escalation**: [scripts/lib/model-tiers.js](../scripts/lib/model-tiers.js) defines `GEMINI4_MODELS`, `toAgyModelEnum`, `escalateAgyModel`, and failure-aware `escalateLogicalModel`.
 *   **Resolution and Precedence**: [scripts/skill/ship.js](../scripts/skill/ship.js) handles merging the config files with any command-line options and passes the resolved flag down.
-*   **Orchestration Logic**: [skills/execute-plan-sdlc/SKILL.md](../skills/execute-plan-sdlc/SKILL.md) defines how the executing agent reads the `--quality` flag and dynamically maps tasks to model engines (e.g., `gemini-3.8-flash-low` vs `gemini-3.1-pro-low`).
-*   **Architecture & Agent Relations**: For a comprehensive view of how quality tiers integrate across all agent layers, see the [SDLC Plugin Architecture Report](./sdlc-plugin-architecture-report.md).
+*   **Orchestration Logic**: [skills/execute-plan-sdlc/SKILL.md](../skills/execute-plan-sdlc/SKILL.md) and [skills/execute-plan-sdlc/workflows/execute.py](../skills/execute-plan-sdlc/workflows/execute.py) define how execution reads the `--quality` flag and maps tasks to Gemini 4 profiles (`gemini-4-hydrogen-medium`, `gemini-4-neon-low`, `gemini-4-carbon-medium`) and `agy` enums (`flash`, `pro`).
+*   **Architecture & Agent Relations**: For a comprehensive view of how quality tiers integrate across all agent layers, see the [SDLC Plugin Architecture Report](./architecture/sdlc-plugin-architecture-report.md) and [Model References](./model-references.md).
 

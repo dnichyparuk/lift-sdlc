@@ -36,6 +36,7 @@ const { resolveSkipConfigCheck, ensureConfigVersion } = require(path.join(LIB, '
 const { initState, findStateFile, readState, writeState, slugifyBranch, pruneStateFiles } = require(path.join(LIB, 'state'));
 const { exec, parseRemoteOwner } = require(path.join(LIB, 'git'));
 const { recordGuardrailEvaluation } = require(path.join(LIB, 'learnings'));
+const { toAgyModelEnum } = require(path.join(LIB, 'model-tiers'));
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -149,96 +150,66 @@ function buildGithubHosting(projectRoot) {
 }
 
 /**
- * Build P15 g17Dispatch metadata (R33).
- * Resolves the G17 prompt template path via find cascade:
- *   1. ~/.gemini/config/plugins (installed plugin path)
- *   2. workspace-relative (development / CI path)
- * Returns null promptTemplatePath and adds an error when the file cannot be found.
- * @returns {{ subagentType: string, model: string, promptTemplatePath: string|null, error?: string }}
- */
-function buildG17Dispatch() {
-  const templateName = 'g17-dimension-coverage-prompt.md';
-  const subagentType = 'research';
-  const model = 'gemini-3.8-flash-medium';
-
-  // 1. Try installed plugin path via find
-  const findResult = spawnSync(
-    'find',
-    [
-      `${process.env.HOME}/.gemini/config/plugins`,
-      '-name', templateName,
-      '-path', '*/plan-sdlc/*',
-    ],
-    { encoding: 'utf8' },
-  );
-  if (!findResult.error && findResult.status === 0) {
-    const lines = (findResult.stdout || '').trim().split('\n').filter(Boolean);
-    if (lines.length > 0) {
-      // sort -V semantics: pick the last (highest version) entry
-      const ver = p => { const m = p.match(/\/(\d+)\.(\d+)\.(\d+)\/skills/); return m ? [+m[1], +m[2], +m[3]] : [0, 0, 0]; };
-      const sorted = lines.slice().sort((a, b) => { const [a1, a2, a3] = ver(a); const [b1, b2, b3] = ver(b); return a1 - b1 || a2 - b2 || a3 - b3; });
-      return { subagentType, model, promptTemplatePath: sorted[sorted.length - 1] };
-    }
-  }
-
-  // 2. Workspace-relative fallback (development / CI)
-  const workspacePath = path.join(
-    __dirname,
-    '..', '..', 'skills', 'plan-sdlc', templateName,
-  );
-  if (fs.existsSync(workspacePath)) {
-    return { subagentType, model, promptTemplatePath: workspacePath };
-  }
-
-  // 3. Not found — surface as error; G17 cannot dispatch without a prompt template
-  return {
-    subagentType,
-    model,
-    promptTemplatePath: null,
-    error: `G17 prompt template not found: ${templateName}`,
-  };
-}
-
-/**
- * Resolve a skill/plan-sdlc template path via the same find cascade as buildG17Dispatch.
+ * Resolve a skill/plan-sdlc template path.
+ * Checks `skills/plan-sdlc/resources/<templateName>` relative to this script FIRST
+ * (cross-platform; works for global CLI installs, workspace installs, and source runs),
+ * then falls back to `skills/plan-sdlc/<templateName>`.
  * Returns the resolved absolute path, or null when not found.
  * @param {string} templateName
  * @returns {string|null}
  */
 function resolveSkillTemplate(templateName) {
-  // 1. Try installed plugin path via find
-  const findResult = spawnSync(
-    'find',
-    [
-      `${process.env.HOME}/.gemini/config/plugins`,
-      '-name', templateName,
-      '-path', '*/plan-sdlc/*',
-    ],
-    { encoding: 'utf8' },
+  const resourcesPath = path.resolve(
+    __dirname,
+    '..', '..', 'skills', 'plan-sdlc', 'resources', templateName,
   );
-  if (!findResult.error && findResult.status === 0) {
-    const lines = (findResult.stdout || '').trim().split('\n').filter(Boolean);
-    if (lines.length > 0) {
-      const ver = p => { const m = p.match(/\/(\d+)\.(\d+)\.(\d+)\/skills/); return m ? [+m[1], +m[2], +m[3]] : [0, 0, 0]; };
-      const sorted = lines.slice().sort((a, b) => { const [a1, a2, a3] = ver(a); const [b1, b2, b3] = ver(b); return a1 - b1 || a2 - b2 || a3 - b3; });
-      return sorted[sorted.length - 1];
-    }
+  if (fs.existsSync(resourcesPath)) {
+    return resourcesPath;
   }
 
-  // 2. Workspace-relative fallback (development / CI)
-  const workspacePath = path.join(__dirname, '..', '..', 'skills', 'plan-sdlc', templateName);
-  if (fs.existsSync(workspacePath)) {
-    return workspacePath;
+  const skillRootPath = path.resolve(
+    __dirname,
+    '..', '..', 'skills', 'plan-sdlc', templateName,
+  );
+  if (fs.existsSync(skillRootPath)) {
+    return skillRootPath;
   }
 
   return null;
 }
 
 /**
+ * Build P15 g17Dispatch metadata (R33).
+ * Resolves the G17 prompt template path via resolveSkillTemplate().
+ * Returns null promptTemplatePath and adds an error when the file cannot be found.
+ * @returns {{ subagentType: string, model: string, agyModel: string, promptTemplatePath: string|null, error?: string }}
+ */
+function buildG17Dispatch() {
+  const templateName = 'g17-dimension-coverage-prompt.md';
+  const subagentType = 'research';
+  const model = 'gemini-4-hydrogen-medium';
+  const agyModel = toAgyModelEnum(model);
+
+  const resolvedPath = resolveSkillTemplate(templateName);
+  if (resolvedPath) {
+    return { subagentType, model, agyModel, promptTemplatePath: resolvedPath };
+  }
+
+  // Not found — surface as error; G17 cannot dispatch without a prompt template
+  return {
+    subagentType,
+    model,
+    agyModel,
+    promptTemplatePath: null,
+    error: `G17 prompt template not found: ${templateName}`,
+  };
+}
+
+/**
  * Build P16 lanes[] metadata (R35).
  * Five entries per KD1 lane partitioning. Entry [4] mirrors g17Dispatch verbatim.
- * @param {{ subagentType: string, model: string, promptTemplatePath: string|null }} g17Dispatch
- * @returns {Array<{ name: string, subagentType: string, model: string, promptTemplatePath: string|null, gateIds: string[] }>}
+ * @param {{ subagentType: string, model: string, agyModel?: string, promptTemplatePath: string|null }} g17Dispatch
+ * @returns {Array<{ id: string, name: string, subagentType: string, model: string, agyModel: string, promptTemplatePath: string|null, gateIds: string[] }>}
  */
 function buildLanes(g17Dispatch, guardrails, projectRoot) {
   const { validateAll } = require(require('node:path').join(__dirname, '..', 'lib', 'dimensions'));
@@ -248,25 +219,25 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
   const laneDefs = [
     {
       name: 'static-structural',
-      model: 'gemini-3.8-flash-low',
+      model: 'gemini-4-hydrogen-medium',
       templateName: 'lane-static-structural-prompt.md',
       gateIds: ['G1', 'G2', 'G3', 'G7', 'G12', ...(hasGuardrails ? [] : ['G14']), ...(hasDimensions ? [] : ['G17'])],
     },
     {
       name: 'content-coverage',
-      model: 'gemini-3.8-flash-medium',
+      model: 'gemini-4-hydrogen-high',
       templateName: 'lane-content-coverage-prompt.md',
       gateIds: ['G5', 'G6', 'G8', 'G9', 'G11', 'G13', 'G15', 'G16'],
     },
     {
       name: 'file-existence',
-      model: 'gemini-3.8-flash-low',
+      model: 'gemini-4-hydrogen-medium',
       templateName: 'lane-file-existence-prompt.md',
       gateIds: ['G4', 'G10'],
     },
       ...(hasGuardrails ? [{
       name: 'guardrail-compliance',
-      model: 'gemini-3.8-flash-medium',
+      model: 'gemini-4-hydrogen-medium',
       templateName: 'lane-guardrail-compliance-prompt.md',
       gateIds: ['G14'],
     }] : []),
@@ -277,6 +248,7 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
     name: def.name,
     subagentType: 'research',
     model: def.model,
+    agyModel: toAgyModelEnum(def.model),
     promptTemplatePath: resolveSkillTemplate(def.templateName),
     gateIds: def.gateIds,
   }));
@@ -292,6 +264,7 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
       name: 'dimension-coverage',
       subagentType: g17Dispatch.subagentType,
       model: g17Dispatch.model,
+      agyModel: g17Dispatch.agyModel || toAgyModelEnum(g17Dispatch.model),
       promptTemplatePath: g17Dispatch.promptTemplatePath,
       gateIds: ['G17'],
     });
@@ -303,22 +276,25 @@ function buildLanes(g17Dispatch, guardrails, projectRoot) {
 /**
  * Build P17 lensReviewers[] metadata (R36).
  * Three entries per KD3 lens partitioning.
- * @returns {Array<{ lens: string, subagentType: string, model: string, promptTemplatePath: string|null, focusCategories: string[] }>}
+ * @returns {Array<{ lens: string, subagentType: string, model: string, agyModel: string, promptTemplatePath: string|null, focusCategories: string[] }>}
  */
 function buildLensReviewers() {
   const lensDefs = [
     {
       lens: 'architecture',
+      model: 'gemini-4-neon-medium',
       templateName: 'lens-architecture-prompt.md',
       focusCategories: ['Buildability', 'Task descriptions', 'Decision documentation', 'Dependency accuracy'],
     },
     {
       lens: 'requirements',
+      model: 'gemini-4-argon-low',
       templateName: 'lens-requirements-prompt.md',
       focusCategories: ['Requirements coverage', 'Metadata completeness', 'Plan completeness', 'OpenSpec G16', 'Exploration provenance', 'Best-practice traceability'],
     },
     {
       lens: 'risk',
+      model: 'gemini-4-argon-low',
       templateName: 'lens-risk-prompt.md',
       focusCategories: ['File paths', 'Verification strategy', 'Scope discipline', 'Guardrail compliance'],
     },
@@ -327,7 +303,8 @@ function buildLensReviewers() {
   return lensDefs.map(def => ({
     lens: def.lens,
     subagentType: 'research',
-    model: 'gemini-3.8-flash-medium',
+    model: def.model,
+    agyModel: toAgyModelEnum(def.model),
     promptTemplatePath: resolveSkillTemplate(def.templateName),
     focusCategories: def.focusCategories,
   }));
@@ -604,7 +581,12 @@ function main() {
     guardrails,
     explorePack,
     githubHosting,
-    g17Dispatch: { subagentType: g17Dispatch.subagentType, model: g17Dispatch.model, promptTemplatePath: g17Dispatch.promptTemplatePath },
+    g17Dispatch: {
+      subagentType: g17Dispatch.subagentType,
+      model: g17Dispatch.model,
+      agyModel: g17Dispatch.agyModel,
+      promptTemplatePath: g17Dispatch.promptTemplatePath,
+    },
     lanes,
     lensReviewers,
     errors,

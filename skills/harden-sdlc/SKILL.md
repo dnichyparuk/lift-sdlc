@@ -3,7 +3,6 @@ name: harden-sdlc
 description: "Use this skill after an SDLC pipeline failure to analyze hardening surfaces (plan and execute guardrails, review dimensions, copilot instructions) and propose user-approved edits that would prevent the same class of failure next time. Strengthen-only in v1 — never relaxes or removes existing rules. Required arguments: --failure-text <string> --skill <caller-name>. Optional: --step, --operation, --exit-code, --error-type, --user-intent, --args-string. Triggers on: harden, strengthen guardrails, prevent this failure, learn from this failure, after pipeline failure."
 user-invocable: true
 argument-hint: "--failure-text <text> --skill <name> [--step <s>] [--operation <op>]"
-model: gemini-3.8-flash-high
 ---
 
 # Hardening After a Pipeline Failure
@@ -77,7 +76,7 @@ values for optional fields are tolerated.
 
 ## Step 2 — CLASSIFY: Surface the Failure Classification
 
-Read **only** the `failure.*` and `classification_hint` fields from
+Read (via `read_file`) **only** the `failure.*` and `classification_hint` fields from
 `MANIFEST_FILE` — do not load the full surface arrays into the main context.
 Display a short preview to the user:
 
@@ -109,7 +108,7 @@ Use `invoke_subagent` with:
     {
       "TypeName": "harden-orchestrator",
       "Role": "Hardening Orchestrator",
-      "Model": "flash_lite",
+      "Model": "pro",
       "Prompt": "MANIFEST_FILE: <ERROR_CONTEXT_FILE>\nPROJECT_ROOT: <cwd>"
     }
   ]
@@ -293,7 +292,7 @@ When `RESULT.classification == "plugin-defect"`:
    follow it, and dispatch with `skill=<failure.skill>`,
    `step=<failure.step>`, `operation=<failure.operation>`,
    `error=<failure.text>`, `exit-or-http-code=<failure.exitCode>`,
-   `error-type=<failure.errorType or "script crash">` (same Glob-then-follow
+   `error-type=<failure.errorType or "script crash">` (same `find_by_name`-then-follow
    idiom used elsewhere in the plugin).
 4. Do NOT edit any user-side hardening surface in the plugin-defect path. The
    no-silent-write invariant applies here too — the user must explicitly

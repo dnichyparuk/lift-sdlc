@@ -168,16 +168,67 @@ test('pre-tool-validate: plans under an archive directory are not validated (#17
   }
 });
 
-test('pre-tool-validate: a dimension file write still allows without leaving temporary files', () => {
+const VALID_DIMENSION_MD = [
+  '---',
+  'name: security',
+  'description: Checks for security vulnerabilities in changed code',
+  'triggers:',
+  '  - "src/**/*.js"',
+  '---',
+  '',
+  'Check all changed files for injection, auth bypass, and secret exposure.',
+  '',
+].join('\n');
+
+test('pre-tool-validate: a valid .md dimension file write allows without leaving temporary files', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-test-'));
   try {
     const output = runHook(
-      planWriteInput('/proj/.sdlc/review-dimensions/security.yaml', 'name: security\n'),
+      JSON.stringify({
+        toolCall: {
+          name: 'write_file',
+          args: { Path: '/proj/.sdlc/review-dimensions/security.md', Content: VALID_DIMENSION_MD },
+        },
+      }),
       { TMPDIR: tmp, TMP: tmp, TEMP: tmp },
     );
-    assert.strictEqual(output.decision, 'allow');
+    assert.strictEqual(output.decision, 'allow', output.reason);
     assert.deepStrictEqual(fs.readdirSync(tmp), []);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+test('pre-tool-validate: an invalid .md dimension file write denies without exposing temporary path', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-test-'));
+  try {
+    const target = '/proj/.sdlc/review-dimensions/broken.md';
+    const output = runHook(
+      JSON.stringify({
+        toolCall: {
+          name: 'create_file',
+          args: { file_path: target, content: 'name: broken\n' },
+        },
+      }),
+      { TMPDIR: tmp, TMP: tmp, TEMP: tmp },
+    );
+    assert.strictEqual(output.decision, 'deny');
+    assert.ok(output.reason.includes('Validation Failed:'), `expected Validation Failed, got:\n${output.reason}`);
+    assert.ok(!output.reason.includes('validate-'), `reason must not expose temp path, got:\n${output.reason}`);
+    assert.deepStrictEqual(fs.readdirSync(tmp), []);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('pre-tool-validate: edit_file allows', () => {
+  const output = runHook(
+    JSON.stringify({
+      toolCall: {
+        name: 'edit_file',
+        args: { Path: '/proj/.sdlc/review-dimensions/security.md', Target: 'a', Replacement: 'b' },
+      },
+    }),
+  );
+  assert.strictEqual(output.decision, 'allow');
 });

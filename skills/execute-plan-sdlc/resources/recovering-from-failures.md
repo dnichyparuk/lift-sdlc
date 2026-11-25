@@ -19,7 +19,7 @@ Maximum retries per task: **2**. After 2 failures on the same task, escalate to 
 | File conflict between agents | Two agents in the same wave modified the same file | High |
 | Partial batch failure | Batch agent reports some tasks SUCCESS, some tasks FAILED | Medium |
 | Phantom success | Agent reports task complete, but `git diff --stat` shows no changes to expected files, or canary grep for the verification token fails | High |
-| Permission prompt hang (bypass mode) | Agent times out or hangs despite `mode: "bypassPermissions"` being set | Medium |
+| Subagent hang / timeout | Agent times out or hangs without returning | Medium |
 | Agent status: NEEDS_CONTEXT | Agent completion checklist reports STATUS: NEEDS_CONTEXT | Low |
 | Agent status: BLOCKED | Agent completion checklist reports STATUS: BLOCKED | Medium–High |
 | Malformed completion checklist | Agent output is missing the COMPLETE:/VERIFY:/STATUS: block, or it cannot be parsed | Low |
@@ -39,26 +39,29 @@ Max 1 retry. If it fails again, escalate.
 
 ### Model escalation on retry
 
-When re-dispatching a failed task, escalate the model one step up the fixed ladder per retry:
+When re-dispatching a failed task, route according to the failure signal (`escalationBudget: 2`, full 2 retries for every starting tier):
+
+- **`NEEDS_CONTEXT`**: Re-dispatch on the **same** model (`assignedModel` / same `agy` enum) with the requested context provided — do not waste a model escalation on a context gap.
+- **`FAILED_TESTS` / `FAILED_BUILD` / `BLOCKED` / capability failure**: Escalate one step per retry along the Gemini 4 failure-aware ladder:
 
 ```
-gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high → user (escalate, do not retry further)
+gemini-4-hydrogen-low (flash_lite) → gemini-4-hydrogen-medium/high (flash) → gemini-4-neon-low/medium (pro) → gemini-4-argon-low/medium (pro) → gemini-4-carbon-medium/high (pro) → user (escalate after 2 retries)
 ```
 
-The starting point is the task's `assignedModel`; each retry advances exactly one position along this ladder.
+At the Antigravity (`agy`) runtime level (`scripts/lib/model-tiers.js::toAgyModelEnum` / `escalateAgyModel`), tiers map to `flash_lite → flash → pro`. The starting point is the task's `assignedModel`; each capability retry advances one position along this ladder while granting every tier its full 2 retries:
 
 Examples:
-- If a task starts on `gemini-3.8-flash-low`, it escalates to `gemini-3.8-flash-medium` (Retry 1), and then to `gemini-3.8-flash-high` (Retry 2).
-- If a task starts on `gemini-3.8-flash-medium`, it escalates to `gemini-3.8-flash-high` (Retry 1), and then to `gemini-3.1-pro-low` (Retry 2).
-- If a task starts on `gemini-3.8-flash-high`, it escalates to `gemini-3.1-pro-low` (Retry 1), and then to `gemini-3.1-pro-high` (Retry 2).
-- If a task starts on `gemini-3.1-pro-low`, it escalates to `gemini-3.1-pro-high` (Retry 1), and then to `gemini-3.1-pro-high` with failure context (Retry 2).
-- If a task starts on `gemini-3.1-pro-high`, it is retried on `gemini-3.1-pro-high` with failure context (Retry 1), and then escalated to user (Retry 2 / no further escalation).
+- Starting on `gemini-4-hydrogen-low` (`flash_lite`): Retry 1 = `gemini-4-hydrogen-medium` (`flash`), Retry 2 = `gemini-4-neon-low` (`pro`).
+- Starting on `gemini-4-hydrogen-medium` / `high` (`flash`): Retry 1 = `gemini-4-neon-low` (`pro`), Retry 2 = `gemini-4-argon-low` (`pro` with failure context).
+- Starting on `gemini-4-neon-low` / `medium` (`pro`): Retry 1 = `gemini-4-argon-low` / `medium` (`pro` with failure context), Retry 2 = `gemini-4-carbon-medium` (`pro` with failure context).
+- Starting on `gemini-4-argon-*` (`pro`): Retry 1 = `gemini-4-carbon-medium` (`pro` with failure context), Retry 2 = `gemini-4-carbon-high` (`pro` with failure context).
+- Starting on `gemini-4-carbon-*` (`pro`): Retry 1 = `gemini-4-carbon-high` (`pro` with failure context), Retry 2 = `gemini-4-carbon-high` (`pro` with failure context), then escalate to user if both retries fail.
 
 Rules:
 - Model escalation counts as one of the 2 allowed retries — it is not a separate retry budget.
-- Only escalate one step per retry.
+- Only escalate one step per retry (and keep the same model for `NEEDS_CONTEXT`).
 - Always add failure context to the retry prompt regardless of model change. A stronger model with the same bad prompt produces the same bad output.
-- Always pass `mode: "bypassPermissions"` when re-dispatching. Model escalation changes the model, not the mode — both parameters must be set on every dispatch.
+- Always pass `Model: "<agy-enum>"` (`flash_lite | flash | pro`) via `invoke_subagent` when re-dispatching. Never omit `Model:`, and never pass an obsolete `mode` parameter (`invoke_subagent` inherits session permissions automatically).
 
 Add this line at the top of the retry prompt when escalating:
 ```
@@ -124,7 +127,7 @@ When a batch agent reports mixed results (some tasks SUCCESS, some tasks FAILED)
 2. Extract each failed task from the batch into its own individual retry
 3. Re-dispatch each failed task as a standalone agent with:
    - The single-task Agent Prompt Template (not the batch template)
-   - Model escalated one step (e.g., `gemini-3.8-flash-low` → `gemini-3.8-flash-high`)
+   - Model escalated one step (e.g., `gemini-4-hydrogen-medium` / `flash` → `gemini-4-neon-low` / `pro`)
    - `invoke_subagent` with the escalated `Model`
    - Failure context from the batch report added at the top of the prompt
 4. Treat each extracted retry independently — it counts toward that task's 2-retry budget
@@ -153,19 +156,19 @@ When an agent reports successful completion but `git diff --stat` shows no chang
 
    Complete the task from scratch — assume none of your previous work exists.
    ```
-    Escalate model one step per the dynamic escalation path (`gemini-3.8-flash-low → gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high`) and pass `mode: "bypassPermissions"` explicitly. This counts toward the 2-retry budget.
+    Escalate model one step per the failure-aware escalation path (`gemini-4-hydrogen-low → gemini-4-hydrogen-medium/high → gemini-4-neon-low/medium → gemini-4-argon-low/medium → gemini-4-carbon-medium/high`) and pass `Model: "<agy-enum>"` explicitly via `invoke_subagent`. This counts toward the 2-retry budget.
 
 4. **After the retry, re-run filesystem verification.** Run `git diff --stat` and grep for the verification token. If still no changes, escalate to the user immediately — do not retry a third time. Include: "Agent reported success twice but produced no filesystem changes. Manual implementation required."
 
 5. **For phantom success in batch agents:** Extract the phantom-success tasks from the batch. Re-dispatch each individually (not as a batch) with the constraints above and model escalation. Tasks that genuinely succeeded in the batch remain final — do not re-run them.
 
-### Permission prompt hang (bypass mode)
+### Subagent hang / timeout
 
-When an agent times out or hangs indefinitely despite `mode: "bypassPermissions"` being set:
+When an agent times out or hangs without returning:
 
-1. **Check first:** Ask the user to confirm whether a permission prompt is visible in their terminal. If so, they should respond to it — the agent will resume automatically.
+1. **Check first:** Verify whether any background subagent task is still running or awaiting input in the session. If so, wait for its completion notification or resolve the input prompt.
 
-2. **If no prompt is visible** (agent genuinely hung, not waiting on user input): treat as a standard timeout. Re-dispatch with failure context and one model escalation step.
+2. **If genuinely hung:** Treat as a standard timeout. Re-dispatch with failure context and one model escalation step (preserving explicit `Model: "<agy-enum>"`).
 
 ### Agent status: NEEDS_CONTEXT
 
@@ -189,7 +192,7 @@ The agent cannot complete the task. Assess the blocker before acting:
    Provide the missing context and re-dispatch with the same or escalated model. Counts as one retry.
 
 2. **Capability problem** — the task requires more reasoning than the assigned model:
-   Re-dispatch with an escalated model (gemini-3.8-flash-medium → gemini-3.8-flash-high → gemini-3.1-pro-low → gemini-3.1-pro-high). Counts as one retry.
+   Re-dispatch with an escalated model (`gemini-4-hydrogen-medium` → `gemini-4-neon-low` → `gemini-4-argon-low` → `gemini-4-carbon-medium`, `agy` enum `flash` → `pro`). Counts as one retry.
 
 3. **Scope problem** — the task is too large for a single agent dispatch:
    Break the task into smaller sub-tasks. Each sub-task starts with a fresh retry budget.
@@ -234,7 +237,7 @@ When escalating to the user after 2 failed retries or a systemic failure, provid
 Task: {task name and wave number}
 Failure: {clear description of what went wrong}
 Attempts: {N retries attempted}
-Models used:     {e.g., "gemini-3.8-flash-medium (attempt 1), gemini-3.8-flash-high (attempt 2)"}
+Models used:     {e.g., "gemini-4-hydrogen-medium / flash (attempt 1), gemini-4-neon-low / pro (attempt 2)"}
 
 Recovery tried:
 {describe each recovery attempt and its outcome}

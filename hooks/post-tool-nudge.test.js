@@ -27,7 +27,7 @@ test('post-tool-nudge: outputs empty object when no state exists', () => {
   }
 });
 
-test('post-tool-nudge: outputs injectSteps when a step is in_progress', () => {
+test('post-tool-nudge: outputs systemMessage when a step is in_progress', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nudge-test-'));
   const prevOverride = process.env.SDLC_STATE_DIR_OVERRIDE;
   process.env.SDLC_STATE_DIR_OVERRIDE = tempDir;
@@ -48,10 +48,8 @@ test('post-tool-nudge: outputs injectSteps when a step is in_progress', () => {
     });
     assert.strictEqual(res.status, 0);
     const json = JSON.parse(res.stdout.trim());
-    assert.ok(Array.isArray(json.injectSteps));
-    assert.strictEqual(json.injectSteps[0].type, 'ephemeralMessage');
-    assert.strictEqual(json.injectSteps[0].ephemeralMessage, json.injectSteps[0].content);
-    assert.ok(json.injectSteps[0].content.includes('commit'));
+    assert.ok(Array.isArray(json.injectSteps) && typeof json.injectSteps[0]?.systemMessage?.systemMessage === 'string');
+    assert.ok(json.injectSteps[0].systemMessage.systemMessage.includes('commit'));
   } finally {
     if (prevOverride !== undefined) {
       process.env.SDLC_STATE_DIR_OVERRIDE = prevOverride;
@@ -59,5 +57,39 @@ test('post-tool-nudge: outputs injectSteps when a step is in_progress', () => {
       delete process.env.SDLC_STATE_DIR_OVERRIDE;
     }
     fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('post-tool-nudge: resolves workspace from stdin.cwd when spawned outside workspace', () => {
+  const tempWorkspace = fs.mkdtempSync(path.join(os.tmpdir(), 'nudge-cwd-'));
+  try {
+    spawnSync('git', ['init', '-q'], { cwd: tempWorkspace });
+    const stateDir = path.join(tempWorkspace, '.sdlc', 'execution');
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(stateDir, 'ship-feature-cwd-nudge-20261125T100000Z.json'),
+      JSON.stringify({
+        branch: 'feature/cwd-nudge',
+        flags: { auto: true },
+        steps: [{ name: 'review', status: 'in_progress' }],
+      }),
+      'utf8'
+    );
+
+    const env = { ...process.env, SDLC_BRANCH_OVERRIDE: 'feature/cwd-nudge' };
+    delete env.SDLC_STATE_DIR_OVERRIDE;
+
+    const res = spawnSync(process.execPath, [HOOK_PATH], {
+      cwd: os.tmpdir(),
+      input: JSON.stringify({ cwd: tempWorkspace }),
+      encoding: 'utf8',
+      env,
+    });
+    assert.strictEqual(res.status, 0);
+    const json = JSON.parse(res.stdout.trim());
+    assert.ok(Array.isArray(json.injectSteps) && typeof json.injectSteps[0]?.systemMessage?.systemMessage === 'string');
+    assert.ok(json.injectSteps[0].systemMessage.systemMessage.includes('review'));
+  } finally {
+    fs.rmSync(tempWorkspace, { recursive: true, force: true });
   }
 });

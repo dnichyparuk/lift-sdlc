@@ -2,8 +2,8 @@
 name: learn-review-only
 description: Drafts a soundness/risk assessment of proposed guardrail additions from a prepared manifest (no conversation context inherited). Returns ONLY the assessment text. Does not call gh, does not call git, does not write any file.
 subagent: true
-tools: view_file
-model: gemini-3.8-flash-low
+tools: [view_file]
+model: flash
 ---
 
 # Learning Review-Only Pre-Screen
@@ -117,7 +117,7 @@ response.
 
 ## Tool Access (Dual-Host)
 
-Under Antigravity, the frontmatter's `tools: view_file` grants read-only file
+Under Antigravity, the frontmatter's `tools: [view_file]` grants read-only file
 access only. Under Claude Code, the equivalent read-only tool is `Read` — see
 the native-tool-name mapping in `docs/plugin-api-specs.md` §2 (item 2). Under
 both hosts this agent is granted no write-capable tool (`write_to_file` /

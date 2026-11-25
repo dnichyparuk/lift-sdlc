@@ -3,7 +3,6 @@ name: setup-sdlc
 description: "Use this skill when setting up Lift-SDLC for a project, initializing configuration, or when any skill reports missing config. Renders a selective-section menu so users choose which sections to configure; each selected section prints a verbose header (purpose, files-modified, consuming skills, per-option description) before any prompt. Supports direct sub-flow entry via --only, --dimensions, --pr-template, --guardrails, --execution-guardrails, --openspec-enrich, --learn. Arguments: [--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--learn] [--remove-openspec] [--add] [--no-copilot]"
 user-invocable: true
 argument-hint: "[--migrate] [--skip <section>] [--force] [--only <ids>] [--dimensions] [--pr-template] [--guardrails] [--execution-guardrails] [--openspec-enrich] [--learn] [--remove-openspec] [--add] [--no-copilot]"
-model: gemini-3.8-flash-medium
 ---
 
 # SDLC Setup
@@ -49,9 +48,9 @@ If the system context contains "Plan mode is active":
 
 ### Step 0 -- Pre-flight
 
-Run `skill/setup.js` via Bash to get current state:
+Run `skill/setup.js` via `run_command` to get current state:
 
-> **VERBATIM** -- Run this bash block exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin; the strict script location pattern is `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly. Do not modify, rephrase, or simplify the commands.
+> **VERBATIM** -- Run this shell block exactly as written, invoking the script with `node` and its absolute path (replace `<PLUGIN_ROOT>` with the absolute path to this plugin; the strict script location pattern is `<PLUGIN_ROOT>/scripts/<group>/<script-name>.js`, where `<group>` is one of `skill`, `util`, `lib`, `state`, or `ci`). There is no shell wrapper — always call `node` on the `.js` file directly. Do not modify, rephrase, or simplify the commands.
 
 ```shell
 PREPARE_OUTPUT_FILE=$(node "<PLUGIN_ROOT>/scripts/skill/setup.js" $ARGUMENTS)
@@ -203,9 +202,9 @@ Options:
 - **yes** -- delete migrated files (keeps backup in git history)
 - **no** -- keep legacy files alongside unified config
 
-On **yes**: delete each file listed in `migrated` using Bash `rm`. Do NOT delete files listed in `conflicts`.
+On **yes**: delete each file listed in `migrated` using `run_command` (`rm`). Do NOT delete files listed in `conflicts`.
 
-After migration, re-run `skill/setup.js` (same bash block as Step 0) to refresh the state before proceeding to Step 3.
+After migration, re-run `skill/setup.js` (same command block as Step 0) to refresh the state before proceeding to Step 3.
 
 On **no** (configure from scratch): proceed directly to Step 3 without migration.
 
@@ -335,20 +334,20 @@ in `.sdlc/local.json` (gitignored, per-developer) — never in `.sdlc/config.jso
 
 Before invoking `setup-dimensions` or `setup-pr-template`, run the project signal scan:
 
-> **Shell safety:** Use the **Glob** tool for all file/directory existence checks.
-> Do NOT use Bash `ls` with glob patterns — zsh (macOS default) errors on unmatched globs.
-> Use Bash only for `git` commands, `gh` CLI, and `which`.
+> **Shell safety:** Use **`find_by_name`** (or `run_command`) for all file/directory existence checks.
+> Do NOT use `run_command` `ls` with glob patterns — zsh (macOS default) errors on unmatched globs.
+> Use `run_command` only for `git` commands, `gh` CLI, and `which`.
 
-- **Dependency manifests:** Glob `package.json`, `requirements.txt`, `Pipfile`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`; read each found file.
-- **Framework config:** Glob `**/jest.config.*`, `**/vitest.config.*`, `**/.eslintrc*`, `**/tsconfig.json`, `**/openapi.yaml`, `**/openapi.json`, `**/.prettierrc*`.
-- **Directory structure:** Glob `src/`, `lib/`, `controllers/`, `services/`, `middleware/`, `models/`, `routes/`, `api/`, `pkg/`, `cmd/`, `internal/`, plus patterns from `@resources/scan-patterns.md`.
-- **CI/CD config:** Glob `.github/workflows/*.yml`, `Jenkinsfile`, `.circleci/config.yml`, `.gitlab-ci.yml`.
-- **Database presence:** Glob `prisma/`, `migrations/`, `alembic.ini`, `db/migrate/`, `**/sequelize*`, `**/typeorm*`, `**/sqlalchemy*`.
-- **Test structure:** Glob `test/`, `tests/`, `spec/`, `__tests__/`, `cypress/`, `**/playwright.config.*`.
-- **Existing content:** Glob `.sdlc/review-dimensions/*` (dimensions); `.github/PULL_REQUEST_TEMPLATE.md`, `.github/pull_request_template.md`, and `.sdlc/pr-template.md` (PR template); Read `.sdlc/config.json` → `plan.guardrails` if present.
-- **AGENTS.md:** Read `AGENTS.md` and `.sdlc/AGENTS.md` if present.
-- **GitHub hosting & PR history:** Bash `git remote -v`, `gh repo view`, `gh pr list --limit 5 --json title,body`; Glob `.github/`.
-- **JIRA evidence:** Bash `git log --oneline -20`, `git rev-parse --abbrev-ref HEAD`.
+- **Dependency manifests:** `find_by_name` `package.json`, `requirements.txt`, `Pipfile`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`; read each found file via `read_file`.
+- **Framework config:** `find_by_name` `**/jest.config.*`, `**/vitest.config.*`, `**/.eslintrc*`, `**/tsconfig.json`, `**/openapi.yaml`, `**/openapi.json`, `**/.prettierrc*`.
+- **Directory structure:** `find_by_name` `src/`, `lib/`, `controllers/`, `services/`, `middleware/`, `models/`, `routes/`, `api/`, `pkg/`, `cmd/`, `internal/`, plus patterns from `@resources/scan-patterns.md`.
+- **CI/CD config:** `find_by_name` `.github/workflows/*.yml`, `Jenkinsfile`, `.circleci/config.yml`, `.gitlab-ci.yml`.
+- **Database presence:** `find_by_name` `prisma/`, `migrations/`, `alembic.ini`, `db/migrate/`, `**/sequelize*`, `**/typeorm*`, `**/sqlalchemy*`.
+- **Test structure:** `find_by_name` `test/`, `tests/`, `spec/`, `__tests__/`, `cypress/`, `**/playwright.config.*`.
+- **Existing content:** `find_by_name` `.sdlc/review-dimensions/*` (dimensions); `.github/PULL_REQUEST_TEMPLATE.md`, `.github/pull_request_template.md`, and `.sdlc/pr-template.md` (PR template); `read_file` `.sdlc/config.json` → `plan.guardrails` if present.
+- **AGENTS.md:** `read_file` `AGENTS.md` and `.sdlc/AGENTS.md` if present.
+- **GitHub hosting & PR history:** `run_command` `git remote -v`, `gh repo view`, `gh pr list --limit 5 --json title,body`; `find_by_name` `.github/`.
+- **JIRA evidence:** `run_command` `git log --oneline -20`, `git rev-parse --abbrev-ref HEAD`.
 
 Collect all signals into a "Scan Input" object to pass to the sub-flow. Run the scan once per setup invocation; cache the result for any subsequent delegated section in the same selectedIds list.
 
@@ -446,7 +445,7 @@ This skill is safe to re-run. Already-configured sections are skipped unless `--
 - Delete legacy files without explicit user confirmation via ask_question
 - Invoke removed skills (`/review-init-sdlc`, `/pr-customize-sdlc`, `/guardrails-init-sdlc`) -- they no longer exist as standalone skills; use the sub-flows (`@resources/setup-dimensions.md`, `@resources/setup-pr-template.md`, `@resources/setup-guardrails.md`) instead
 - Modify Jira templates directly -- delegate to `/jira-sdlc` via the Skill tool
-- Write config files using the write_to_file or replace_file_content tools directly -- always go through `lib/config.js` functions (`writeProjectConfig`, `writeLocalConfig`) via inline Node.js in Bash
+- Write config files using `write_to_file` or `replace_file_content` directly -- always go through `lib/config.js` functions (`writeProjectConfig`, `writeLocalConfig`) via inline Node.js in `run_command`
 - Invoke sub-skills via invoke_subagent or run inline as specified
 - Skip ask_question for any user interaction -- do not print questions and wait for freeform input
 - Assume `mode` for the version section without asking or detecting it -- it is a required field enforced by the JSON schema; default to `mode: "file"` when `detected.versionFile` is present, otherwise `mode: "tag"`, and always include `mode` in the written config

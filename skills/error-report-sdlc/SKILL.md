@@ -3,7 +3,6 @@ name: error-report-sdlc
 description: "Internal skill invoked by other SDLC skills when they encounter an actionable error (script crash, CLI failure, persistent API error, build failure after retries). Proposes creating a GitHub issue in dnichyparuk/lift-sdlc to track the error with full context capture, two-gate user consent, and pre-flight verification. NOT user-invocable — only dispatched from within another skill's error handling path. When dispatched, follow ./resources/REFERENCE.md for the full procedure."
 user-invocable: false
 disable-model-invocation: true
-model: gemini-3.8-flash-medium
 ---
 
 # Error-to-GitHub Issue Proposal
@@ -96,7 +95,7 @@ Use `invoke_subagent` with:
     {
       "TypeName": "error-report-orchestrator",
       "Role": "Error Report Orchestrator",
-      "Model": "flash_lite",
+      "Model": "flash",
       "Prompt": "MANIFEST_FILE: <ERROR_CONTEXT_FILE>\nPROJECT_ROOT: <cwd>\nPLUGIN_ROOT: <PLUGIN_ROOT>"
     }
   ]
@@ -114,7 +113,7 @@ manifest fields are empty, and returns ONLY a JSON object `{ "title": ..., "body
 (full contract: `agents/error-report-orchestrator.md`). The orchestrator does not call
 `gh`, does not call `git`, does not write any file.
 
-Capture the returned object as `PROPOSAL = { title, body }`. If the parse fails, log the raw orchestrator output to stderr and stop. Do NOT dispatch error-report-sdlc for this failure (recursion guard).
+Capture the returned object as `PROPOSAL = { title, body }`. If JSON parsing fails, re-dispatch `error-report-orchestrator` once with a format reminder to return ONLY a valid JSON object `{ "title": ..., "body": ... }`. If the second attempt also fails to parse as JSON, log the raw orchestrator output to stderr and stop. Do NOT dispatch error-report-sdlc for this failure (recursion guard).
 
 ### Step 5 — Consent Gate 2: Review (main context)
 
@@ -166,8 +165,7 @@ error output or stop behavior.
 - Invoke this skill directly in response to user requests — it is internal only.
 - Recursively dispatch this skill on its own prepare-script **or orchestrator**
   crash — log to stderr and stop.
-- Pin `model:` in this skill's frontmatter. The orchestrator agent (Step 4) is the
-  correct place to pin `model: gemini-3.8-flash-low`.
+- Pin `model:` in this skill's frontmatter. Step 4's explicit `"Model": "flash"` dispatch (or the orchestrator agent definition) is the correct place to route the orchestrator.
 - Run consent gates or `gh issue create` inside the orchestrator agent — it has no
   `run_command`/`Bash` tool.
 - Create a GitHub issue without both consent gates passing.

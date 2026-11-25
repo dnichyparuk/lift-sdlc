@@ -8,14 +8,14 @@ The plugin has **local-only** state tracking—no external data collection or an
 
 ## Components
 
-### 1. Session Hooks
+### 1. Session & Guard Hooks (9 Hooks in `hooks.json`)
 
-Defined in [hooks.json](../hooks.json), these run at different lifecycle events:
+Defined in [hooks.json](../hooks.json), 9 hooks run across `SessionStart` (×1), `PreToolUse` (×4), `PostInvocation` (×1), and `Stop` (×3). All hooks share `hooks/lib/hook-context.js`, which resolves the user workspace from `stdin.cwd` / `stdin.workspacePaths[0]` and emits context injections using the official `agy` v1.5+ contract `{ injectSteps: [{ systemMessage: { systemMessage: "..." } }] }`.
 
-#### `session-start.js` (PreInvocation Hook)
+#### `session-start.js` (`SessionStart` Hook)
 **Location**: `hooks/session-start.js`
 
-Runs when a session starts and outputs context information:
+Runs on `SessionStart` and injects context information:
 - Plugin version & skill count
 - Active pipeline state (ship/execute)
 - Compact recovery info (restores state after context compaction)
@@ -28,24 +28,18 @@ Runs when a session starts and outputs context information:
 - Reads state files to determine active pipelines
 - Cleans up stale recovery files (>24 hours old)
 
-#### `stop-state-save.js` (Stop Hook)
-**Location**: `hooks/stop-state-save.js`
+#### `stop-state-save.js`, `stop-block.js`, `stop-plan-integrity.js` (`Stop` Hooks)
+- **`hooks/stop-state-save.js`**: Persists `.sdlc/execution/.compact-recovery-<branch>.json` when Antigravity finishes responding (per-branch safety net for session crashes between compactions, issue #256; captures pipeline type, branch, step/wave progress, review verdicts, deferred findings, and flags).
+- **`hooks/stop-block.js`**: Prevents premature turn end while a pipeline step is `in_progress` or auto-mode is advancing.
+- **`hooks/stop-plan-integrity.js`**: Enforces `plan-sdlc` integrity checkpoints (`skillInvoked`, `planFile`, `guardrailsEvaluated`, `critiqueRan`) before allowing turn end.
+- Both `stop-block.js` and `stop-plan-integrity.js` allow stops immediately when `terminationReason !== 'NO_TOOL_CALL'` or `continuationActive === true`.
 
-Saves pipeline state when Antigravity finishes responding:
-- Creates `.sdlc/execution/.compact-recovery-<branch>.json` files
-- Safety net for session crashes between compactions
-- Per-branch recovery files (issue #256)
-
-**State Captured**:
-- Pipeline type (ship-sdlc or execute-plan-sdlc)
-- Current branch
-- Current step/wave progress
-- Review verdicts and deferred findings
-- Pipeline flags (preset, auto, skip)
-
-#### Guard Hooks
-- **`pre-tool-git-guard.js`**: Validates git operations before execution
-- **`pre-tool-validate.js`**: Validates file write operations
+#### Guard & Nudge Hooks (`PreToolUse` ×4 & `PostInvocation` ×1)
+- **`hooks/pre-tool-git-guard.js`** (`PreToolUse` on `run_command`): Validates git operations before execution.
+- **`hooks/question-suppression.js`** (`PreToolUse` on `ask_question|ask_user|AskUserQuestion`): Suppresses interactive prompts during auto-mode runs.
+- **`hooks/pre-tool-jira-write-guard.js`** (`PreToolUse` on Jira write MCP tools): Fail-closed guard requiring an explicit `.sdlc/execution/jira-approval-*.token` file before Jira mutations.
+- **`hooks/pre-tool-validate.js`** (`PreToolUse` on file-write tools): Validates file write operations.
+- **`hooks/post-tool-nudge.js`** (`PostInvocation`): Detects drift and injects corrective system messages.
 
 ### 2. Execution State Files
 
@@ -137,12 +131,14 @@ Recovery files are:
 Calculates context/token budget to determine concurrent task limits.
 
 #### Model Context Limits
-Using 75% of context for inputs, 25% reserved for reasoning:
+Using 75% of context for inputs, 25% reserved for reasoning (or 65% input / 35% output reserve for `-xhigh` variants and `gemini-4-carbon-high` via `getReservedRatio`):
 
-| Model | Input Limit | Byte Budget |
-|-------|-------------|-------------|
-| gemini-3.8-flash (all variants) | 1M tokens | ~3M bytes |
-| gemini-3.1-pro (all variants) | 1M tokens | ~3M bytes |
+| Model | Input Limit | Byte Budget (75% default) |
+|-------|-------------|---------------------------|
+| `gemini-4-hydrogen` (all variants) | 1M tokens | ~3M bytes |
+| `gemini-4-neon` (all variants) | 1M tokens | ~3M bytes |
+| `gemini-4-argon` (all variants) | 1M tokens | ~3M bytes |
+| `gemini-4-carbon` (all variants) | 1M tokens | ~3M bytes |
 
 #### Static Cap Table
 Progressive caps based on total remaining tasks:
@@ -310,8 +306,7 @@ To prevent repeated permission prompts, add to `~/.gemini/antigravity-cli/settin
 {
   "permissions": {
     "allow": [
-      "command(node .*/\\.gemini/config/plugins/.*)",
-      "command(.*/\.gemini/config/plugins/lift-sdlc/skills/.*/scripts/.*)"
+      "command(node .*/\\.gemini/antigravity-cli/plugins/sdlc/.*)"
     ]
   }
 }
@@ -364,7 +359,7 @@ node hooks/stop-state-save.js
 
 ## See Also
 
-- [SDLC Plugin Architecture Report](./sdlc-plugin-architecture-report.md): Overview of the four-layer architecture
+- [SDLC Plugin Architecture Report](./architecture/sdlc-plugin-architecture-report.md): Overview of the four-layer architecture
 - [Scripts README](../scripts/README.md): Overview of all helper scripts
 - [Plugin README](../README.md): General plugin documentation
 - [hooks.json](../hooks.json): Hook registration definitions

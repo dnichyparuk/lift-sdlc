@@ -3,7 +3,6 @@ name: plan-sdlc
 description: "Use when writing an implementation plan from requirements, a spec, a design doc, or a user description. ALWAYS use when plan mode is active — this is the designated plan-mode skill. Analyzes scope, maps file structure, decomposes into classified tasks with dependencies, and produces a plan ready for execute-plan-sdlc. Triggers on: write plan, create plan, plan this, break this into tasks, implementation plan, plan mode."
 user-invocable: true
 argument-hint: "[--spec] [--from-openspec <change-name>] [spec-file-path]"
-model: gemini-3.8-flash-medium
 ---
 
 # Plan (SDLC)
@@ -118,7 +117,7 @@ Naming convention: `YYYY-MM-DD-<feature-name>.md`. Create the directory if neede
 
 **Plan mode:** Write to the designated plan file path. Skip path resolution.
 
-**planFile marker (intended to be consumed by a `hooks/stop-plan-integrity.js` Stop hook):** After path resolution, record the resolved plan path in the plan integrity state. Run in both plan-mode and normal-mode branches. Marker writes are best-effort — swallow any error (`2>/dev/null || true`) so a failed marker never blocks plan creation. **`hooks/stop-plan-integrity.js` does not exist in this repo and is not registered in `hooks.json`** — the marker file is currently written but never read back; no Stop hook verifies plan integrity today. See `resources/state-format.md` for the designed (not-yet-built) contract.
+**planFile marker (enforced by `hooks/stop-plan-integrity.js`):** After path resolution, record the resolved plan path in the plan integrity state. Run in both plan-mode and normal-mode branches. Marker writes are best-effort — swallow any error (`2>/dev/null || true`) so a failed marker never blocks plan creation. At Stop time, `hooks/stop-plan-integrity.js` (registered in `hooks.json`) checks `plan-<branchSlug>-*.json` and prompts continuation if any integrity checkpoint (`skillInvoked`, `planFile`, `guardrailsEvaluated`, `critiqueRan`) is incomplete.
 
 Each `--mark` block below spells out the full `<PLUGIN_ROOT>` path — SKILL.md run_command blocks run as separate invocations, so shell variables do NOT persist between them. Marker failures are silent (`2>/dev/null || true`), so a hoisted variable would drop `guardrailsEvaluated`/`critiqueRan` without any error.
 
@@ -153,7 +152,7 @@ fi
 
 - **Full pipeline** (`explorePack.manifestPath` is non-null AND scope is 4+ files / unclear scope):
 
-  1. Spawn `sdlc:plan-explore-orchestrator` via `invoke_subagent` exactly once with `Model: "flash"` and inputs:
+  1. Spawn `plan-explore-orchestrator` via `invoke_subagent` exactly once with `Model: "flash"` and inputs:
      ```
      MANIFEST_FILE: <explorePack.manifestPath>
      PROJECT_ROOT: <cwd>
@@ -208,7 +207,7 @@ Identify constraints: language, framework, existing conventions, testing approac
 Wait for answer.
 
 **Orchestrator dispatch:**
-Dispatch the `sdlc:plan-generation-orchestrator` via `invoke_subagent` exactly once with `Model: "pro"` and inputs:
+Dispatch the `plan-generation-orchestrator` via `invoke_subagent` exactly once with `Model: "pro"` and inputs:
 ```
 USER_PROMPT: <verbatim user request>
 PLAN_FILE_PATH: <absolute path to plan file>
@@ -232,25 +231,25 @@ The `plan-generation-orchestrator` handles file mapping, task decomposition (wit
 
 **Re-anchor:** Re-read the plan file before dispatching lanes. The file — not your memory of it — is the source of truth.
 
-**Fan-out dispatch:** Dispatch all five Step 3 lanes from `lanes[]` together in a single `invoke_subagent` call with multiple `Subagents` entries.
+**Fan-out dispatch:** Dispatch all Step 3 lanes from `lanes[]` together in a single `invoke_subagent` call with multiple `Subagents` entries.
 
-All 17 quality gates (G1–G17) are partitioned across five lanes — each gate belongs to exactly one lane. Lane dispatch parameters (`TypeName`, `Model`, and prompt body read from `promptTemplatePath`) MUST be sourced verbatim from the corresponding `lanes[i]` entry in the prepare output (`agent-dispatch-script-driven` guardrail — do NOT hardcode these values).
+All 17 quality gates (G1–G17) are partitioned across up to five lanes — each gate belongs to exactly one lane (`guardrail-compliance` is omitted when no guardrails are configured, and `dimension-coverage` is omitted when no review dimensions exist, so `lanes[]` length varies between 3 and 5). Lane dispatch parameters (`TypeName`, `Model`, and prompt body read from `promptTemplatePath`) MUST be sourced verbatim from each `lane` entry in `lanes[]` in the prepare output (`agent-dispatch-script-driven` guardrail — do NOT hardcode these values or assume fixed array indices).
 
-For each `lanes[i]` entry (i = 0..4) in `Subagents`:
+For each `lane` in `lanes[]` in `Subagents`:
 
-- `TypeName`: `lanes[i].subagentType`
-- `Role`: `lanes[i].name + " gate evaluator"`
-- `Model`: `lanes[i].model` mapped to platform enum (contains 'pro' → 'pro', 'flash-low' or 'flash_lite' → 'flash_lite', 'flash' → 'flash', otherwise → 'inherit')
-- prompt body: Read `lanes[i].promptTemplatePath` and fill template variables:
+- `TypeName`: `lane.subagentType`
+- `Role`: `lane.name + " gate evaluator"`
+- `Model`: `lane.agyModel` (or `lane.model` mapped to platform enum: contains `'neon'`, `'argon'`, `'carbon'`, or `'pro'` → `'pro'`; `'hydrogen-low'`, `'flash-low'`, or `'flash_lite'` → `'flash_lite'`; `'hydrogen'` or `'flash'` → `'flash'`; otherwise → `'inherit'`)
+- prompt body: Read `lane.promptTemplatePath` and fill template variables:
   - All lanes: `{PLAN_FILE_PATH}` (absolute path to plan file), `{PROJECT_ROOT}` (cwd)
-  - Lanes 0–3 non-G17: `{REQUIREMENTS_SUMMARY}` (the numbered requirements list from Step 1 CONSUME — same content as `{REQUIREMENTS_CHECKLIST}` in Step 5; retained in memory from Step 1), `{ACTIVE_GUARDRAILS}` (from `guardrails[]` P7), `{OPENSPEC_TASKS}` (from `openspecContext.tasks` P13, null when not OpenSpec-sourced), `{BRIEF_FINDING_IDS}` (from `explorePack.manifestPath` context, null when no brief)
-  - Lane 4 (G17/dimension-coverage): `{DIMENSIONS_DIR}` (`.sdlc/review-dimensions/`), `{COPILOT_DIR}` (`.github/instructions/`), `{GITHUB_HOSTING_DETECTED}` (`githubHosting.detected`), `{LEARNINGS_LOG_PATH}` (`.sdlc/learnings/log.md`), `{PR_COMMIT_WINDOW}` (best-effort "last 14 days" if unknown)
+  - Non-G17 lanes (`lane.name !== "dimension-coverage"`): `{REQUIREMENTS_SUMMARY}` (the numbered requirements list from Step 1 CONSUME — same content as `{REQUIREMENTS_CHECKLIST}` in Step 5; retained in memory from Step 1), `{ACTIVE_GUARDRAILS}` (from `guardrails[]` P7), `{OPENSPEC_TASKS}` (from `openspecContext.tasks` P13, null when not OpenSpec-sourced), `{BRIEF_FINDING_IDS}` (from `explorePack.manifestPath` context, null when no brief)
+  - Dimension-coverage lane (`lane.name === "dimension-coverage"` / G17): `{DIMENSIONS_DIR}` (`.sdlc/review-dimensions/`), `{COPILOT_DIR}` (`.github/instructions/`), `{GITHUB_HOSTING_DETECTED}` (`githubHosting.detected`), `{LEARNINGS_LOG_PATH}` (`.sdlc/learnings/log.md`), `{PR_COMMIT_WINDOW}` (best-effort "last 14 days" if unknown)
 
-**Null `promptTemplatePath` handling:** When `lanes[i].promptTemplatePath` is null (prepare script reported it could not find the template), skip that lane's dispatch and immediately add a synthetic blocking issue:
+**Null `promptTemplatePath` handling:** When `lane.promptTemplatePath` is null (prepare script reported it could not find the template), skip that lane's dispatch and immediately add a synthetic blocking issue:
 ```
-{ laneStatus: "failed", gateIds: lanes[i].gateIds, issues: [{ gateId: lanes[i].gateIds[0], severity: "error", message: "Lane <name> skipped — promptTemplatePath null (template not found at prepare time)", blocking: true }], passes: [] }
+{ laneStatus: "failed", gateIds: lane.gateIds, issues: [{ gateId: lane.gateIds[0], severity: "error", message: "Lane <name> skipped — promptTemplatePath null (template not found at prepare time)", blocking: true }], passes: [] }
 ```
-Exception: lane 4 (G17/dimension-coverage) — when `lanes[4].promptTemplatePath` is null, treat as empty findings (advisory dispatch-failure fallback) and continue. Log to `.sdlc/learnings/log.md`:
+Exception: the dimension-coverage lane (`lane.name === "dimension-coverage"`, G17) — when `lane.promptTemplatePath` is null, treat as empty findings (advisory dispatch-failure fallback) and continue. Log to `.sdlc/learnings/log.md`:
 ```
 ## YYYY-MM-DD — plan-sdlc: G17 skipped — promptTemplatePath null (template not found at prepare time)
 ```
@@ -263,19 +262,19 @@ Each lane returns a JSON object with schema:
 ```json
 { "gateIds": [...], "issues": [...], "passes": [...], "laneStatus": "ok"|"failed"|"timeout" }
 ```
-Lane 3 (guardrail-compliance) additionally returns `guardrailCompliancePayload` in the JSON object — store this for Step 4's `## Guardrail Compliance` section.
-Lane 4 (dimension-coverage/G17) returns the G17 findings JSON — parse the `findings` object and persist as `g17Findings` for Step 4.
+The `guardrail-compliance` lane (`lane.name === "guardrail-compliance"`, when present) additionally returns `guardrailCompliancePayload` in the JSON object — store this for Step 4's `## Guardrail Compliance` section.
+The `dimension-coverage` lane (`lane.name === "dimension-coverage"`, when present) returns the G17 findings JSON — parse the `findings` object and persist as `g17Findings` for Step 4.
 
 **Merge algorithm:**
 1. `allIssues` = union of `issues[]` from all lanes
 2. `allPasses` = union of `passes[]` from all lanes
 3. `coverageCheck`: the union of all `gateIds[]` arrays returned by lanes MUST equal {G1..G17} exactly. Any missing gate ID → add a blocking issue: `{ gateId: "<missing>", severity: "error", message: "Gate <missing> not evaluated by any lane", blocking: true }`
-4. Lane returning `laneStatus !== "ok"`: append to `allIssues` as blocking error `{ gateId: "lane-failure", severity: "error", message: "Lane <name> failed: <reason> — gate IDs <list> not evaluated", blocking: true }` — **exception: G17 lane (lanes[4]) failure is advisory, not blocking** (per dispatch-failure fallback)
+4. Lane returning `laneStatus !== "ok"`: append to `allIssues` as blocking error `{ gateId: "lane-failure", severity: "error", message: "Lane <name> failed: <reason> — gate IDs <list> not evaluated", blocking: true }` — **exception: G17 lane (`lane.name === "dimension-coverage"`) failure is advisory, not blocking** (per dispatch-failure fallback)
 5. Dedup `allIssues` by `(gateId, taskRef, message-normalized-prefix)` — keep first occurrence
 
 Note every issue from `allIssues`. Do NOT write to the plan file in this step.
 
-**JOIN barrier — `guardrailsEvaluated`:** After the guardrail-compliance lane (lanes[3]) result is incorporated into the merged issue list, record the checkpoint. **Do NOT write this marker before lanes[3] returns.** Marker writes are best-effort — a failed marker must never block plan creation.
+**JOIN barrier — `guardrailsEvaluated`:** After the `guardrail-compliance` lane (`lane.name === "guardrail-compliance"`, or `static-structural` when no `guardrail-compliance` lane is present because `guardrails[]` is empty) result is incorporated into the merged issue list, record the checkpoint. **Do NOT write this marker before the lane covering G14 returns.** Marker writes are best-effort — a failed marker must never block plan creation.
 
 ```shell
 node "<PLUGIN_ROOT>/scripts/skill/plan.js" --mark guardrailsEvaluated 2>/dev/null || true
@@ -284,7 +283,7 @@ node "<PLUGIN_ROOT>/scripts/skill/plan.js" --mark guardrailsEvaluated 2>/dev/nul
 > - **Input**: Guardrails content via stdin.
 > - **Output**: Appends guardrails to configuration.
 
-**JOIN barrier — `critiqueRan`:** After ALL five lanes have returned and the merged issue list is complete (including G17/lanes[4] findings parsed into `g17Findings`), record the checkpoint. **Do NOT write this marker until all five lanes have returned.** This extends the existing G17 join semantics to every lane.
+**JOIN barrier — `critiqueRan`:** After ALL dispatched lanes in `lanes[]` have returned and the merged issue list is complete (including `dimension-coverage` / G17 findings parsed into `g17Findings` when `lane.name === "dimension-coverage"` is present), record the checkpoint. **Do NOT write this marker until all dispatched lanes have returned.** This extends the existing G17 join semantics to every lane.
 
 ```shell
 node "<PLUGIN_ROOT>/scripts/skill/plan.js" --mark critiqueRan 2>/dev/null || true
@@ -329,7 +328,7 @@ Skip for lightweight plans (2–3 file scope from Step 0 routing).
 For each `lensReviewers[i]` entry (i = 0..2):
 - `TypeName`: `lensReviewers[i].subagentType`
 - `Role`: `"Plan Reviewer - " + lensReviewers[i].lens`
-- `Model`: override with the **opposite-of-plan-author model** at dispatch time, mapped to platform enum (cross-model property — plan written by Flash → dispatch reviewer with `Model: "pro"`; plan written by Pro → dispatch reviewer with `Model: "flash"`). This overrides the default `lensReviewers[i].model` value from the prepare output for ≥5-task plans.
+- `Model`: use cross-family Pro diversity (`architecture` → `gemini-4-neon-medium`, `requirements` → `gemini-4-argon-low`, `risk` → `gemini-4-argon-low`; all mapped to `Model: "pro"`). Do NOT downgrade Pro lenses to `flash` — pairing Neon (`architecture`) with Argon (`requirements`, `risk`) preserves cross-family diversity at Pro quality.
 - `Workspace`: `"inherit"`
 - `Prompt`: Read `lensReviewers[i].promptTemplatePath` and fill template variables:
   - `{PLAN_FILE_PATH}` — absolute path to the plan file
@@ -415,7 +414,7 @@ node "<PLUGIN_ROOT>/scripts/skill/plan-handoff-advisory.js"
 > - **Input**: None.
 > - **Output**: Prints advisory text for downstream agent handoff.
 
-The script reads `$TMPDIR/sdlc-context-stats.json` and emits a `/compact` advisory only when transcript ≥60% of model budget. **The sidecar's producer, a `UserPromptSubmit` hook at `hooks/context-stats.js`, does not exist and is not registered in `hooks.json`** — the sidecar file is therefore never written today, so this advisory currently never fires (the reader degrades to a silent no-op when the sidecar is absent, by design). Pipeline state is preserved across `/compact` (PreCompact + SessionStart hooks), so re-invoking after compaction is safe.
+The script reads `$TMPDIR/sdlc-context-stats.json` (optional context-stats sidecar) and emits a `/compact` advisory only when transcript ≥60% of model budget; when the sidecar is absent, it degrades to a silent no-op. Pipeline state is preserved across `/compact` via the plugin's hooks, so re-invoking after compaction is safe.
 
 **Plan mode:** Announce the plan path and propose execution. Prepend any advisory output from the wrapper above the `ship` / `execute` lines:
 

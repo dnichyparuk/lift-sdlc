@@ -7,10 +7,12 @@
   },
   "scripts": {
     "test": "node --test 'scripts/**/*.test.js' 'skills/**/*.test.js' 'hooks/**/*.test.js'",
-    "lint": "eslint scripts skills",
+    "lint": "eslint scripts skills hooks",
     "check:refs": "node scripts/ci/validate-skill-script-refs.js",
     "check:plugin": "node scripts/ci/validate-plugin-schema.js",
     "check:discovery": "node scripts/ci/validate-discovery.js",
+    "check:tiers": "node scripts/ci/validate-cost-tiers.js",
+    "check:all": "npm run check:refs && npm run check:plugin && npm run check:discovery && npm run check:tiers",
     "test:learning-loop": "node scripts/ci/simulate-learning-loop.js"
   },
   "devDependencies": {

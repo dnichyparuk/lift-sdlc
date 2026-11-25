@@ -35,4 +35,4 @@ The skills mapped to `gemini-3.8-flash-low` natively in their orchestrator front
 
 ## See Also
 
-*   **Architecture & Agent Relations**: To understand how these efficient skills fit into the broader Layer 1/Layer 2 agent architecture, see the [SDLC Plugin Architecture Report](./sdlc-plugin-architecture-report.md).
+*   **Architecture & Agent Relations**: To understand how these efficient skills fit into the broader Layer 1/Layer 2 agent architecture, see the [SDLC Plugin Architecture Report](../architecture/sdlc-plugin-architecture-report.md).
