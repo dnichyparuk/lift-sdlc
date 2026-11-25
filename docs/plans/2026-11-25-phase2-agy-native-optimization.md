@@ -106,9 +106,9 @@ Extend `checkPD5` in `scripts/lib/discovery.js` to validate lowercase `./resourc
 Add a non-breaking `--meta` flag to `scripts/util/execute-context-advisory.js` returning `{ guardrails, advisory, standardWorkerEnum, priorWaveContextCaps }` from `readSection(cwd, 'execute')`. Refactor `execute.py`, `review.py`, and `verify.py` to export `async def run_execute(wf_args, cwd, plugin_root)`, `run_review(...)`, and `run_verify(...)` called by `main()`, and wire `execute.py` to resolve `standardWorkerEnum` from `--meta` / `wf_args` before defaulting to `"pro"`.
 
 **Acceptance criteria:**
-- [ ] All 3 Python workflows expose `run_<name>(...)` coroutines callable both standalone via `main()` and via namespace-isolated `exec()`
-- [ ] `execute.py` honors `execute.standardWorkerEnum: "inherit"` from `.sdlc/local.json` / `.sdlc/config.json` via `--meta`
-- [ ] All 3 workflows pass `py_compile` and `workflow-smoke.test.js`
+- [x] All 3 Python workflows expose `run_<name>(...)` coroutines callable both standalone via `main()` and via namespace-isolated `exec()`
+- [x] `execute.py` honors `execute.standardWorkerEnum: "inherit"` from `.sdlc/local.json` / `.sdlc/config.json` via `--meta`
+- [x] All 3 workflows pass `py_compile` and `workflow-smoke.test.js`
 
 ### Task 6: Wire `plan.js --critique-static` into `plan-sdlc/SKILL.md` and trim below 20 KB
 

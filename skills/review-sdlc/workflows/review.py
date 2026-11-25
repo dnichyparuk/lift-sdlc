@@ -10,8 +10,8 @@ Executes multi-dimension code review at max subagent depth = 1:
 - Computes the final verdict deterministically, persists `{diff_dir}/review-comment.md`,
   and prints structured JSON for `review-sdlc` posting/cleanup gates.
 
-Note: Uses `async def main()` with no top-level `await` so `python3 -m py_compile`
-succeeds cleanly. Invoke via `run_workflow` with:
+Note: Uses `async def main()` / `async def run_review(wf_args=None, cwd=None, plugin_root=None)`
+with no top-level `await` so `python3 -m py_compile` succeeds cleanly. Invoke via `run_workflow`:
   exec(open("<PLUGIN_ROOT>/skills/review-sdlc/workflows/review.py").read(), globals())
   await main()
 """
@@ -116,17 +116,17 @@ def _wf_args():
     return raw if isinstance(raw, dict) else {}
 
 
-def _resolve_cwd():
-    wf_args = _wf_args()
-    if wf_args.get("cwd"):
-        return str(Path(wf_args["cwd"]).resolve())
+def _resolve_cwd(wf_args=None):
+    resolved = _wf_args() if wf_args is None else (wf_args if isinstance(wf_args, dict) else {})
+    if resolved.get("cwd"):
+        return str(Path(resolved["cwd"]).resolve())
     return str(Path.cwd().resolve())
 
 
-def _resolve_plugin_root(cwd):
-    wf_args = _wf_args()
-    if wf_args.get("plugin_root"):
-        candidate = Path(wf_args["plugin_root"]).resolve()
+def _resolve_plugin_root(cwd, wf_args=None):
+    resolved = _wf_args() if wf_args is None else (wf_args if isinstance(wf_args, dict) else {})
+    if resolved.get("plugin_root"):
+        candidate = Path(resolved["plugin_root"]).resolve()
         if (candidate / "scripts" / "skill").is_dir():
             return str(candidate)
     if "__file__" in globals():
@@ -139,6 +139,17 @@ def _resolve_plugin_root(cwd):
             if (cand / "scripts" / "skill").is_dir():
                 return str(cand.resolve())
     return str(Path(cwd).resolve())
+
+
+def _resolve_path(raw_path, base_cwd):
+    if not raw_path:
+        return None
+    p = Path(raw_path)
+    if not p.is_absolute():
+        cand = Path(base_cwd) / p
+        if cand.is_file() or not p.is_file():
+            return cand
+    return p
 
 
 def to_agy_model(tier):
@@ -206,7 +217,7 @@ async def run_cmd(command, summary="Run shell command", cwd=None):
         return 1, "", msg
 
 
-def _build_dimension_prompt(dim, scope):
+def _build_dimension_prompt(dim, scope, cwd=None):
     matched = "\n".join(dim.get("matched_files") or [])
     commit_lines = []
     for entry in dim.get("file_context") or []:
@@ -221,11 +232,12 @@ def _build_dimension_prompt(dim, scope):
     )
 
     diff_file = dim.get("diff_file")
+    diff_path = _resolve_path(diff_file, cwd) if (diff_file and cwd) else (Path(diff_file) if diff_file else None)
     diff_section = ""
-    if diff_file and Path(diff_file).is_file():
-        size = Path(diff_file).stat().st_size
+    if diff_path and diff_path.is_file():
+        size = diff_path.stat().st_size
         if size <= INLINE_DIFF_MAX_BYTES:
-            diff_section = Path(diff_file).read_text(encoding="utf-8", errors="replace")
+            diff_section = diff_path.read_text(encoding="utf-8", errors="replace")
         else:
             diff_section = f"(Diff exceeds {INLINE_DIFF_MAX_BYTES} bytes — read `{diff_file}` directly with `read_file`.)"
     else:
@@ -341,15 +353,23 @@ def _render_comment_markdown(manifest, consolidated_dims, not_reviewed, verdict,
     return "\n".join(lines).rstrip() + "\n"
 
 
-async def main():
+async def run_review(wf_args=None, cwd=None, plugin_root=None):
     """Run multi-dimension code review fan-out + consolidation."""
-    wf_args = _wf_args()
-    cwd = _resolve_cwd()
-    plugin_root = _resolve_plugin_root(cwd)
+    resolved_args = _wf_args() if wf_args is None else (dict(wf_args) if isinstance(wf_args, dict) else {})
+    resolved_cwd = str(Path(cwd).resolve()) if cwd else _resolve_cwd(resolved_args)
+    resolved_plugin_root = (
+        str(Path(plugin_root).resolve())
+        if plugin_root
+        else _resolve_plugin_root(resolved_cwd, resolved_args)
+    )
+    wf_args = resolved_args
+    cwd = resolved_cwd
+    plugin_root = resolved_plugin_root
 
     _wf_phase("Load Review Manifest")
     manifest_file = wf_args.get("manifest_file")
-    if not manifest_file or not Path(manifest_file).is_file():
+    manifest_path = _resolve_path(manifest_file, cwd)
+    if not manifest_path or not manifest_path.is_file():
         rev_script = str(Path(plugin_root) / "scripts" / "skill" / "review.js")
         review_args = str(wf_args.get("review_args") or "").strip()
         rc, out, err = await run_cmd(
@@ -359,7 +379,8 @@ async def main():
         )
         lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
         manifest_file = lines[-1] if lines else ""
-        if rc != 0 or not manifest_file or not Path(manifest_file).is_file():
+        manifest_path = _resolve_path(manifest_file, cwd)
+        if rc != 0 or not manifest_path or not manifest_path.is_file():
             result = {
                 "status": "failed",
                 "exit_code": rc,
@@ -368,7 +389,8 @@ async def main():
             print(json.dumps(result, indent=2))
             return result
 
-    manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
+    manifest_file = str(manifest_path.resolve())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     scope = manifest.get("scope") or "all"
     diff_dir = manifest.get("diff_dir") or str(Path(manifest_file).parent)
     dimensions = manifest.get("dimensions") or []
@@ -383,7 +405,7 @@ async def main():
         async def run_dimension(dim):
             model = to_agy_model(dim.get("model") or manifest.get("subagent_model") or "flash")
             return await agent(
-                prompt=_build_dimension_prompt(dim, scope),
+                prompt=_build_dimension_prompt(dim, scope, cwd=cwd),
                 schema=DIMENSION_FINDINGS_SCHEMA,
                 role=f"{dim['name']} reviewer",
                 type_name="research",
@@ -488,5 +510,13 @@ async def main():
     return final_result
 
 
+async def main():
+    """Entrypoint delegating to `run_review` using workflow `args` globals."""
+    return await run_review(wf_args=_wf_args())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(main())

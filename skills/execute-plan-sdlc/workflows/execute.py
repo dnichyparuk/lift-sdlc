@@ -11,8 +11,8 @@ Executes implementation plans at max subagent depth = 1:
 - Runs `spec-compliance-reviewer` (JSON schema output) on waves with Standard or
   Complex tasks when quality != "minimal".
 
-Note: Uses `async def main()` with no top-level `await` so `python3 -m py_compile`
-succeeds cleanly. Invoke via `run_workflow` with:
+Note: Uses `async def main()` / `async def run_execute(wf_args=None, cwd=None, plugin_root=None)`
+with no top-level `await` so `python3 -m py_compile` succeeds cleanly. Invoke via `run_workflow`:
   exec(open("<PLUGIN_ROOT>/skills/execute-plan-sdlc/workflows/execute.py").read(), globals())
   await main()
 """
@@ -106,17 +106,17 @@ def _wf_args():
     return raw if isinstance(raw, dict) else {}
 
 
-def _resolve_cwd():
-    wf_args = _wf_args()
-    if wf_args.get("cwd"):
-        return str(Path(wf_args["cwd"]).resolve())
+def _resolve_cwd(wf_args=None):
+    resolved = _wf_args() if wf_args is None else (wf_args if isinstance(wf_args, dict) else {})
+    if resolved.get("cwd"):
+        return str(Path(resolved["cwd"]).resolve())
     return str(Path.cwd().resolve())
 
 
-def _resolve_plugin_root(cwd):
-    wf_args = _wf_args()
-    if wf_args.get("plugin_root"):
-        candidate = Path(wf_args["plugin_root"]).resolve()
+def _resolve_plugin_root(cwd, wf_args=None):
+    resolved = _wf_args() if wf_args is None else (wf_args if isinstance(wf_args, dict) else {})
+    if resolved.get("plugin_root"):
+        candidate = Path(resolved["plugin_root"]).resolve()
         if (candidate / "scripts" / "state").is_dir():
             return str(candidate)
     if "__file__" in globals():
@@ -129,6 +129,25 @@ def _resolve_plugin_root(cwd):
             if (cand / "scripts" / "state").is_dir():
                 return str(cand.resolve())
     return str(Path(cwd).resolve())
+
+
+def _resolve_path(raw_path, base_cwd):
+    if not raw_path:
+        return None
+    p = Path(raw_path)
+    if not p.is_absolute():
+        cand = Path(base_cwd) / p
+        if cand.is_file() or not p.is_file():
+            return cand
+    return p
+
+
+def _normalize_worker_enum(value):
+    if isinstance(value, str):
+        norm = value.strip().lower()
+        if norm in ("pro", "inherit"):
+            return norm
+    return None
 
 
 def _parse_run_command_output(raw):
@@ -548,11 +567,18 @@ async def _verify_wave(wave_tasks, results_by_id, cwd, plugin_root, test_overrid
     }
 
 
-async def main():
+async def run_execute(wf_args=None, cwd=None, plugin_root=None):
     """Execute plan waves with escalation retry ladder and spec-compliance review."""
-    wf_args = _wf_args()
-    cwd = _resolve_cwd()
-    plugin_root = _resolve_plugin_root(cwd)
+    resolved_args = _wf_args() if wf_args is None else (dict(wf_args) if isinstance(wf_args, dict) else {})
+    resolved_cwd = str(Path(cwd).resolve()) if cwd else _resolve_cwd(resolved_args)
+    resolved_plugin_root = (
+        str(Path(plugin_root).resolve())
+        if plugin_root
+        else _resolve_plugin_root(resolved_cwd, resolved_args)
+    )
+    wf_args = resolved_args
+    cwd = resolved_cwd
+    plugin_root = resolved_plugin_root
 
     plan_file = wf_args.get("plan_file")
     quality = str(wf_args.get("quality") or "balanced").lower()
@@ -581,13 +607,14 @@ async def main():
     else:
         det = {}
 
-    if not plan_file or not Path(plan_file).is_file():
+    plan_path = _resolve_path(plan_file, cwd)
+    if not plan_path or not plan_path.is_file():
         result = {"status": "failed", "error": f"Explicit plan file not found: {plan_file}"}
         print(json.dumps(result, indent=2))
         return result
 
-    plan_abs = str(Path(plan_file).resolve())
-    plan_text = Path(plan_abs).read_text(encoding="utf-8")
+    plan_abs = str(plan_path.resolve())
+    plan_text = plan_path.read_text(encoding="utf-8")
     tasks, openspec_specs = parse_plan_markdown(plan_text, cwd)
     if not tasks:
         result = {"status": "failed", "error": f"No tasks ('### Task N: ...') found in {plan_abs}"}
@@ -602,10 +629,41 @@ async def main():
         return result
 
     adv_script = str(Path(plugin_root) / "scripts" / "util" / "execute-context-advisory.js")
-    _, adv_out, _ = await run_cmd(f"node {shlex.quote(adv_script)}", summary="Load execution guardrails", cwd=cwd)
-    guardrails = _parse_json(adv_out)
+    explicit_worker_enum = _normalize_worker_enum(wf_args.get("standard_worker_enum"))
+    adv_cmd = f"node {shlex.quote(adv_script)} --meta"
+    if cwd:
+        adv_cmd += f" --cwd {shlex.quote(cwd)}"
+    try:
+        adv_rc, adv_out, _ = await run_cmd(
+            adv_cmd,
+            summary="Load execution guardrails and metadata",
+            cwd=cwd,
+        )
+    except Exception as exc:
+        if getattr(exc, "denied", False):
+            raise
+        adv_rc, adv_out = 1, ""
+
+    adv_parsed = _parse_json(adv_out) if adv_rc == 0 else None
+    guardrails = None
+    meta_worker_enum = None
+    meta_caps = None
+    if isinstance(adv_parsed, dict):
+        if isinstance(adv_parsed.get("guardrails"), list):
+            guardrails = adv_parsed["guardrails"]
+        meta_worker_enum = _normalize_worker_enum(adv_parsed.get("standardWorkerEnum"))
+        if isinstance(adv_parsed.get("priorWaveContextCaps"), dict):
+            meta_caps = adv_parsed["priorWaveContextCaps"]
+    elif isinstance(adv_parsed, list):
+        guardrails = adv_parsed
+
     if not isinstance(guardrails, list):
         guardrails = wf_args.get("guardrails") or []
+
+    standard_worker_enum = explicit_worker_enum or meta_worker_enum or "pro"
+    prior_caps = wf_args.get("prior_wave_context_caps")
+    if not isinstance(prior_caps, dict):
+        prior_caps = meta_caps if isinstance(meta_caps, dict) else {}
 
     small_plan = len(tasks) <= 3 and all(t["complexity"].lower() != "complex" and t["risk"].lower() != "high" for t in tasks)
     use_state = not small_plan
@@ -717,12 +775,16 @@ async def main():
                 if m_id:
                     fact_sheet_by_id[m_id.group(1)] = fs_path
 
+            cap_flags = []
+            for flag_name, key in (("--max-files", "maxFiles"), ("--max-decisions", "maxDecisions"), ("--max-interfaces", "maxInterfaces")):
+                val = prior_caps.get(key)
+                if not isinstance(val, bool) and isinstance(val, int) and val > 0:
+                    cap_flags.append(f"{flag_name} {val}")
+            summarize_cmd = "summarize-prior-wave-context" + (f" {' '.join(cap_flags)}" if cap_flags else "")
             _, pr_out, _ = await _run_execute_state(
-                plugin_root, cwd, "summarize-prior-wave-context", summary="Summarize prior wave context"
+                plugin_root, cwd, summarize_cmd, summary="Summarize prior wave context"
             )
             prior_summary = _parse_json(pr_out)
-
-        standard_worker_enum = wf_args.get("standard_worker_enum") or "pro"
 
         async def run_task_with_ladder(task):
             nonlocal escalations_used
@@ -1050,5 +1112,13 @@ async def main():
     return final_result
 
 
+async def main():
+    """Entrypoint delegating to `run_execute` using workflow `args` globals."""
+    return await run_execute(wf_args=_wf_args())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(main())

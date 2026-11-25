@@ -8,15 +8,19 @@
  * a missing helper or unreadable sidecar is silently ignored, never fatal.
  *
  * Usage:
- *   node execute-context-advisory.js
+ *   node execute-context-advisory.js [--meta] [--cwd <path>]
  *
  * Behavior:
  *   - Prints the context-heaviness advisory text to stderr when the
  *     transcript-stats sidecar reports `heavy: true` (no advisory otherwise).
- *   - Prints the `execute.guardrails` array (from project config) as a single
- *     JSON line on stdout — consumed inline by the SKILL.md caller via
- *     command substitution (no --output-file manifest here, matching the
- *     original script's direct `console.log(JSON.stringify(...))` stdout).
+ *   - Without `--meta` (default): prints the `execute.guardrails` array (from
+ *     project config) as a single JSON line on stdout — consumed inline by
+ *     the SKILL.md caller via command substitution (no --output-file manifest
+ *     here, matching the original script's direct `console.log(JSON.stringify(...))`
+ *     stdout).
+ *   - With `--meta`: prints `{ guardrails, advisory, standardWorkerEnum,
+ *     priorWaveContextCaps }` as a single JSON line on stdout, merging
+ *     `.sdlc/local.json` over `.sdlc/config.json` via `readSection(root, 'execute')`.
  *
  * Exit codes:
  *   0 = success (guardrails JSON printed, advisory printed to stderr if any)
@@ -42,13 +46,46 @@ const SKILL_NAME = 'execute-plan-sdlc';
 // ---------------------------------------------------------------------------
 
 /**
- * No flags accepted — kept for parity with the project's parseArgs+main
- * convention (scripts/skill/commit.js:65-100).
+ * Parse CLI flags (`--meta`, `--cwd <path>`).
+ * Returns `{}` when no flags are passed for backwards compatibility.
  * @param {string[]} argv
- * @returns {{}}
+ * @returns {{ meta?: boolean, cwd?: string }}
  */
 function parseArgs(argv) {
-  return {};
+  const raw = Array.isArray(argv) ? argv : [];
+  const args = (raw.length >= 2 && !String(raw[0]).startsWith('-')) ? raw.slice(2) : raw;
+  const opts = {};
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--meta') {
+      opts.meta = true;
+    } else if (a === '--cwd') {
+      if (i + 1 >= args.length || args[i + 1] === '' || args[i + 1].startsWith('-')) {
+        throw new Error('--cwd requires a directory path argument');
+      }
+      opts.cwd = args[++i];
+    } else if (typeof a === 'string' && a.startsWith('--cwd=')) {
+      const val = a.slice('--cwd='.length);
+      if (!val) {
+        throw new Error('--cwd requires a directory path argument');
+      }
+      opts.cwd = val;
+    }
+  }
+
+  return opts;
+}
+
+function isPlainObject(v) {
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+
+function resolveStandardWorkerEnum(execute) {
+  const raw = execute && execute.standardWorkerEnum;
+  return raw === 'pro' || raw === 'inherit' ? raw : 'pro';
 }
 
 // ---------------------------------------------------------------------------
@@ -56,11 +93,11 @@ function parseArgs(argv) {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the execute-guardrails array and (best-effort) context advisory.
+ * Resolve the execute-guardrails array, execution metadata, and (best-effort) context advisory.
  *
  * @param {string} cwd  Working directory to read project config from
  * @param {{ readSectionFn?: Function, getAdvisoryFn?: Function, recordGuardrailEvaluationFn?: Function }} [deps]  Injectable for tests
- * @returns {{ guardrails: Array, advisory: string|null }}
+ * @returns {{ guardrails: Array, advisory: string|null, standardWorkerEnum: 'pro'|'inherit', priorWaveContextCaps: object|null }}
  */
 function runExecuteContextAdvisory(cwd, {
   readSectionFn = readSection,
@@ -75,7 +112,11 @@ function runExecuteContextAdvisory(cwd, {
   }
 
   const execute = readSectionFn(cwd, 'execute');
-  const guardrails = (execute && execute.guardrails) || [];
+  const guardrails = Array.isArray(execute && execute.guardrails) ? execute.guardrails : [];
+  const standardWorkerEnum = resolveStandardWorkerEnum(execute);
+  const priorWaveContextCaps = isPlainObject(execute && execute.priorWaveContextCaps)
+    ? execute.priorWaveContextCaps
+    : null;
 
   if (Array.isArray(guardrails) && guardrails.length > 0) {
     const ids = guardrails.map((g) => (typeof g === 'string' ? g : g?.id)).filter(Boolean);
@@ -89,7 +130,7 @@ function runExecuteContextAdvisory(cwd, {
     }
   }
 
-  return { guardrails, advisory };
+  return { guardrails, advisory, standardWorkerEnum, priorWaveContextCaps };
 }
 
 // ---------------------------------------------------------------------------
@@ -97,10 +138,15 @@ function runExecuteContextAdvisory(cwd, {
 // ---------------------------------------------------------------------------
 
 function main(argv) {
-  parseArgs(argv);
-  const root = resolveSdlcRoot() || process.cwd();
-  const { guardrails, advisory } = runExecuteContextAdvisory(root);
+  const opts = parseArgs(argv);
+  const targetCwd = opts.cwd ? path.resolve(opts.cwd) : undefined;
+  const root = resolveSdlcRoot(targetCwd ? { cwd: targetCwd } : undefined) || targetCwd || process.cwd();
+  const { guardrails, advisory, standardWorkerEnum, priorWaveContextCaps } = runExecuteContextAdvisory(root);
   if (advisory) process.stderr.write(advisory + '\n');
+  if (opts.meta) {
+    writeJsonLine({ guardrails, advisory, standardWorkerEnum, priorWaveContextCaps });
+    return;
+  }
   writeJsonLine(guardrails);
 }
 

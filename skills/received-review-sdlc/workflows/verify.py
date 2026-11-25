@@ -12,8 +12,8 @@ Verifies outstanding PR review comment threads at max subagent depth = 1:
   verification JSON matching `scripts/lib/verify-summary.js` invariants (missing
   IDs omitted from `findings[]`, never fabricated).
 
-Note: Uses `async def main()` with no top-level `await` so `python3 -m py_compile`
-succeeds cleanly. Invoke via `run_workflow` with:
+Note: Uses `async def main()` / `async def run_verify(wf_args=None, cwd=None, plugin_root=None)`
+with no top-level `await` so `python3 -m py_compile` succeeds cleanly. Invoke via `run_workflow`:
   exec(open("<PLUGIN_ROOT>/skills/received-review-sdlc/workflows/verify.py").read(), globals())
   await main()
 """
@@ -95,17 +95,17 @@ def _wf_args():
     return raw if isinstance(raw, dict) else {}
 
 
-def _resolve_cwd():
-    wf_args = _wf_args()
-    if wf_args.get("cwd"):
-        return str(Path(wf_args["cwd"]).resolve())
+def _resolve_cwd(wf_args=None):
+    resolved = _wf_args() if wf_args is None else (wf_args if isinstance(wf_args, dict) else {})
+    if resolved.get("cwd"):
+        return str(Path(resolved["cwd"]).resolve())
     return str(Path.cwd().resolve())
 
 
-def _resolve_plugin_root(cwd):
-    wf_args = _wf_args()
-    if wf_args.get("plugin_root"):
-        candidate = Path(wf_args["plugin_root"]).resolve()
+def _resolve_plugin_root(cwd, wf_args=None):
+    resolved = _wf_args() if wf_args is None else (wf_args if isinstance(wf_args, dict) else {})
+    if resolved.get("plugin_root"):
+        candidate = Path(resolved["plugin_root"]).resolve()
         if (candidate / "scripts" / "skill").is_dir():
             return str(candidate)
     if "__file__" in globals():
@@ -118,6 +118,17 @@ def _resolve_plugin_root(cwd):
             if (cand / "scripts" / "skill").is_dir():
                 return str(cand.resolve())
     return str(Path(cwd).resolve())
+
+
+def _resolve_path(raw_path, base_cwd):
+    if not raw_path:
+        return None
+    p = Path(raw_path)
+    if not p.is_absolute():
+        cand = Path(base_cwd) / p
+        if cand.is_file() or not p.is_file():
+            return cand
+    return p
 
 
 def _parse_run_command_output(raw):
@@ -271,15 +282,23 @@ def _render_report_markdown(pr_number, selected_threads, collected_by_id, group_
     return "\n".join(lines).rstrip() + "\n"
 
 
-async def main():
+async def run_verify(wf_args=None, cwd=None, plugin_root=None):
     """Verify outstanding PR review threads grouped by file with 1 retry for missing IDs."""
-    wf_args = _wf_args()
-    cwd = _resolve_cwd()
-    plugin_root = _resolve_plugin_root(cwd)
+    resolved_args = _wf_args() if wf_args is None else (dict(wf_args) if isinstance(wf_args, dict) else {})
+    resolved_cwd = str(Path(cwd).resolve()) if cwd else _resolve_cwd(resolved_args)
+    resolved_plugin_root = (
+        str(Path(plugin_root).resolve())
+        if plugin_root
+        else _resolve_plugin_root(resolved_cwd, resolved_args)
+    )
+    wf_args = resolved_args
+    cwd = resolved_cwd
+    plugin_root = resolved_plugin_root
 
     _wf_phase("Load Thread Manifest")
     manifest_file = wf_args.get("manifest_file")
-    if not manifest_file or not Path(manifest_file).is_file():
+    manifest_path = _resolve_path(manifest_file, cwd)
+    if not manifest_path or not manifest_path.is_file():
         rr_script = str(Path(plugin_root) / "scripts" / "skill" / "received-review.js")
         rr_args = str(wf_args.get("received_review_args") or "").strip()
         rc, out, err = await run_cmd(
@@ -289,7 +308,8 @@ async def main():
         )
         lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
         manifest_file = lines[-1] if lines else ""
-        if rc != 0 or not manifest_file or not Path(manifest_file).is_file():
+        manifest_path = _resolve_path(manifest_file, cwd)
+        if rc != 0 or not manifest_path or not manifest_path.is_file():
             result = {
                 "status": "failed",
                 "exit_code": rc,
@@ -298,7 +318,8 @@ async def main():
             print(json.dumps(result, indent=2))
             return result
 
-    manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
+    manifest_file = str(manifest_path.resolve())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     pr_meta = manifest.get("pr") or {}
     pr_number = pr_meta.get("number") or "unknown"
 
@@ -406,5 +427,13 @@ async def main():
     return result
 
 
+async def main():
+    """Entrypoint delegating to `run_verify` using workflow `args` globals."""
+    return await run_verify(wf_args=_wf_args())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(main())
