@@ -218,10 +218,10 @@ Move `--reject <pr>`, `--stale`, and detailed rollback-window edge branches to `
 Load `execute.py::run_execute`, `review.py::run_review`, and `verify.py::run_verify` inside `skills/ship-sdlc/workflows/ship.py` using namespace-isolated `exec()` inheriting `run_workflow` primitives. Eliminate `agent(type_name="self", ...)` hops for `execute`, `review`, and `await-remote-review` Step 3 verification; propagate `high_risk_wave` `needs_consent` from `run_execute`; and run `fetch-logs.js` + `verify-pipeline-sdlc-classify.js` deterministically before spawning a CI fix agent on `always-proposal`. Keep a lean fix agent for local pre-PR `received-review` against `review-comment.md`.
 
 **Acceptance criteria:**
-- [ ] `ship.py` executes `execute`, `review`, and remote PR thread verification directly at Depth 1 without `agent(type_name="self", ...)`
-- [ ] `high_risk_wave` consent pauses propagate cleanly back to `ship-sdlc`
-- [ ] `verify-pipeline` classifies logs deterministically before spawning any LLM agent
-- [ ] `py_compile` and expanded `workflow-smoke.test.js` pass
+- [x] `ship.py` executes `execute`, `review`, and remote PR thread verification directly at Depth 1 without `agent(type_name="self", ...)`
+- [x] `high_risk_wave` consent pauses propagate cleanly back to `ship-sdlc`
+- [x] `verify-pipeline` classifies logs deterministically before spawning any LLM agent
+- [x] `py_compile` and expanded `workflow-smoke.test.js` pass
 
 ### Task 12: Trim `execute-plan-sdlc/SKILL.md` below 18 KB and wire `--meta`
 

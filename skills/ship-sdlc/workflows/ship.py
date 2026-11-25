@@ -2,10 +2,16 @@
 
 Executes the end-to-end shipping pipeline at max subagent depth = 1:
 - Deterministic setup, preflight, rebase, OpenSpec validation/archiving,
-  completeness/ancestry gates, and state transitions run via `call_tool("run_command", ...)`.
-- Active SDLC skills dispatch via main-level `await agent(..., model=..., schema=...)`.
-- Interactive consent gates pause cleanly with preserved state and return
-  structured JSON so `ship-sdlc` can prompt the user via `ask_question`.
+  completeness/ancestry gates, CI log fetch/classification, and state
+  transitions run via `call_tool("run_command", ...)`.
+- `execute-plan-sdlc`, `review-sdlc`, and `received-review-sdlc` thread
+  verification load `execute.py::run_execute`, `review.py::run_review`, and
+  `verify.py::run_verify` in isolated Python namespaces at Depth 1.
+- Leaf SDLC actions (`commit-sdlc`, `version-sdlc`, `pr-sdlc`, lean review
+  fixes, and actionable CI fixes) dispatch via `await agent(...)`.
+- Interactive consent gates (including `high_risk_wave` from `execute.py`)
+  pause cleanly with preserved state and return structured JSON so `ship-sdlc`
+  can prompt the user via `ask_question`.
 
 Note: Uses `async def main()` with no top-level `await` so `python3 -m py_compile`
 succeeds cleanly. Invoke via `run_workflow` with:
@@ -19,6 +25,7 @@ import os
 import re
 import shlex
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -119,6 +126,22 @@ def _wf_phase(name):
 def _wf_args():
     raw = globals().get("args")
     return raw if isinstance(raw, dict) else {}
+
+
+def _load_subworkflow(rel_path: str, plugin_root) -> dict:
+    """Load a sibling Python workflow in an isolated namespace inheriting run_workflow primitives."""
+    target_path = Path(plugin_root) / rel_path
+    code = target_path.read_text(encoding="utf-8")
+    ns = {
+        "__file__": str(target_path),
+        "__name__": "sdlc_subwf",
+    }
+    g = globals()
+    for prim in ("call_tool", "agent", "phase", "parallel", "pipeline", "log", "args", "WORKSPACES"):
+        if prim in g:
+            ns[prim] = g[prim]
+    exec(compile(code, str(target_path), "exec"), ns)
+    return ns
 
 
 def _resolve_cwd():
@@ -345,6 +368,573 @@ async def _cleanup_pipeline(plugin_root, work_dir, state_file, steps_count, any_
     return {"exit_code": rc, "report": _parse_json_output(out) or out, "stderr": err}
 
 
+async def _fail_step(plugin_root, work_dir, step_name, err_msg, step_outcomes, **extra):
+    """Record step failure in ship state and append to step_outcomes."""
+    await _run_ship_state(
+        plugin_root,
+        work_dir,
+        f"fail --step {shlex.quote(step_name)} --error {shlex.quote(err_msg)}",
+        summary=f"Fail step {step_name}",
+    )
+    step_outcomes.append({"step": step_name, "status": "failed", "error": err_msg, **extra})
+
+
+async def _complete_step(plugin_root, work_dir, state_file, flags, step_name, summary_txt, step_outcomes, emit_todo=True, **extra):
+    """Record step completion in ship state, emit optional todo marker, and append outcome."""
+    await _run_ship_state(
+        plugin_root,
+        work_dir,
+        f"complete --step {shlex.quote(step_name)} --result {shlex.quote(summary_txt)}",
+        summary=f"Complete step {step_name}",
+    )
+    if emit_todo and len(flags.get("steps", [])) >= 2 and state_file:
+        await _run_ship_todos(
+            plugin_root,
+            work_dir,
+            state_file,
+            f"--event step --current-step {shlex.quote(step_name)} --mark-completed {shlex.quote(step_name)}",
+        )
+    step_outcomes.append({"step": step_name, "status": "completed", "summary": summary_txt, **extra})
+
+
+async def _cleanup_review_artifacts(plugin_root, work_dir, manifest_file):
+    """Clean up review manifest and sdlc-review-* temp dir via review-cleanup.js safety guard."""
+    if not manifest_file:
+        return None
+    cleanup_script = str(Path(plugin_root) / "scripts" / "util" / "review-cleanup.js")
+    rc, out, err = await run_cmd(
+        f"node {shlex.quote(cleanup_script)} {shlex.quote(str(manifest_file))}",
+        summary="Clean up review artifacts",
+        cwd=work_dir,
+    )
+    return {"exit_code": rc, "output": out, "stderr": err}
+
+
+async def _run_execute_step(
+    step,
+    wf_args,
+    flags,
+    prior_status,
+    plan_file,
+    state_file,
+    execute_branch,
+    work_dir,
+    plugin_root,
+    prepare_file,
+    artifacts,
+    step_outcomes,
+):
+    """Run execute-plan-sdlc directly at Depth 1 via execute.py::run_execute."""
+    if plan_file and state_file:
+        await _run_ship_todos(
+            plugin_root,
+            work_dir,
+            state_file,
+            f"--plan-file {shlex.quote(plan_file)} --event execute --current-step execute",
+        )
+
+    await _run_ship_state(plugin_root, work_dir, "start --step execute", summary="Start step execute")
+
+    step_args = step.get("args") or ""
+    exec_wf_args = {
+        "plan_file": plan_file,
+        "quality": flags.get("quality") or wf_args.get("quality") or "balanced",
+        "auto": bool(flags.get("auto")),
+        "resume": bool(flags.get("resume") and prior_status == "in_progress"),
+        "commit_waves": bool(flags.get("executeCommitWaves") or "--commit-waves" in step_args),
+        "branch": execute_branch,
+        "approve_high_risk": bool(wf_args.get("approve_high_risk")),
+        "cwd": work_dir,
+        "plugin_root": plugin_root,
+    }
+    for opt_key in ("test_command", "standard_worker_enum", "prior_wave_context_caps", "guardrails"):
+        if opt_key in wf_args:
+            exec_wf_args[opt_key] = wf_args[opt_key]
+
+    try:
+        exec_ns = _load_subworkflow("skills/execute-plan-sdlc/workflows/execute.py", plugin_root)
+        exec_res = await exec_ns["run_execute"](
+            wf_args=exec_wf_args,
+            cwd=work_dir,
+            plugin_root=plugin_root,
+        )
+    except Exception as exc:
+        await _fail_step(plugin_root, work_dir, "execute", f"execute-plan-sdlc failed: {exc}", step_outcomes)
+        return False, None
+
+    if isinstance(exec_res, dict) and exec_res.get("status") == "needs_consent":
+        paused = {
+            **exec_res,
+            "status": "needs_consent",
+            "gate": exec_res.get("gate") or "high_risk_wave",
+            "state_file": state_file,
+            "work_dir": work_dir,
+            "prepare_output_file": prepare_file,
+        }
+        return False, paused
+
+    if not isinstance(exec_res, dict) or exec_res.get("status") not in ("completed", "success"):
+        err_msg = (
+            (exec_res or {}).get("error")
+            or (exec_res or {}).get("summary")
+            or f"execute-plan-sdlc failed ({(exec_res or {}).get('tasks_completed', 0)}/{(exec_res or {}).get('tasks_total', '?')} tasks)"
+        )
+        await _fail_step(plugin_root, work_dir, "execute", err_msg, step_outcomes)
+        return False, None
+
+    artifacts["execute"] = exec_res
+
+    if plan_file and state_file:
+        vc_script = str(Path(plugin_root) / "scripts" / "util" / "verify-completeness.js")
+        vrc, vout, verr = await run_cmd(
+            f"node {shlex.quote(vc_script)} --state-file {shlex.quote(state_file)} --plan-file {shlex.quote(plan_file)}",
+            summary="Verify plan completeness",
+            cwd=work_dir,
+        )
+        if vrc != 0:
+            err_msg = verr or vout or f"verify-completeness failed (exit {vrc})"
+            await _fail_step(plugin_root, work_dir, "execute", err_msg, step_outcomes, exit_code=vrc)
+            return False, None
+
+    git_ops = str(Path(plugin_root) / "scripts" / "util" / "ship-git-ops.js")
+    src, sout, serr = await run_cmd(
+        f"node {shlex.quote(git_ops)} stage-post-execute",
+        summary="Stage post-execute files",
+        cwd=work_dir,
+    )
+    stage_res = _parse_json_output(sout) or {}
+    if src != 0 or stage_res.get("error"):
+        err_msg = stage_res.get("error") or serr or sout or "stage-post-execute failed"
+        await _fail_step(plugin_root, work_dir, "execute", err_msg, step_outcomes)
+        return False, None
+    artifacts["post_execute_staged"] = stage_res.get("staged", [])
+
+    summary_txt = str(
+        exec_res.get("summary")
+        or f"execute completed: {exec_res.get('tasks_completed', 0)}/{exec_res.get('tasks_total', 0)} tasks in {exec_res.get('waves_executed', 0)} wave(s)"
+    )[:240]
+    await _complete_step(plugin_root, work_dir, state_file, flags, "execute", summary_txt, step_outcomes)
+    return True, None
+
+
+async def _run_review_step(
+    step,
+    step_idx,
+    steps,
+    wf_args,
+    flags,
+    existing_state_steps,
+    state_file,
+    work_dir,
+    plugin_root,
+    artifacts,
+    step_outcomes,
+):
+    """Run review-sdlc directly at Depth 1 via review.py::run_review and persist verdict/counts."""
+    await _run_ship_state(plugin_root, work_dir, "start --step review", summary="Start step review")
+
+    rev_wf_args = {
+        "review_args": step.get("args") or "--committed",
+        "cwd": work_dir,
+        "plugin_root": plugin_root,
+    }
+    if wf_args.get("review_manifest_file"):
+        rev_wf_args["manifest_file"] = wf_args["review_manifest_file"]
+
+    empty_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    try:
+        rev_ns = _load_subworkflow("skills/review-sdlc/workflows/review.py", plugin_root)
+        rev_res = await rev_ns["run_review"](
+            wf_args=rev_wf_args,
+            cwd=work_dir,
+            plugin_root=plugin_root,
+        )
+    except Exception as exc:
+        await _fail_step(plugin_root, work_dir, "review", f"review-sdlc failed: {exc}", step_outcomes)
+        return False, None, empty_counts, None, None
+
+    if not isinstance(rev_res, dict) or rev_res.get("status") not in ("completed", "success"):
+        if isinstance(rev_res, dict) and rev_res.get("manifest_file"):
+            await _cleanup_review_artifacts(plugin_root, work_dir, rev_res.get("manifest_file"))
+        err_msg = (rev_res or {}).get("error") or (rev_res or {}).get("summary") or "review-sdlc returned failure"
+        await _fail_step(plugin_root, work_dir, "review", err_msg, step_outcomes)
+        return False, None, empty_counts, None, None
+
+    review_verdict = rev_res.get("verdict") or "APPROVED"
+    raw_counts = rev_res.get("counts") or {}
+    review_counts = {
+        k: int(raw_counts.get(k, 0) or 0)
+        for k in ("critical", "high", "medium", "low", "info")
+    }
+    comment_file = rev_res.get("comment_file")
+    manifest_file = rev_res.get("manifest_file")
+    artifacts["review"] = rev_res
+
+    counts_json = json.dumps(review_counts)
+    decide_parts = []
+    if comment_file:
+        decide_parts.append(f"CommentFile: {comment_file}")
+    if manifest_file:
+        decide_parts.append(f"ManifestFile: {manifest_file}")
+    decide_parts.append(f"Verdict: {review_verdict}")
+    decide_parts.append(f"Counts: {counts_json}")
+    await _run_ship_state(
+        plugin_root,
+        work_dir,
+        f"decide --step review --text {shlex.quote(' | '.join(decide_parts))}",
+        summary="Record review verdict",
+    )
+
+    for df in rev_res.get("deferred_findings") or []:
+        sev = df.get("severity") or "medium"
+        fpath = df.get("file") or "unknown"
+        title = df.get("title") or "Deferred finding"
+        line_arg = f" --line {shlex.quote(str(df['line']))}" if df.get("line") else ""
+        await _run_ship_state(
+            plugin_root,
+            work_dir,
+            f"defer --severity {shlex.quote(sev)} --file {shlex.quote(fpath)}{line_arg} --title {shlex.quote(title)}",
+            summary="Defer review finding",
+        )
+
+    threshold = flags.get("reviewThreshold") or "high"
+    remaining_steps = steps[step_idx + 1:]
+    needs_comment_downstream = (
+        _review_meets_threshold(review_counts, threshold)
+        and any(
+            s.get("name") == "received-review"
+            and s.get("status") != "skipped"
+            and not (flags.get("resume") and existing_state_steps.get("received-review") in ("completed", "skipped"))
+            for s in remaining_steps
+        )
+    )
+    if manifest_file and not needs_comment_downstream:
+        await _cleanup_review_artifacts(plugin_root, work_dir, manifest_file)
+        manifest_file = None
+
+    total_findings = rev_res.get("total_findings")
+    if total_findings is None:
+        total_findings = sum(review_counts.values())
+    summary_txt = str(
+        rev_res.get("summary")
+        or f"review completed: {review_verdict} ({total_findings} finding(s))"
+    )[:240]
+    await _complete_step(plugin_root, work_dir, state_file, flags, "review", summary_txt, step_outcomes)
+    return True, review_verdict, review_counts, comment_file, manifest_file
+
+
+async def _run_verify_pipeline_step(
+    step,
+    wf_args,
+    flags,
+    auto,
+    state_file,
+    work_dir,
+    plugin_root,
+    prepare_file,
+    artifacts,
+    step_outcomes,
+):
+    """Poll CI checks and run deterministic log fetch/classification before any CI fix agent."""
+    await _run_ship_state(plugin_root, work_dir, "start --step verify-pipeline", summary="Start verify-pipeline")
+    vp_script = str(Path(plugin_root) / "scripts" / "util" / "verify-pipeline.js")
+    fetch_logs_script = str(Path(plugin_root) / "scripts" / "util" / "fetch-logs.js")
+    classify_script = str(Path(plugin_root) / "scripts" / "skill" / "verify-pipeline-sdlc-classify.js")
+    max_iters = int(flags.get("verifyPipelineMaxIterations") or 3)
+    vp_args = step.get("args", "")
+    state_flag = f" --state-file {shlex.quote(state_file)}" if state_file else ""
+    vp_final = {}
+    paused_gate = None
+
+    for iteration in range(max_iters):
+        vrc, vout, _ = await run_cmd(
+            f"node {shlex.quote(vp_script)} {vp_args}{state_flag}".strip(),
+            summary=f"Verify CI pipeline (iter {iteration + 1})",
+            cwd=work_dir,
+        )
+        vp_final = _parse_json_output(vout) or {"status": "error" if vrc != 0 else "green"}
+        vp_status = vp_final.get("status")
+        if vp_status in ("green", "skipped", "timeout", "error"):
+            break
+        if vp_status == "failed":
+            if not auto and not wf_args.get("approve_ci_fix"):
+                paused_gate = {
+                    "status": "needs_consent",
+                    "gate": "verify_pipeline",
+                    "verify_pipeline": vp_final,
+                    "state_file": state_file,
+                    "work_dir": work_dir,
+                    "prepare_output_file": prepare_file,
+                }
+                break
+
+            pr_num = vp_final.get("prNumber") or (artifacts.get("pr") or {}).get("pr_number")
+            failed_checks = vp_final.get("failedChecks") or []
+            fallback_excerpt = "\n\n".join(
+                f"=== {c.get('name', 'check')} ===\n{c.get('logsExcerpt', '')}"
+                for c in failed_checks
+                if isinstance(c, dict) and c.get("logsExcerpt")
+            ).strip()
+
+            tmp_inline_log = None
+            try:
+                if pr_num:
+                    fl_cmd = f"node {shlex.quote(fetch_logs_script)} --pr-number {shlex.quote(str(pr_num))}"
+                else:
+                    with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False, encoding="utf-8") as tf:
+                        tf.write(fallback_excerpt)
+                        tmp_inline_log = tf.name
+                    fl_cmd = f"node {shlex.quote(fetch_logs_script)} --logs {shlex.quote(tmp_inline_log)}"
+                fl_rc, fl_out, fl_err = await run_cmd(fl_cmd, summary="Fetch failed CI logs", cwd=work_dir)
+            finally:
+                if tmp_inline_log:
+                    Path(tmp_inline_log).unlink(missing_ok=True)
+
+            log_text = (fl_out or "").strip()
+            if not log_text and fallback_excerpt:
+                log_text = fallback_excerpt
+
+            if fl_rc != 0 and not log_text:
+                abort_verdict = {
+                    "status": "abort",
+                    "reason": fl_err or fl_out or f"fetch-logs.js failed (exit {fl_rc})",
+                }
+                vp_final["verdict"] = abort_verdict
+                artifacts["verify_pipeline_verdict"] = abort_verdict
+                break
+
+            tmp_cls_log = None
+            try:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False, encoding="utf-8") as tf:
+                    tf.write(log_text)
+                    tmp_cls_log = tf.name
+                _, cl_out, _ = await run_cmd(
+                    f"node {shlex.quote(classify_script)} --logs-file {shlex.quote(tmp_cls_log)}",
+                    summary="Classify CI failure logs",
+                    cwd=work_dir,
+                )
+            finally:
+                if tmp_cls_log:
+                    Path(tmp_cls_log).unlink(missing_ok=True)
+
+            cls_res = _parse_json_output(cl_out) or {
+                "category": "unknown",
+                "signals": [],
+                "routingBucket": "always-proposal",
+            }
+            vp_final["classification"] = cls_res
+            routing_bucket = cls_res.get("routingBucket") or "always-proposal"
+            category = cls_res.get("category") or "unknown"
+            signals = cls_res.get("signals") or []
+
+            if routing_bucket == "always-proposal":
+                if category == "unknown" and log_text:
+                    summary_txt = f"Unclassified CI failure (always-proposal). Log excerpt:\n{log_text[-1000:]}"
+                else:
+                    summary_txt = (
+                        f"Deterministic CI failure classification: category={category}, "
+                        f"routingBucket=always-proposal, signals={signals}"
+                    )
+                proposal_verdict = {
+                    "status": "proposal",
+                    "category": category,
+                    "routingBucket": routing_bucket,
+                    "signals": signals,
+                    "summary": summary_txt,
+                    "suggestedPatch": f"Manual investigation required for `{category}` failure on PR #{pr_num or 'unknown'}.",
+                }
+                vp_final["verdict"] = proposal_verdict
+                artifacts["verify_pipeline_verdict"] = proposal_verdict
+                artifacts["verify_pipeline_proposal"] = proposal_verdict
+                await _run_ship_state(
+                    plugin_root,
+                    work_dir,
+                    f"decide --step verify-pipeline --text {shlex.quote(f'Proposal ({category}): {summary_txt[:180]}')}",
+                    summary="Record verify-pipeline deterministic proposal",
+                )
+                break
+
+            fix_res = await agent(
+                prompt=(
+                    f"Working directory: {work_dir}\n"
+                    f"Plugin root: {plugin_root}\n"
+                    f"Apply a minimal fix for actionable CI failure on PR #{pr_num or ''}"
+                    f"{' --auto' if auto else ''}.\n\n"
+                    "## Pre-Computed Classification (Steps 1-2 Already Completed)\n"
+                    f"- Category: `{category}` | Routing bucket: `{routing_bucket}`\n"
+                    f"- Signals: `{json.dumps(signals)}`\n"
+                    f"- Failed checks: {json.dumps(failed_checks)}\n\n"
+                    f"### CI Failure Log Excerpt\n```\n{log_text[-4000:]}\n```\n\n"
+                    "## Instructions\n"
+                    "- Do NOT re-run `fetch-logs.js` or `verify-pipeline-sdlc-classify.js`.\n"
+                    "- Apply only the minimal fix for the failing lint/test/type error; do NOT refactor or commit.\n"
+                    "- Return structured JSON matching the schema via `finish`."
+                ),
+                schema=STEP_RESULT_SCHEMA,
+                role="Ship: verify-pipeline-sdlc",
+                type_name="self",
+                workspace="inherit",
+                model=_resolve_sub_dispatch_model(step, "verify-pipeline-sdlc", fallback="pro"),
+            )
+            if isinstance(fix_res, dict) and fix_res.get("status") in ("success", "fix-applied"):
+                await agent(
+                    prompt=(
+                        f"Working directory: {work_dir}\n"
+                        f"Plugin root: {plugin_root}\n"
+                        "Execute `/commit-sdlc --auto` to commit and push the CI fix."
+                    ),
+                    schema=STEP_RESULT_SCHEMA,
+                    role="Ship: commit CI fix",
+                    type_name="self",
+                    workspace="inherit",
+                    model=_resolve_sub_dispatch_model(step, "commit-sdlc", fallback="pro"),
+                )
+            else:
+                vp_final["fix_result"] = fix_res
+                break
+
+    if paused_gate:
+        return None, paused_gate
+
+    artifacts["verify_pipeline"] = vp_final
+    await _run_ship_state(
+        plugin_root,
+        work_dir,
+        f"complete --step verify-pipeline --result {shlex.quote(json.dumps(vp_final)[:200])}",
+        summary="Complete verify-pipeline",
+    )
+    step_outcomes.append({"step": "verify-pipeline", "status": "completed", "result": vp_final})
+    return vp_final, None
+
+
+async def _run_await_remote_review_step(
+    step,
+    wf_args,
+    auto,
+    state_file,
+    work_dir,
+    plugin_root,
+    prepare_file,
+    artifacts,
+    step_outcomes,
+):
+    """Await remote PR reviews and verify threads directly at Depth 1 via verify.py::run_verify."""
+    await _run_ship_state(plugin_root, work_dir, "start --step await-remote-review", summary="Start await-remote-review")
+    ar_script = str(Path(plugin_root) / "scripts" / "util" / "await-review.js")
+    state_flag = f" --state-file {shlex.quote(state_file)}" if state_file else ""
+    arc, aout, _ = await run_cmd(
+        f"node {shlex.quote(ar_script)} {step.get('args', '')}{state_flag}".strip(),
+        summary="Await remote PR review",
+        cwd=work_dir,
+    )
+    ar_res = _parse_json_output(aout) or {"status": "error" if arc != 0 else "approved-clean"}
+
+    if ar_res.get("status") == "actionable":
+        if not auto and not wf_args.get("approve_remote_review"):
+            return False, {
+                "status": "needs_consent",
+                "gate": "await_remote_review",
+                "remote_review": ar_res,
+                "state_file": state_file,
+                "work_dir": work_dir,
+                "prepare_output_file": prepare_file,
+            }
+
+        pr_num = ar_res.get("prNumber") or (artifacts.get("pr") or {}).get("pr_number")
+        rr_parts = []
+        if pr_num:
+            rr_parts.append(f"--pr {shlex.quote(str(pr_num))}")
+        if auto:
+            rr_parts.append("--auto")
+        verify_wf_args = {
+            "received_review_args": " ".join(rr_parts),
+            "cwd": work_dir,
+            "plugin_root": plugin_root,
+        }
+        if wf_args.get("verify_manifest_file"):
+            verify_wf_args["manifest_file"] = wf_args["verify_manifest_file"]
+
+        try:
+            verify_ns = _load_subworkflow("skills/received-review-sdlc/workflows/verify.py", plugin_root)
+            ver_res = await verify_ns["run_verify"](
+                wf_args=verify_wf_args,
+                cwd=work_dir,
+                plugin_root=plugin_root,
+            )
+        except Exception as exc:
+            await _fail_step(plugin_root, work_dir, "await-remote-review", f"verify.py failed: {exc}", step_outcomes)
+            return False, None
+
+        artifacts["await_remote_review_verify"] = ver_res
+        if not isinstance(ver_res, dict) or (
+            ver_res.get("status") == "failed"
+            and not ver_res.get("reportFile")
+            and not ver_res.get("findings")
+            and not ver_res.get("missingIds")
+        ):
+            err_msg = (ver_res or {}).get("error") or "verify.py failed to verify remote PR review threads"
+            await _fail_step(plugin_root, work_dir, "await-remote-review", err_msg, step_outcomes)
+            return False, None
+
+        findings = ver_res.get("findings") or []
+        missing_ids = ver_res.get("missingIds") or []
+        report_file = ver_res.get("reportFile") or ""
+        pr_meta = ver_res.get("pr") or {}
+        pr_display = pr_meta.get("number") or pr_num or ""
+
+        if findings or missing_ids:
+            remote_fix_res = await agent(
+                prompt=(
+                    f"Working directory: {work_dir}\n"
+                    f"Plugin root: {plugin_root}\n"
+                    f"Respond to pre-verified PR review threads for PR #{pr_display}"
+                    f"{' --auto' if auto else ''}.\n\n"
+                    "## Pre-Verified Findings (Step 3 Already Completed — Skip Re-Verification)\n"
+                    "- Do NOT run `verify.py`, `received-review-orchestrator`, or Step 3b re-verification.\n"
+                    "- Treat any IDs in `missingIds` as `cannot-verify`.\n"
+                    f"- Full verification report file: `{report_file}` (read only for pushback or `needs discussion`).\n\n"
+                    f"### Pre-Verified `findings[]`\n```json\n{json.dumps(findings, indent=2)}\n```\n\n"
+                    f"### `missingIds`\n```json\n{json.dumps(missing_ids)}\n```\n\n"
+                    "## Instructions\n"
+                    "- Follow `received-review-sdlc` Steps 4-12: evaluate verdicts, draft technical responses (no performative openers), "
+                    "apply `agree, will fix` edits, verify with `run-truncated.js`, validate reply links via "
+                    "`scripts/util/received-review-validate-links.js`, and post PR thread replies + resolve addressed threads.\n"
+                    "- Do NOT run `git commit` or `git push` (handled by `commit-sdlc` below).\n"
+                    "- Return structured JSON matching the schema via `finish`."
+                ),
+                schema=STEP_RESULT_SCHEMA,
+                role="Ship: remote review fix/reply",
+                type_name="self",
+                workspace="inherit",
+                model=_resolve_sub_dispatch_model(step, "received-review-sdlc", fallback="pro"),
+            )
+            artifacts["await_remote_review_fix"] = remote_fix_res
+
+        _, st_out, _ = await run_cmd("git status --porcelain", summary="Check remote review changes", cwd=work_dir)
+        if st_out.strip():
+            await agent(
+                prompt=(
+                    f"Working directory: {work_dir}\n"
+                    f"Plugin root: {plugin_root}\n"
+                    "Execute `/commit-sdlc --auto` to commit and push remote review fixes."
+                ),
+                schema=STEP_RESULT_SCHEMA,
+                role="Ship: commit remote review fixes",
+                type_name="self",
+                workspace="inherit",
+                model=_resolve_sub_dispatch_model(step, "commit-sdlc", fallback="pro"),
+            )
+
+    await _run_ship_state(
+        plugin_root,
+        work_dir,
+        f"complete --step await-remote-review --result {shlex.quote(str(ar_res.get('status') or 'done'))}",
+        summary="Complete await-remote-review",
+    )
+    step_outcomes.append({"step": "await-remote-review", "status": "completed", "result": ar_res})
+    return True, None
+
+
 async def main():
     """Execute the deterministic ship-sdlc workflow."""
     wf_args = _wf_args()
@@ -422,6 +1012,8 @@ async def main():
     existing_state_steps = {}
     review_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
     review_verdict = None
+    review_comment_file = wf_args.get("review_comment_file")
+    review_manifest_file = wf_args.get("review_manifest_file")
     review_ran = False
     received_review_ran = False
 
@@ -448,6 +1040,16 @@ async def main():
             for dec in reversed(st_data.get("decisions") or []):
                 if dec.get("step") == "review" and isinstance(dec.get("text"), str):
                     txt = dec["text"]
+                    cfm = re.search(r"CommentFile:\s*([^|\n]+)", txt)
+                    if cfm and not review_comment_file:
+                        cand = cfm.group(1).strip()
+                        if cand and cand != "None":
+                            review_comment_file = cand
+                    mfm = re.search(r"ManifestFile:\s*([^|\n]+)", txt)
+                    if mfm and not review_manifest_file:
+                        cand = mfm.group(1).strip()
+                        if cand and cand != "None":
+                            review_manifest_file = cand
                     vm = re.search(r"Verdict:\s*([^|]+)", txt)
                     if vm and not review_verdict:
                         review_verdict = vm.group(1).strip()
@@ -548,7 +1150,7 @@ async def main():
     any_failed = False
     paused_gate = None
 
-    for step in steps:
+    for step_idx, step in enumerate(steps):
         name = step.get("name")
         if name == "cleanup":
             continue
@@ -623,10 +1225,13 @@ async def main():
                         }
                         break
 
-        # ---- Step-specific conditional & inline handlers ----
+        # ---- Step-specific conditional & inline/Depth-1 handlers ----
         if name == "received-review":
             threshold = flags.get("reviewThreshold") or "high"
             if not review_ran or not _review_meets_threshold(review_counts, threshold):
+                if review_manifest_file:
+                    await _cleanup_review_artifacts(plugin_root, work_dir, review_manifest_file)
+                    review_manifest_file = None
                 reason = "review did not meet threshold"
                 await _run_ship_state(
                     plugin_root, work_dir,
@@ -641,6 +1246,7 @@ async def main():
                     "gate": "received_review",
                     "verdict": review_verdict,
                     "counts": review_counts,
+                    "review_comment_file": review_comment_file,
                     "state_file": state_file,
                     "work_dir": work_dir,
                     "prepare_output_file": prepare_file,
@@ -692,9 +1298,8 @@ async def main():
                 Path(val_manifest_path).unlink(missing_ok=True)
             if vrc != 0 or not val_data.get("ok"):
                 err_msg = "; ".join(val_data.get("errors") or []) or val_data.get("stderr") or verr or "OpenSpec validation failed"
-                await _run_ship_state(plugin_root, work_dir, f"fail --step archive-openspec --error {shlex.quote(err_msg)}", summary="Fail archive-openspec")
+                await _fail_step(plugin_root, work_dir, name, err_msg, step_outcomes)
                 any_failed = True
-                step_outcomes.append({"step": name, "status": "failed", "error": err_msg})
                 break
             if not auto and not wf_args.get("approve_openspec_archive"):
                 paused_gate = {
@@ -719,9 +1324,8 @@ async def main():
                 Path(arch_manifest_path).unlink(missing_ok=True)
             if arc != 0 or not arch_data.get("ok"):
                 err_msg = "; ".join(arch_data.get("errors") or []) or arch_data.get("stderr") or aerr or "OpenSpec archive failed"
-                await _run_ship_state(plugin_root, work_dir, f"fail --step archive-openspec --error {shlex.quote(err_msg)}", summary="Fail archive-openspec")
+                await _fail_step(plugin_root, work_dir, name, err_msg, step_outcomes)
                 any_failed = True
-                step_outcomes.append({"step": name, "status": "failed", "error": err_msg})
                 break
             git_ops = str(Path(plugin_root) / "scripts" / "util" / "ship-git-ops.js")
             grc, gout, gerr = await run_cmd(
@@ -732,9 +1336,8 @@ async def main():
             commit_arch = _parse_json_output(gout) or {}
             if grc != 0:
                 err_msg = commit_arch.get("reason") or gerr or "commit-openspec-archive failed"
-                await _run_ship_state(plugin_root, work_dir, f"fail --step archive-openspec --error {shlex.quote(err_msg)}", summary="Fail archive-openspec")
+                await _fail_step(plugin_root, work_dir, name, err_msg, step_outcomes)
                 any_failed = True
-                step_outcomes.append({"step": name, "status": "failed", "error": err_msg})
                 break
             summary_txt = f"openspec archive ({change_name}): {commit_arch.get('reason') or 'committed'}"
             await _run_ship_state(plugin_root, work_dir, f"complete --step archive-openspec --result {shlex.quote(summary_txt)}", summary="Complete archive-openspec")
@@ -742,124 +1345,86 @@ async def main():
             step_outcomes.append({"step": name, "status": "completed", "summary": summary_txt})
             continue
 
-        if name == "verify-pipeline":
-            await _run_ship_state(plugin_root, work_dir, "start --step verify-pipeline", summary="Start verify-pipeline")
-            vp_script = str(Path(plugin_root) / "scripts" / "util" / "verify-pipeline.js")
-            max_iters = int(flags.get("verifyPipelineMaxIterations") or 3)
-            vp_args = step.get("args", "")
-            vp_final = {}
-            for iteration in range(max_iters):
-                vrc, vout, _ = await run_cmd(
-                    f"node {shlex.quote(vp_script)} {vp_args} --state-file {shlex.quote(state_file)}",
-                    summary=f"Verify CI pipeline (iter {iteration + 1})",
-                    cwd=work_dir,
-                )
-                vp_final = _parse_json_output(vout) or {"status": "error" if vrc != 0 else "green"}
-                vp_status = vp_final.get("status")
-                if vp_status in ("green", "skipped", "timeout", "error"):
-                    break
-                if vp_status == "failed":
-                    if not auto and not wf_args.get("approve_ci_fix"):
-                        paused_gate = {
-                            "status": "needs_consent",
-                            "gate": "verify_pipeline",
-                            "verify_pipeline": vp_final,
-                            "state_file": state_file,
-                            "work_dir": work_dir,
-                            "prepare_output_file": prepare_file,
-                        }
-                        break
-                    fix_res = await agent(
-                        prompt=(
-                            f"Working directory: {work_dir}\n"
-                            f"Plugin root: {plugin_root}\n"
-                            f"Execute `/verify-pipeline-sdlc` for PR #{vp_final.get('prNumber') or ''} "
-                            f"with failed checks: {json.dumps(vp_final.get('failedChecks', []))}"
-                            f"{' --auto' if auto else ''}.\n"
-                            "Return structured JSON matching the schema."
-                        ),
-                        schema=STEP_RESULT_SCHEMA,
-                        role="Ship: verify-pipeline-sdlc",
-                        type_name="self",
-                        workspace="inherit",
-                        model=_resolve_sub_dispatch_model(step, "verify-pipeline-sdlc", fallback="pro"),
-                    )
-                    if isinstance(fix_res, dict) and fix_res.get("status") == "success":
-                        await agent(
-                            prompt=(
-                                f"Working directory: {work_dir}\n"
-                                f"Plugin root: {plugin_root}\n"
-                                "Execute `/commit-sdlc --auto` to commit and push the CI fix."
-                            ),
-                            schema=STEP_RESULT_SCHEMA,
-                            role="Ship: commit CI fix",
-                            type_name="self",
-                            workspace="inherit",
-                            model=_resolve_sub_dispatch_model(step, "commit-sdlc", fallback="pro"),
-                        )
+        if name == "execute":
+            ok, paused_gate = await _run_execute_step(
+                step=step,
+                wf_args=wf_args,
+                flags=flags,
+                prior_status=prior_status,
+                plan_file=plan_file,
+                state_file=state_file,
+                execute_branch=execute_branch,
+                work_dir=work_dir,
+                plugin_root=plugin_root,
+                prepare_file=prepare_file,
+                artifacts=artifacts,
+                step_outcomes=step_outcomes,
+            )
             if paused_gate:
                 break
-            await _run_ship_state(
-                plugin_root, work_dir,
-                f"complete --step verify-pipeline --result {shlex.quote(json.dumps(vp_final)[:200])}",
-                summary="Complete verify-pipeline",
+            if not ok:
+                any_failed = True
+                break
+            continue
+
+        if name == "review":
+            ok, rev_verdict, rev_counts, rev_comment, rev_manifest = await _run_review_step(
+                step=step,
+                step_idx=step_idx,
+                steps=steps,
+                wf_args=wf_args,
+                flags=flags,
+                existing_state_steps=existing_state_steps,
+                state_file=state_file,
+                work_dir=work_dir,
+                plugin_root=plugin_root,
+                artifacts=artifacts,
+                step_outcomes=step_outcomes,
             )
-            step_outcomes.append({"step": name, "status": "completed", "result": vp_final})
+            if not ok:
+                any_failed = True
+                break
+            review_ran = True
+            review_verdict = rev_verdict
+            review_counts = rev_counts
+            review_comment_file = rev_comment
+            review_manifest_file = rev_manifest
+            continue
+
+        if name == "verify-pipeline":
+            _, paused_gate = await _run_verify_pipeline_step(
+                step=step,
+                wf_args=wf_args,
+                flags=flags,
+                auto=auto,
+                state_file=state_file,
+                work_dir=work_dir,
+                plugin_root=plugin_root,
+                prepare_file=prepare_file,
+                artifacts=artifacts,
+                step_outcomes=step_outcomes,
+            )
+            if paused_gate:
+                break
             continue
 
         if name == "await-remote-review":
-            await _run_ship_state(plugin_root, work_dir, "start --step await-remote-review", summary="Start await-remote-review")
-            ar_script = str(Path(plugin_root) / "scripts" / "util" / "await-review.js")
-            arc, aout, _ = await run_cmd(
-                f"node {shlex.quote(ar_script)} {step.get('args', '')} --state-file {shlex.quote(state_file)}",
-                summary="Await remote PR review",
-                cwd=work_dir,
+            ok, paused_gate = await _run_await_remote_review_step(
+                step=step,
+                wf_args=wf_args,
+                auto=auto,
+                state_file=state_file,
+                work_dir=work_dir,
+                plugin_root=plugin_root,
+                prepare_file=prepare_file,
+                artifacts=artifacts,
+                step_outcomes=step_outcomes,
             )
-            ar_res = _parse_json_output(aout) or {"status": "error" if arc != 0 else "approved-clean"}
-            if ar_res.get("status") == "actionable":
-                if not auto and not wf_args.get("approve_remote_review"):
-                    paused_gate = {
-                        "status": "needs_consent",
-                        "gate": "await_remote_review",
-                        "remote_review": ar_res,
-                        "state_file": state_file,
-                        "work_dir": work_dir,
-                        "prepare_output_file": prepare_file,
-                    }
-                    break
-                await agent(
-                    prompt=(
-                        f"Working directory: {work_dir}\n"
-                        f"Plugin root: {plugin_root}\n"
-                        f"Execute `/received-review-sdlc` for PR #{ar_res.get('prNumber') or ''}"
-                        f"{' --auto' if auto else ''}."
-                    ),
-                    schema=STEP_RESULT_SCHEMA,
-                    role="Ship: remote received-review-sdlc",
-                    type_name="self",
-                    workspace="inherit",
-                    model=_resolve_sub_dispatch_model(step, "received-review-sdlc", fallback="pro"),
-                )
-                _, st_out, _ = await run_cmd("git status --porcelain", summary="Check remote review changes", cwd=work_dir)
-                if st_out.strip():
-                    await agent(
-                        prompt=(
-                            f"Working directory: {work_dir}\n"
-                            f"Plugin root: {plugin_root}\n"
-                            "Execute `/commit-sdlc --auto` to commit and push remote review fixes."
-                        ),
-                        schema=STEP_RESULT_SCHEMA,
-                        role="Ship: commit remote review fixes",
-                        type_name="self",
-                        workspace="inherit",
-                        model=_resolve_sub_dispatch_model(step, "commit-sdlc", fallback="pro"),
-                    )
-            await _run_ship_state(
-                plugin_root, work_dir,
-                f"complete --step await-remote-review --result {shlex.quote(str(ar_res.get('status') or 'done'))}",
-                summary="Complete await-remote-review",
-            )
-            step_outcomes.append({"step": name, "status": "completed", "result": ar_res})
+            if paused_gate:
+                break
+            if not ok:
+                any_failed = True
+                break
             continue
 
         if name == "learnings-commit":
@@ -873,9 +1438,8 @@ async def main():
             lres = _parse_json_output(lout) or {}
             if lrc != 0 or lres.get("dirty"):
                 err_msg = lres.get("postConditionReason") or lres.get("reason") or lerr or "commit-learnings failed"
-                await _run_ship_state(plugin_root, work_dir, f"fail --step learnings-commit --error {shlex.quote(err_msg)}", summary="Fail learnings-commit")
+                await _fail_step(plugin_root, work_dir, name, err_msg, step_outcomes)
                 any_failed = True
-                step_outcomes.append({"step": name, "status": "failed", "error": err_msg})
                 break
             await _run_ship_state(
                 plugin_root, work_dir,
@@ -885,38 +1449,47 @@ async def main():
             step_outcomes.append({"step": name, "status": "completed", "result": lres})
             continue
 
-        # ---- Main-level agent step dispatch (execute, commit, review, received-review, commit-fixes, version, pr) ----
-        if name == "execute" and plan_file and state_file:
-            await _run_ship_todos(
-                plugin_root, work_dir, state_file,
-                f"--plan-file {shlex.quote(plan_file)} --event execute --current-step execute",
-            )
-
+        # ---- Main-level leaf agent step dispatch (commit, received-review, commit-fixes, version, pr) ----
         await _run_ship_state(plugin_root, work_dir, f"start --step {shlex.quote(name)}", summary=f"Start step {name}")
         skill_name = step.get("skill")
         step_args = step.get("args") or ""
-        if name == "execute":
-            if execute_branch and "--branch" not in step_args:
-                step_args = f"{step_args} --branch {execute_branch}".strip()
-            if flags.get("resume") and prior_status == "in_progress" and "--resume" not in step_args:
-                step_args = f"{step_args} --resume".strip()
 
         step_model = to_agy_model(step.get("model"))
         step_schema = STEP_RESULT_SCHEMA
-        if name == "review":
-            step_schema = REVIEW_STEP_SCHEMA
-        elif name == "version":
+        if name == "version":
             step_schema = VERSION_STEP_SCHEMA
         elif name == "pr":
             step_schema = PR_STEP_SCHEMA
 
-        prompt_text = (
-            f"Working directory: {work_dir}\n"
-            f"Plugin root: {plugin_root}\n"
-            f"Execute skill `/{skill_name}` with arguments: `{step_args}`.\n"
-            "Operate strictly within the working directory above. "
-            "Do not call `ask_question` — report structured data via `finish`."
-        )
+        if name == "received-review":
+            threshold = flags.get("reviewThreshold") or "high"
+            comment_ref = (
+                f"Read the local review findings from `{review_comment_file}`."
+                if review_comment_file
+                else "Use the review findings from the preceding review step."
+            )
+            prompt_text = (
+                f"Working directory: {work_dir}\n"
+                f"Plugin root: {plugin_root}\n"
+                f"Apply fixes for local pre-PR review findings (verdict={review_verdict}, "
+                f"threshold={threshold}, counts={json.dumps(review_counts)})"
+                f"{' --auto' if auto else ''}.\n\n"
+                f"- {comment_ref}\n"
+                "- This is a pre-PR local review — no GitHub PR threads exist yet, so do NOT invoke "
+                "`verify.py`, `received-review.js`, `received-review-orchestrator`, or `gh` PR thread reply commands.\n"
+                "- Implement minimal fixes for findings meeting the severity threshold, verify changes via "
+                "`scripts/util/run-truncated.js`, and leave changes unstaged for `commit-fixes`.\n"
+                "- Do NOT call `ask_question` — report structured data via `finish`."
+            )
+        else:
+            prompt_text = (
+                f"Working directory: {work_dir}\n"
+                f"Plugin root: {plugin_root}\n"
+                f"Execute skill `/{skill_name}` with arguments: `{step_args}`.\n"
+                "Operate strictly within the working directory above. "
+                "Do not call `ask_question` — report structured data via `finish`."
+            )
+
         try:
             agent_res = await agent(
                 prompt=prompt_text,
@@ -927,49 +1500,17 @@ async def main():
                 model=step_model,
             )
         except Exception as exc:
-            err_msg = f"{skill_name} failed: {exc}"
-            await _run_ship_state(plugin_root, work_dir, f"fail --step {shlex.quote(name)} --error {shlex.quote(err_msg)}", summary=f"Fail step {name}")
+            await _fail_step(plugin_root, work_dir, name, f"{skill_name} failed: {exc}", step_outcomes)
             any_failed = True
-            step_outcomes.append({"step": name, "status": "failed", "error": err_msg})
             break
 
         if not isinstance(agent_res, dict) or agent_res.get("status") != "success":
             err_msg = (agent_res or {}).get("error") or (agent_res or {}).get("summary") or f"{skill_name} returned failure"
-            await _run_ship_state(plugin_root, work_dir, f"fail --step {shlex.quote(name)} --error {shlex.quote(err_msg)}", summary=f"Fail step {name}")
+            await _fail_step(plugin_root, work_dir, name, err_msg, step_outcomes)
             any_failed = True
-            step_outcomes.append({"step": name, "status": "failed", "error": err_msg})
             break
 
         # ---- Deterministic Post-Gates ----
-        if name == "execute":
-            if plan_file and state_file:
-                vc_script = str(Path(plugin_root) / "scripts" / "util" / "verify-completeness.js")
-                vrc, vout, verr = await run_cmd(
-                    f"node {shlex.quote(vc_script)} --state-file {shlex.quote(state_file)} --plan-file {shlex.quote(plan_file)}",
-                    summary="Verify plan completeness",
-                    cwd=work_dir,
-                )
-                if vrc != 0:
-                    err_msg = verr or vout or f"verify-completeness failed (exit {vrc})"
-                    await _run_ship_state(plugin_root, work_dir, f"fail --step execute --error {shlex.quote(err_msg)}", summary="Fail execute completeness gate")
-                    any_failed = True
-                    step_outcomes.append({"step": name, "status": "failed", "exit_code": vrc, "error": err_msg})
-                    break
-            git_ops = str(Path(plugin_root) / "scripts" / "util" / "ship-git-ops.js")
-            src, sout, serr = await run_cmd(
-                f"node {shlex.quote(git_ops)} stage-post-execute",
-                summary="Stage post-execute files",
-                cwd=work_dir,
-            )
-            stage_res = _parse_json_output(sout) or {}
-            if src != 0 or stage_res.get("error"):
-                err_msg = stage_res.get("error") or serr or sout or "stage-post-execute failed"
-                await _run_ship_state(plugin_root, work_dir, f"fail --step execute --error {shlex.quote(err_msg)}", summary="Fail execute staging")
-                any_failed = True
-                step_outcomes.append({"step": name, "status": "failed", "error": err_msg})
-                break
-            artifacts["post_execute_staged"] = stage_res.get("staged", [])
-
         if name == "commit" and _has_package_script(work_dir, "preflight"):
             trunc_script = str(Path(plugin_root) / "scripts" / "util" / "run-truncated.js")
             prc, pout, perr = await run_cmd(
@@ -979,36 +1520,18 @@ async def main():
             )
             if prc != 0:
                 err_msg = f"Preflight gate failed (exit {prc}): {(perr or pout)[-500:]}"
-                await _run_ship_state(plugin_root, work_dir, f"fail --step commit --error {shlex.quote(err_msg)}", summary="Fail preflight gate")
+                await _fail_step(plugin_root, work_dir, "commit", err_msg, step_outcomes)
+                step_outcomes[-1]["step"] = "preflight"
+                step_outcomes[-1]["output"] = pout
                 any_failed = True
-                step_outcomes.append({"step": "preflight", "status": "failed", "output": pout, "error": err_msg})
                 break
-
-        if name == "review":
-            review_ran = True
-            review_verdict = agent_res.get("verdict")
-            review_counts = agent_res.get("counts") or review_counts
-            artifacts["review"] = agent_res
-            counts_json = json.dumps(review_counts)
-            await _run_ship_state(
-                plugin_root, work_dir,
-                f"decide --step review --text {shlex.quote(f'Verdict: {review_verdict} | Counts: {counts_json}')}",
-                summary="Record review verdict",
-            )
-            for df in agent_res.get("deferred_findings") or []:
-                sev = df.get("severity") or "medium"
-                fpath = df.get("file") or "unknown"
-                title = df.get("title") or "Deferred finding"
-                line_arg = f" --line {shlex.quote(str(df['line']))}" if df.get("line") else ""
-                await _run_ship_state(
-                    plugin_root, work_dir,
-                    f"defer --severity {shlex.quote(sev)} --file {shlex.quote(fpath)}{line_arg} --title {shlex.quote(title)}",
-                    summary="Defer review finding",
-                )
 
         if name == "received-review":
             received_review_ran = True
             artifacts["received_review"] = agent_res
+            if review_manifest_file:
+                await _cleanup_review_artifacts(plugin_root, work_dir, review_manifest_file)
+                review_manifest_file = None
 
         if name == "version":
             new_tag = agent_res.get("new_tag")
@@ -1022,32 +1545,25 @@ async def main():
                 )
                 if arc != 0:
                     err_msg = aerr or aout or f"verify-ancestry failed for {new_tag}"
-                    await _run_ship_state(plugin_root, work_dir, f"fail --step version --error {shlex.quote(err_msg)}", summary="Fail ancestry gate")
+                    await _fail_step(plugin_root, work_dir, name, err_msg, step_outcomes)
                     any_failed = True
-                    step_outcomes.append({"step": name, "status": "failed", "error": err_msg})
                     break
 
         if name == "pr":
             artifacts["pr"] = agent_res
 
         summary_txt = str(agent_res.get("summary") or f"{name} completed")[:240]
-        await _run_ship_state(
-            plugin_root, work_dir,
-            f"complete --step {shlex.quote(name)} --result {shlex.quote(summary_txt)}",
-            summary=f"Complete step {name}",
-        )
-        if len(flags.get("steps", [])) >= 2 and state_file:
-            await _run_ship_todos(
-                plugin_root, work_dir, state_file,
-                f"--event step --current-step {shlex.quote(name)} --mark-completed {shlex.quote(name)}",
-            )
-        step_outcomes.append({"step": name, "status": "completed", "summary": summary_txt})
+        await _complete_step(plugin_root, work_dir, state_file, flags, name, summary_txt, step_outcomes)
 
     if paused_gate:
         paused_gate["steps_completed"] = step_outcomes
         paused_gate["artifacts"] = artifacts
         print(json.dumps(paused_gate, indent=2))
         return paused_gate
+
+    if review_manifest_file and not any_failed:
+        await _cleanup_review_artifacts(plugin_root, work_dir, review_manifest_file)
+        review_manifest_file = None
 
     _wf_phase("Terminal Cleanup & Report")
     cleanup_info = await _cleanup_pipeline(
