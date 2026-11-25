@@ -123,10 +123,10 @@ When deriving dynamic discovery dimensions, models are assigned based on task na
 - **Standard analysis (`code` / `web`)**: `gemini-4-hydrogen-high` (`flash`)
 - **Complex tracing (`hybrid` / architecture)**: `gemini-4-neon-high` / `gemini-4-carbon-high` (`pro`)
 
-### B. Quality Gate Lanes (Parallel Fan-Out via `lanes[]`)
-Plan validation gates G1–G17 are partitioned across up to 5 parallel lanes (`scripts/skill/plan.js`):
-- `static-structural` (G1–G3, G7, G12): `gemini-4-hydrogen-medium` (`flash`)
-- `file-existence` (G4, G10): `gemini-4-hydrogen-medium` (`flash`)
+### B. Quality Gate Lanes (Deterministic Static Check + Parallel Fan-Out via `lanes[]`)
+Plan validation gates G1–G17 are partitioned across 1 deterministic static check (`--critique-static`, 0 LLM calls) and up to 4 parallel LLM lanes (`scripts/skill/plan.js`):
+- `--critique-static` (G3, G4, G10, G12): deterministic Node.js check (0 LLM calls)
+- `static-structural` (G1, G2, G7; plus rolled-in G14/G17 when guardrails/dimensions are absent): `gemini-4-hydrogen-medium` (`flash`)
 - `content-coverage` (G5, G6, G8, G9, G11, G13, G15, G16): `gemini-4-hydrogen-high` (`flash`)
 - `guardrail-compliance` (G14): `gemini-4-hydrogen-medium` (`flash`)
 - `dimension-coverage` (G17): `gemini-4-hydrogen-medium` (`flash`)
@@ -186,7 +186,7 @@ As defined in [skills/setup-sdlc/resources/dimension-catalog.md](../skills/setup
 ## 8. Received Review Thread Verifiers (`received-review-sdlc`)
 
 When verifying outstanding review threads via [received-review-orchestrator.md](../agents/received-review-orchestrator.md):
-- Any thread in the group has `severity: "critical"` → Dispatched to **`pro`** (`gemini-4-neon-*`)
+- Any thread in the group has `severity: "critical"` or `"high"` → Dispatched to **`pro`** (`gemini-4-neon-low`)
 - Otherwise → Dispatched to **`flash`** (`gemini-4-hydrogen-*`)
 
 ---

@@ -197,7 +197,7 @@ test('G4: flags unsequenced shared Modify: conflicts and passes direct or transi
   }
 });
 
-test('G10: flags missing Modify: files and later-created Modify: files, passes disk or earlier-task Create:', () => {
+test('G10: flags missing Modify: files and unsequenced Create: -> Modify: files, passes disk or explicit Depends on: Create:', () => {
   const root = makeTempProject();
   try {
     writeFiles(root, { 'src/real.js': 'ok\n' });
@@ -228,14 +228,30 @@ test('G10: flags missing Modify: files and later-created Modify: files, passes d
     const badOrderRes = runStaticCritique(badOrderPath, root);
     const g10Order = badOrderRes.issues.filter(i => i.gateId === 'G10');
     assert.strictEqual(g10Order.length, 2);
-    assert.ok(g10Order.some(i => i.message.includes('src/later.js') && i.message.includes('does not precede Task 1')));
+    assert.ok(g10Order.some(i => i.message.includes('src/later.js') && i.message.includes('Depends on: Task 2')));
     assert.ok(g10Order.some(i => i.message.includes('src/self.js') && i.message.includes('does not precede Task 1')));
 
-    // Created in Task 1 (strictly lower number) AND created in Task 3 with Task 2 depending on Task 3 -> both pass G10
+    // Create: X in Task 1 -> Modify: X in Task 2 WITHOUT Depends on: Task 1 -> flags G10 ordering issue
+    const missingDepPlan = makePlan([
+      { number: 1, dependsOn: 'none', create: ['src/from-t1.js'] },
+      { number: 2, dependsOn: 'none', modify: ['src/from-t1.js'] },
+    ]);
+    const missingDepPath = path.join(root, 'missing-dep-order.md');
+    fs.writeFileSync(missingDepPath, missingDepPlan, 'utf8');
+
+    const missingDepRes = runStaticCritique(missingDepPath, root);
+    const g10MissingDep = missingDepRes.issues.filter(i => i.gateId === 'G10');
+    assert.strictEqual(g10MissingDep.length, 1);
+    assert.strictEqual(g10MissingDep[0].taskRef, 'Task 2');
+    assert.match(g10MissingDep[0].message, /src\/from-t1\.js/);
+    assert.match(g10MissingDep[0].message, /Depends on: Task 1/);
+    assert.ok(!missingDepRes.passes.includes('G10'));
+
+    // Create: X in Task 1 -> Modify: X in Task 2 WITH Depends on: Task 1 (and transitive Task 3 -> Task 2 -> Task 1) -> passes G10
     const goodOrderPlan = makePlan([
       { number: 1, dependsOn: 'none', create: ['src/from-t1.js'] },
-      { number: 2, dependsOn: 'Task 3', modify: ['src/from-t1.js', 'src/from-t3.js'] },
-      { number: 3, dependsOn: 'none', create: ['src/from-t3.js'] },
+      { number: 2, dependsOn: 'Task 1', modify: ['src/from-t1.js'] },
+      { number: 3, dependsOn: 'Task 2', modify: ['src/from-t1.js'] },
     ]);
     const goodOrderPath = path.join(root, 'good-order.md');
     fs.writeFileSync(goodOrderPath, goodOrderPlan, 'utf8');

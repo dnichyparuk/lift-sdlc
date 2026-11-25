@@ -220,8 +220,10 @@ def _parse_json(text):
     return None
 
 
-def next_escalated_model(current_model):
-    """Advance one tier along the escalation ladder: flash_lite -> flash -> pro."""
+def next_escalated_model(current_model, error_code="FAILED_TESTS"):
+    """Advance one tier along the escalation ladder unless error_code is NEEDS_CONTEXT."""
+    if isinstance(error_code, str) and error_code.strip().upper() == "NEEDS_CONTEXT":
+        return current_model
     if current_model == "flash_lite":
         return "flash"
     return "pro"
@@ -472,7 +474,12 @@ def _render_task_prompt(task, fact_sheet_path, guardrails, prior_summary, work_d
         sections.append(f"## Context From Prior Waves\n{json.dumps(prior_summary, indent=2)}")
 
     if prev_error:
-        sections.append(f"## Previous Attempt Failure (Escalated Retry)\n{prev_error}")
+        heading = (
+            "## Injected Missing Context (Same-Tier Retry)"
+            if "NEEDS_CONTEXT" in prev_error
+            else "## Previous Attempt Failure (Escalated Retry)"
+        )
+        sections.append(f"{heading}\n{prev_error}")
 
     sections.append(
         "## Instructions\n"
@@ -587,6 +594,8 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
     auto = bool(wf_args.get("auto"))
     resume = bool(wf_args.get("resume"))
     commit_waves = bool(wf_args.get("commit_waves"))
+    approve_high_risk: bool = bool(wf_args.get("approve_high_risk"))
+    skip_high_risk: bool = bool(wf_args.get("skip_high_risk"))
     branch = wf_args.get("branch")
     test_override = wf_args.get("test_command")
 
@@ -669,6 +678,7 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
     use_state = not small_plan
 
     completed_ids = set()
+    skipped_task_ids = set()
     resumed_wave_shas = {}
     run_id = "run"
     if use_state:
@@ -695,6 +705,8 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
                     for wt in w.get("tasks") or []:
                         if wt.get("status") == "completed":
                             completed_ids.add(str(wt["id"]))
+                        elif wt.get("status") == "skipped-dependency":
+                            skipped_task_ids.add(str(wt["id"]))
         else:
             all_ids_json = json.dumps([t["id"] for t in tasks])
             rc, init_out, init_err = await _run_execute_state(
@@ -729,14 +741,53 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
     failed_halt = False
 
     for wave_idx, wave_tasks in enumerate(waves, start=1):
-        pending_tasks = [t for t in wave_tasks if t["id"] not in completed_ids]
+        pending_tasks = [t for t in wave_tasks if t["id"] not in completed_ids and t["id"] not in skipped_task_ids]
         if not pending_tasks or wave_idx in resumed_wave_shas:
-            _wf_log(f"Wave {wave_idx}: already completed — skipping")
-            wave_summaries.append({"wave": wave_idx, "status": "completed", "resumed_skip": True})
+            all_wave_skipped = bool(wave_tasks) and all(t["id"] in skipped_task_ids for t in wave_tasks)
+            _wf_log(f"Wave {wave_idx}: already {'skipped' if all_wave_skipped else 'completed'} — skipping")
+            wave_summaries.append({
+                "wave": wave_idx,
+                "status": "skipped" if all_wave_skipped else "completed",
+                "resumed_skip": True,
+            })
             continue
 
         high_risk_tasks = [t for t in pending_tasks if t["risk"].lower() == "high"]
-        if high_risk_tasks and not auto and not wf_args.get("approve_high_risk"):
+        if high_risk_tasks and not auto and not approve_high_risk:
+            if skip_high_risk:
+                _wf_log(f"Wave {wave_idx}: high-risk wave skipped via skip_high_risk")
+                if use_state:
+                    for t in pending_tasks:
+                        await _run_execute_state(
+                            plugin_root,
+                            cwd,
+                            (
+                                f"task-fail --wave {wave_idx} --task {shlex.quote(t['id'])} "
+                                f"--name {shlex.quote(t['name'])} --complexity {shlex.quote(t['complexity'])} "
+                                f"--risk {shlex.quote(t['risk'])} --error {shlex.quote('Skipped high-risk wave by user')} "
+                                "--skipped-dependency"
+                            ),
+                            summary=f"Record skipped high-risk task {t['id']}",
+                        )
+                    await _run_execute_state(
+                        plugin_root,
+                        cwd,
+                        f"wave-done --wave {wave_idx}",
+                        summary=f"Record skipped wave {wave_idx}",
+                    )
+                for t in pending_tasks:
+                    skipped_task_ids.add(t["id"])
+                wave_summaries.append({
+                    "wave": wave_idx,
+                    "status": "skipped",
+                    "reason": "skip_high_risk",
+                    "tasks": [
+                        {"task_id": t["id"], "title": t["title"], "risk": t["risk"], "status": "skipped"}
+                        for t in pending_tasks
+                    ],
+                })
+                continue
+
             result = {
                 "status": "needs_consent",
                 "gate": "high_risk_wave",
@@ -805,6 +856,7 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
                     prev_err,
                     model,
                 )
+                err_code_for_esc = "FAILED_TESTS"
                 try:
                     res = await agent(
                         prompt=prompt,
@@ -818,9 +870,15 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
                     attempts.append({"attempt": attempt, "model": model, "error": str(exc)})
                     prev_err = f"Subagent exception at tier {model}: {exc}"
                     last_res = {"task_id": task["id"], "status": "FAILED", "files_touched": [], "summary": prev_err, "error_code": "BLOCKED"}
+                    err_code_for_esc = "BLOCKED"
                 else:
                     last_res = res if isinstance(res, dict) else {"task_id": task["id"], "status": "FAILED", "files_touched": [], "summary": "Invalid non-dict result"}
                     status_val = last_res.get("status")
+                    err_code = last_res.get("error_code")
+                    needs_context = (
+                        status_val == "NEEDS_CONTEXT"
+                        or (isinstance(err_code, str) and err_code.strip().upper() == "NEEDS_CONTEXT")
+                    )
                     ok = (
                         status_val in ("DONE", "DONE_WITH_CONCERNS")
                         and last_res.get("tests_pass") is not False
@@ -829,10 +887,28 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
                     attempts.append({"attempt": attempt, "model": model, "status": status_val})
                     if ok:
                         return {**last_res, "final_model": model, "attempts": attempts}
-                    prev_err = f"Previous tier {model} returned status={status_val}, error_code={last_res.get('error_code')}: {last_res.get('summary')}"
+                    if needs_context:
+                        err_code_for_esc = "NEEDS_CONTEXT"
+                        extra_ctx = []
+                        if last_res.get("concerns"):
+                            extra_ctx.append(f"Requested context / concerns: {json.dumps(last_res['concerns'])}")
+                        if openspec_specs:
+                            extra_ctx.append(
+                                "OpenSpec specs:\n" + "\n".join(
+                                    f"- {sp['file']}:\n{sp['content'][:1200]}" for sp in openspec_specs
+                                )
+                            )
+                        ctx_block = ("\n" + "\n".join(extra_ctx)) if extra_ctx else ""
+                        prev_err = (
+                            f"Previous attempt at tier {model} returned NEEDS_CONTEXT: {last_res.get('summary')}.{ctx_block}\n"
+                            "Retrying at the same model tier with injected context — inspect the target files directly."
+                        )
+                    else:
+                        err_code_for_esc = err_code or "FAILED_TESTS"
+                        prev_err = f"Previous tier {model} returned status={status_val}, error_code={err_code}: {last_res.get('summary')}"
 
                 if attempt < MAX_RETRIES_PER_TASK:
-                    next_model = next_escalated_model(model)
+                    next_model = next_escalated_model(model, err_code_for_esc)
                     if next_model != model:
                         escalations_used += 1
                     model = next_model
@@ -915,8 +991,7 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
         # ---- Spec compliance review (Standard/Complex tasks, quality != minimal) ----
         non_trivial = [t for t in pending_tasks if t["complexity"].lower() != "trivial" and results_by_id[t["id"]].get("status") in ("DONE", "DONE_WITH_CONCERNS")]
         if non_trivial and quality != "minimal":
-            has_complex = any(t["complexity"].lower() == "complex" for t in non_trivial)
-            reviewer_model = "pro" if (has_complex or quality == "full") else "flash"
+            reviewer_model = "pro"
             spec_blocks = []
             for t in non_trivial:
                 touched = results_by_id[t["id"]].get("files_touched") or t["files"]
@@ -1080,10 +1155,27 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
 
     _wf_phase("Final Verification & Completeness")
     final_verify = None
+    executed_tasks = [t for t in tasks if t["id"] not in skipped_task_ids]
     if not failed_halt:
-        final_verify = await _verify_wave(tasks, {t["id"]: {"status": "DONE", "files_touched": t["files"]} for t in tasks}, cwd, plugin_root, test_override)
-        if final_verify["command_failures"]:
-            failed_halt = True
+        if executed_tasks:
+            final_verify = await _verify_wave(
+                executed_tasks,
+                {t["id"]: {"status": "DONE", "files_touched": t["files"]} for t in executed_tasks},
+                cwd,
+                plugin_root,
+                test_override,
+            )
+            if final_verify["command_failures"]:
+                failed_halt = True
+        else:
+            final_verify = {
+                "changed_files": [],
+                "phantom_failures": [],
+                "canary_failures": [],
+                "command_failures": [],
+                "ok": True,
+                "skipped": True,
+            }
 
     if use_state and not failed_halt:
         vc_rc, vc_out, vc_err = await _run_execute_state(
@@ -1095,14 +1187,21 @@ async def run_execute(wf_args=None, cwd=None, plugin_root=None):
         else:
             await _run_execute_state(plugin_root, cwd, f"cleanup --branch {shlex.quote(branch)}", summary="Cleanup execute state")
 
+    completeness_verified = bool(use_state and not failed_halt)
+    all_skipped = bool(tasks) and len(skipped_task_ids) == len(tasks) and not failed_halt
+    final_status = "failed" if failed_halt else ("skipped" if all_skipped else "completed")
+
     final_result = {
-        "status": "failed" if failed_halt else "completed",
+        "status": final_status,
         "branch": branch,
         "quality": quality,
-        "tasks_completed": len(completed_ids) if use_state else (0 if failed_halt else len(tasks)),
+        "tasks_completed": len(completed_ids) if use_state else (0 if (failed_halt or all_skipped) else len(executed_tasks)),
         "tasks_total": len(tasks),
+        "tasks_skipped": len(skipped_task_ids),
+        "skipped_task_ids": sorted(skipped_task_ids),
         "waves_executed": len(wave_summaries),
         "escalations_used": escalations_used,
+        "completeness_verified": completeness_verified,
         "waves": wave_summaries,
         "spec_reviews": spec_reviews,
         "final_verification": final_verify,

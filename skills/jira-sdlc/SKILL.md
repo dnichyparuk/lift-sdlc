@@ -158,9 +158,9 @@ Present `$PROPOSAL_TITLE` and `$PROPOSAL_BODY` verbatim (`"Y (file issue) / edit
 
 ## Step 3 — Execute Operation
 
-**Write-op precondition self-check:** Before dispatching any write MCP call, verify personally that Step 2.6 returned `approve`, Step 2.7 exited 0, and both `approval-<hash>.token` and `critique-<hash>.json` exist on disk for this exact `payload_hash` (< 10 min old). **No PreToolUse hook enforces this today** (`hooks/pre-tool-jira-write-guard.js` does not exist).
+**Write-op precondition check:** Before dispatching any write MCP call, verify Step 2.6 returned `approve`, Step 2.7 exited 0, and both `approval-<hash>.token` and `critique-<hash>.json` exist for this `payload_hash` (< 10 min old). `hooks/pre-tool-jira-write-guard.js` (registered in `hooks.json`) enforces this fresh token pair fail-closed.
 
-Read `./resources/operations-reference.md` and follow the section for the Step 2 classification (`Create`, `Edit`, `Search`, `View`, `Transition`, `Link`, `Comment`, `Assign`, `Worklog`, `Bulk`). For **cloudId authorization errors** and dual-namespace retry (`mcp__antigravity_ai_Atlassian__`, `R23`), future **hook-block telemetry** (`R21`), and **unsampled transition failures** (`R14`), follow `./resources/operations-and-telemetry.md`.
+Read `./resources/operations-reference.md` and follow the section for the Step 2 classification (`Create`, `Edit`, `Search`, `View`, `Transition`, `Link`, `Comment`, `Assign`, `Worklog`, `Bulk`). For **cloudId authorization errors** and dual-namespace retry (`mcp__antigravity_ai_Atlassian__`, `R23`), **hook-block telemetry** (`R21`), and **unsampled transition failures** (`R14`), follow `./resources/operations-and-telemetry.md`.
 
 ## Step 4 — Post-Operation Cache Updates
 
@@ -191,7 +191,7 @@ See `resources/REFERENCE.md` Section 5 for the HTTP status table.
 | Transition safety | Transition `id` from cache or fresh `getTransitionsForJiraIssue`, never guessed |
 | User disambiguation | `lookupJiraAccountId` multi-match results always disambiguated |
 | No fabricated values | All field values from cache `allowedValues` or user input |
-| Artifacts verified | Both `approval-<hash>.token` and `critique-<hash>.json` confirmed for exact `payload_hash` (< 10 min old); no hook backstop exists (Step 3) |
+| Artifacts verified | Both `approval-<hash>.token` and `critique-<hash>.json` confirmed for exact `payload_hash` (< 10 min old); enforced fail-closed by `hooks/pre-tool-jira-write-guard.js` (Step 3) |
 | Link verified | `scripts/skill/jira.js --validate-body` returned exit 0 before write dispatch (Step 2.7) |
 | Hash-bound approval | `approval-<hash>.token` on disk for exact `payload_hash` (LLM-verified per Step 3) |
 | Critique artifact age | `critique-<hash>.json` on disk for exact `payload_hash` and < 10 min old (LLM-verified per Step 3) |

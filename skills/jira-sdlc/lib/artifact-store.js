@@ -9,10 +9,11 @@
  *
  * Before dispatching a write MCP call, the LLM re-derives <hash> from the
  * final `tool_input` and verifies both files exist with mtime < TTL_MS, then
- * consumes (deletes) them on success. There is no hook backstop —
- * `hooks/pre-tool-jira-write-guard.js` does not exist and is not registered in
- * `hooks.json`; this check is the skill's own (see SKILL.md Step 3). Atomic
- * writes (tmp+rename) so a reader never sees a partial file.
+ * consumes (deletes) them on success. `hooks/pre-tool-jira-write-guard.js`
+ * (registered in `hooks.json`) provides a fail-closed PreToolUse backstop
+ * verifying a fresh (< TTL_MS) paired `approval-<hash>.token` +
+ * `critique-<hash>.json` in `storeDir()`. Atomic writes (tmp+rename) so a
+ * reader never sees a partial file.
  */
 
 const fs = require('fs');
@@ -30,6 +31,9 @@ const TTL_MS = 10 * 60 * 1000; // 10 minutes
 const TMPDIR_REAL = fs.realpathSync(os.tmpdir());
 
 function storeDir() {
+  if (process.env.SDLC_JIRA_STORE_DIR_OVERRIDE) {
+    return process.env.SDLC_JIRA_STORE_DIR_OVERRIDE;
+  }
   return path.join(TMPDIR_REAL, 'jira-sdlc');
 }
 

@@ -139,6 +139,9 @@ async def run_checks():
     assert ex_ns["next_escalated_model"]("flash_lite") == "flash"
     assert ex_ns["next_escalated_model"]("flash") == "pro"
     assert ex_ns["next_escalated_model"]("pro") == "pro"
+    assert ex_ns["next_escalated_model"]("flash_lite", "NEEDS_CONTEXT") == "flash_lite"
+    assert ex_ns["next_escalated_model"]("flash", "NEEDS_CONTEXT") == "flash"
+    assert ex_ns["next_escalated_model"]("inherit", "NEEDS_CONTEXT") == "inherit"
 
     sample_plan = (
         "# Demo Plan\\n\\n"
@@ -375,6 +378,7 @@ async def run_checks():
         # Case 7a: wf_args omits standard_worker_enum -> resolves "inherit" from real --meta CLI output
         meta_cmds = []
         dispatched_models = []
+        reviewer_models = []
 
         async def mock_exec_call_tool(tool_name, **kwargs):
             cmd = kwargs.get("CommandLine", "")
@@ -392,6 +396,8 @@ async def run_checks():
             if kwargs.get("type_name") == "task-implementer":
                 dispatched_models.append(kwargs.get("model"))
                 return {"task_id": "1", "status": "DONE", "files_touched": ["a.js"], "summary": "done"}
+            if kwargs.get("type_name") == "spec-compliance-reviewer":
+                reviewer_models.append(kwargs.get("model"))
             return {"verdict": "COMPLIANT", "tasks": [{"task_id": "1", "compliant": True, "issues": []}], "summary": "ok"}
 
         iso_ex_ns = load_workflow(workflow_paths["execute"], {
@@ -405,8 +411,10 @@ async def run_checks():
             plugin_root=str(repo_root),
         )
         assert res_inherit["status"] == "completed", f"run_execute failed: {res_inherit}"
+        assert res_inherit["completeness_verified"] is False, "small_plan skips execute state"
         assert any("--meta" in c for c in meta_cmds), f"Expected --meta call, got {meta_cmds}"
         assert dispatched_models == ["inherit"], f"Expected ['inherit'], got {dispatched_models}"
+        assert reviewer_models == ["pro"], f"P1-1: spec-compliance-reviewer must always use 'pro', got {reviewer_models}"
 
         # Case 7b: --meta command fails -> graceful fallback to "pro"
         dispatched_models.clear()
@@ -445,6 +453,132 @@ async def run_checks():
         )
         assert res_override["status"] == "completed"
         assert dispatched_models == ["pro"], f"Expected explicit ['pro'], got {dispatched_models}"
+
+        # Case 7d: P0-1 completeness_verified, P1-1 reviewer_model=='pro', P1-2 NEEDS_CONTEXT holds tier, P0-3 skip_high_risk
+        nc_plan = Path(tmpdir) / "nc-plan.md"
+        nc_plan.write_text(
+            "# Multi Plan\\n\\n"
+            "### Task 1: Context task\\n**Complexity:** Trivial\\n**Risk:** Low\\n**Depends on:** none\\n**Files:**\\n- Create: \`t1.js\`\\n\\n**Description:**\\nCreate t1.js.\\n\\n"
+            "### Task 2: Error code context task\\n**Complexity:** Trivial\\n**Risk:** Low\\n**Depends on:** Task 1\\n**Files:**\\n- Create: \`t2.js\`\\n\\n**Description:**\\nCreate t2.js.\\n\\n"
+            "### Task 3: Failing test escalation task\\n**Complexity:** Trivial\\n**Risk:** Low\\n**Depends on:** Task 2\\n**Files:**\\n- Create: \`t3.js\`\\n\\n**Description:**\\nCreate t3.js.\\n\\n"
+            "### Task 4: Standard reviewed task\\n**Complexity:** Standard\\n**Risk:** Low\\n**Depends on:** Task 3\\n**Files:**\\n- Create: \`t4.js\`\\n\\n**Description:**\\nCreate t4.js.\\n",
+            encoding="utf-8",
+        )
+        task_attempts = {"1": [], "2": [], "3": [], "4": []}
+        nc_prompts = []
+        nc_reviewer_models = []
+        nc_state_cmds = []
+
+        async def mock_nc_call_tool(tool_name, **kwargs):
+            cmd = kwargs.get("CommandLine", "")
+            nc_state_cmds.append(cmd)
+            if "execute-context-advisory.js" in cmd:
+                return 'Command exited with code 0.\\nCommand output:\\n{"guardrails":[],"standardWorkerEnum":"pro"}'
+            if "state/execute.js" in cmd and " read " in cmd:
+                return 'Command exited with code 0.\\nCommand output:\\n{"startedAt":"2026-11-25T00:00:00Z","waves":[]}'
+            if "git ls-files" in cmd:
+                return "Command exited with code 0.\\nCommand output:\\nt1.js\\nt2.js\\nt3.js\\nt4.js\\n"
+            if "git diff --stat" in cmd:
+                return "Command exited with code 0.\\nCommand output:\\n t1.js | 1 +\\n t2.js | 1 +\\n t3.js | 1 +\\n t4.js | 1 +\\n"
+            return "Command exited with code 0.\\nCommand output:\\n{}"
+
+        async def mock_nc_agent(**kwargs):
+            if kwargs.get("type_name") == "spec-compliance-reviewer":
+                nc_reviewer_models.append(kwargs.get("model"))
+                return {"verdict": "COMPLIANT", "tasks": [{"task_id": "4", "compliant": True, "issues": []}], "summary": "ok"}
+            role = kwargs.get("role", "")
+            tid = role.split(":")[0].replace("Task ", "").strip()
+            task_attempts[tid].append(kwargs.get("model"))
+            if tid == "1" and len(task_attempts["1"]) == 1:
+                return {"task_id": "1", "status": "NEEDS_CONTEXT", "files_touched": [], "concerns": ["missing schema path"], "summary": "Need schema path"}
+            if tid == "2" and len(task_attempts["2"]) == 1:
+                return {"task_id": "2", "status": "BLOCKED", "error_code": "NEEDS_CONTEXT", "files_touched": [], "summary": "Need API types"}
+            if tid == "3" and len(task_attempts["3"]) == 1:
+                return {"task_id": "3", "status": "BLOCKED", "error_code": "FAILED_TESTS", "files_touched": [], "summary": "Test failed"}
+            if tid == "1":
+                nc_prompts.append(kwargs.get("prompt", ""))
+            return {"task_id": tid, "status": "DONE", "files_touched": [f"t{tid}.js"], "summary": f"done {tid}"}
+
+        nc_ns = load_workflow(workflow_paths["execute"], {
+            "call_tool": mock_nc_call_tool,
+            "agent": mock_nc_agent,
+        })
+        nc_res = await nc_ns["run_execute"](
+            wf_args={"plan_file": str(nc_plan), "quality": "balanced", "branch": "feat/nc-smoke"},
+            cwd=tmpdir,
+            plugin_root=str(repo_root),
+        )
+        assert nc_res["status"] == "completed", f"nc_res failed: {nc_res}"
+        assert nc_res["completeness_verified"] is True, f"P0-1: expected completeness_verified=True: {nc_res}"
+        assert nc_reviewer_models == ["pro"], f"P1-1: expected ['pro'], got {nc_reviewer_models}"
+        assert task_attempts["1"] == ["flash", "flash"], f"P1-2: NEEDS_CONTEXT must hold tier, got {task_attempts['1']}"
+        assert task_attempts["2"] == ["flash", "flash"], f"P1-2: error_code=NEEDS_CONTEXT must hold tier, got {task_attempts['2']}"
+        assert task_attempts["3"] == ["flash", "pro"], f"FAILED_TESTS must escalate flash->pro, got {task_attempts['3']}"
+        assert nc_res["escalations_used"] == 1, f"Only Task 3 should count as escalation, got {nc_res['escalations_used']}"
+        assert nc_prompts and "Need schema path" in nc_prompts[0] and "missing schema path" in nc_prompts[0]
+        assert any("state/execute.js" in c and "verify-completeness" in c for c in nc_state_cmds)
+
+        # Case 7e: P0-3 skip_high_risk in execute.py (mixed wave plan continues; all-high-risk returns skipped)
+        shr_plan = Path(tmpdir) / "shr-plan.md"
+        shr_plan.write_text(
+            "# Skip High Risk Plan\\n\\n"
+            "### Task 1: Safe prep\\n**Complexity:** Trivial\\n**Risk:** Low\\n**Depends on:** none\\n**Files:**\\n- Create: \`safe.js\`\\n\\n**Description:**\\nCreate safe.js.\\n\\n"
+            "### Task 2: Risky migration\\n**Complexity:** Trivial\\n**Risk:** High\\n**Depends on:** Task 1\\n**Files:**\\n- Create: \`risky.sql\`\\n\\n**Description:**\\nCreate risky.sql.\\n",
+            encoding="utf-8",
+        )
+        shr_cmds = []
+        shr_agents = []
+
+        async def mock_shr_call_tool(tool_name, **kwargs):
+            cmd = kwargs.get("CommandLine", "")
+            shr_cmds.append(cmd)
+            if "execute-context-advisory.js" in cmd:
+                return 'Command exited with code 0.\\nCommand output:\\n{"guardrails":[],"standardWorkerEnum":"pro"}'
+            if "state/execute.js" in cmd and " read " in cmd:
+                return 'Command exited with code 0.\\nCommand output:\\n{"startedAt":"2026-11-25T00:00:00Z","waves":[]}'
+            if "git ls-files" in cmd:
+                return "Command exited with code 0.\\nCommand output:\\nsafe.js\\n"
+            if "git diff --stat" in cmd:
+                return "Command exited with code 0.\\nCommand output:\\n safe.js | 1 +\\n"
+            return "Command exited with code 0.\\nCommand output:\\n{}"
+
+        async def mock_shr_agent(**kwargs):
+            shr_agents.append(kwargs)
+            return {"task_id": "1", "status": "DONE", "files_touched": ["safe.js"], "summary": "done safe"}
+
+        shr_ns = load_workflow(workflow_paths["execute"], {
+            "call_tool": mock_shr_call_tool,
+            "agent": mock_shr_agent,
+        })
+        shr_res = await shr_ns["run_execute"](
+            wf_args={"plan_file": str(shr_plan), "quality": "balanced", "branch": "feat/shr", "auto": False, "skip_high_risk": True},
+            cwd=tmpdir,
+            plugin_root=str(repo_root),
+        )
+        assert shr_res["status"] == "completed", f"Expected completed with Wave 2 skipped, got: {shr_res}"
+        assert shr_res["completeness_verified"] is True
+        assert shr_res["tasks_skipped"] == 1 and shr_res["skipped_task_ids"] == ["2"]
+        assert shr_res["waves"][1]["status"] == "skipped"
+        assert len(shr_agents) == 1
+        assert any("task-fail" in c and "--skipped-dependency" in c for c in shr_cmds)
+
+        # All-high-risk plan with skip_high_risk=True returns status=='skipped' cleanly
+        all_hr_plan = Path(tmpdir) / "all-hr-plan.md"
+        all_hr_plan.write_text(
+            "# All High Risk\\n\\n"
+            "### Task 1: Risky only\\n**Complexity:** Trivial\\n**Risk:** High\\n**Depends on:** none\\n**Files:**\\n- Create: \`drop.sql\`\\n\\n**Description:**\\nRisky.\\n",
+            encoding="utf-8",
+        )
+        shr_cmds.clear()
+        shr_agents.clear()
+        all_hr_res = await shr_ns["run_execute"](
+            wf_args={"plan_file": str(all_hr_plan), "quality": "balanced", "branch": "feat/all-hr", "auto": False, "skip_high_risk": True},
+            cwd=tmpdir,
+            plugin_root=str(repo_root),
+        )
+        assert all_hr_res["status"] == "skipped", f"Expected skipped when all waves skipped, got: {all_hr_res}"
+        assert all_hr_res["completeness_verified"] is True
+        assert len(shr_agents) == 0
 
     print(json.dumps({"ok": True, "workflows_checked": sorted(workflow_paths.keys())}))
 
@@ -592,6 +726,8 @@ async def run_ship_tests():
         async def mock_call_tool(tool_name, **kwargs):
             cmd = kwargs.get("CommandLine", "")
             cmds.append(cmd)
+            if "verify-completeness.js" in cmd:
+                raise AssertionError(f"P0-1: ship.py must NOT invoke verify-completeness.js: {cmd}")
             if "state/ship.js" in cmd and " init " in cmd:
                 return f"Command exited with code 0.\\nCommand output:\\n{json.dumps({'filePath': str(tmp / 'ship-state.json')})}"
             if "state/ship.js" in cmd and "cleanup-pipeline" in cmd:
@@ -660,6 +796,7 @@ async def run_ship_tests():
         assert "Ship: remote review fix/reply" in all_roles, f"lean remote fix/reply agent missing: {all_roles}"
 
         assert any("decide --step review" in c and "Verdict: APPROVED" in c and "Counts:" in c for c in cmds), f"Missing decide --step review: {cmds}"
+        assert not any("verify-completeness.js" in c for c in cmds), f"P0-1: ship.py must NOT call verify-completeness.js: {cmds}"
         assert any("review-cleanup.js" in c for c in cmds), f"review-cleanup.js must be invoked: {cmds}"
         assert not review_manifest.exists(), "review-cleanup.js should remove manifest file"
         assert tmp.is_dir(), "review-cleanup.js safety guard must preserve non-sdlc-review- dir"
@@ -696,6 +833,8 @@ async def run_ship_tests():
         async def mock_hr_call_tool(tool_name, **kwargs):
             cmd = kwargs.get("CommandLine", "")
             hr_cmds.append(cmd)
+            if "verify-completeness.js" in cmd:
+                raise AssertionError(f"P0-1: ship.py must NOT invoke verify-completeness.js: {cmd}")
             if "state/ship.js" in cmd and " init " in cmd:
                 return f"Command exited with code 0.\\nCommand output:\\n{json.dumps({'filePath': str(tmp / 'hr-ship.json')})}"
             if "ship-workspace-setup.js" in cmd:
@@ -758,11 +897,46 @@ async def run_ship_tests():
             "call_tool": mock_hr_resume_call_tool,
             "agent": mock_hr_agent,
         })
-        hr_res2 = await hr_res_ns["main"]()
-        assert hr_res2["status"] == "completed", f"Expected completed on approved resume, got: {hr_res2}"
+        hr_pause_commit = await hr_res_ns["main"]()
+        assert hr_pause_commit["status"] == "needs_consent" and hr_pause_commit["gate"] == "commit", f"P0-3: expected commit consent gate when not auto, got: {hr_pause_commit}"
         assert any(c.get("type_name") == "task-implementer" for c in hr_agents)
-        assert any("verify-completeness.js" in c for c in hr_cmds)
-        assert any("stage-post-execute" in c for c in hr_cmds)
+        assert not any(c.get("role") == "Ship: commit-sdlc" for c in hr_agents), "commit-sdlc must not run before approve_commit"
+        assert not any("verify-completeness.js" in c for c in hr_cmds)
+        assert any("state/execute.js" in c and "verify-completeness" in c for c in hr_cmds)
+        assert hr_pause_commit["artifacts"]["execute"]["completeness_verified"] is True
+
+        # Second resume after user approves commit (injects --auto to leaf commit-sdlc)
+        async def mock_hr_commit_resume_call_tool(tool_name, **kwargs):
+            cmd = kwargs.get("CommandLine", "")
+            if "state/ship.js" in cmd and " read" in cmd:
+                return f"Command exited with code 0.\\nCommand output:\\n{json.dumps({'steps': [{'name': 'execute', 'status': 'completed'}, {'name': 'commit', 'status': 'pending'}], 'decisions': []})}"
+            return await mock_hr_call_tool(tool_name, **kwargs)
+
+        hr_cmds.clear()
+        hr_agents.clear()
+        hr_res_ns2 = load_ship({
+            "args": {"prepare_output_file": str(hr_prepare_resume), "cwd": tmpdir, "plugin_root": str(repo_root), "approve_high_risk": True, "approve_commit": True},
+            "call_tool": mock_hr_commit_resume_call_tool,
+            "agent": mock_hr_agent,
+        })
+        hr_res2 = await hr_res_ns2["main"]()
+        assert hr_res2["status"] == "completed", f"Expected completed on approved commit resume, got: {hr_res2}"
+        commit_agents = [c for c in hr_agents if c.get("role") == "Ship: commit-sdlc"]
+        assert len(commit_agents) == 1 and "--auto" in commit_agents[0]["prompt"], f"P0-3: commit-sdlc must receive --auto, got: {commit_agents}"
+        assert not any("verify-completeness.js" in c for c in hr_cmds)
+
+        # Resume with skip_high_risk=True skips execute without looping into needs_consent
+        hr_cmds.clear()
+        hr_agents.clear()
+        hr_skip_ns = load_ship({
+            "args": {"prepare_output_file": str(hr_prepare_resume), "cwd": tmpdir, "plugin_root": str(repo_root), "skip_high_risk": True, "approve_commit": True},
+            "call_tool": mock_hr_resume_call_tool,
+            "agent": mock_hr_agent,
+        })
+        hr_skip_res = await hr_skip_ns["main"]()
+        assert hr_skip_res["status"] == "completed", f"P0-3: expected completed after skip_high_risk, got: {hr_skip_res}"
+        assert not any(c.get("type_name") == "task-implementer" for c in hr_agents)
+        assert hr_skip_res["steps"][0]["step"] == "execute" and hr_skip_res["steps"][0]["status"] == "skipped"
 
     # 8d. verify-pipeline deterministic classification (always-proposal skips LLM; actionable dispatches lean fix)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -951,6 +1125,191 @@ async def run_ship_tests():
         assert "pre-PR local review" in rr_agents[0]["prompt"]
         assert any("review-cleanup.js" in c for c in rr_cmds)
         assert not rev_manifest.exists() and not review_dir.exists()
+
+    # 8f. P0-3 leaf consent gates (commit-fixes, version, pr + --auto injection), skip_ci_fix, and P0-1 execute status checks
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        leaf_prepare = tmp / "leaf-prepare.json"
+        leaf_prepare.write_text(json.dumps({
+            "flags": {"auto": False, "resume": True, "steps": ["received-review", "commit-fixes", "version", "pr"], "workspace": "continue", "reviewThreshold": "high"},
+            "context": {"currentBranch": "feat/leaf-gates", "defaultBranch": "main", "expectedBranch": "feat/leaf-gates", "worktree": {"inLinkedWorktree": False}},
+            "resume": {"found": True, "fullPath": str(tmp / "leaf-ship.json"), "nextPendingStep": "commit-fixes"},
+            "steps": [
+                {"name": "received-review", "skill": "received-review-sdlc", "model": "pro", "status": "conditional", "args": ""},
+                {"name": "commit-fixes", "skill": "commit-sdlc", "model": "flash", "status": "conditional", "args": "--expected-branch feat/leaf-gates"},
+                {"name": "version", "skill": "version-sdlc", "model": "flash", "status": "will_run", "args": "--bump patch --expected-branch feat/leaf-gates"},
+                {"name": "pr", "skill": "pr-sdlc", "model": "flash", "status": "will_run", "args": "--expected-branch feat/leaf-gates"},
+                {"name": "cleanup", "skill": None, "model": None, "status": "will_run"},
+            ],
+        }), encoding="utf-8")
+
+        leaf_state_steps = [
+            {"name": "received-review", "status": "completed"},
+            {"name": "commit-fixes", "status": "pending"},
+            {"name": "version", "status": "pending"},
+            {"name": "pr", "status": "pending"},
+        ]
+        leaf_agents = []
+
+        async def mock_leaf_call_tool(tool_name, **kwargs):
+            cmd = kwargs.get("CommandLine", "")
+            if "verify-completeness.js" in cmd:
+                raise AssertionError(f"P0-1: ship.py must NOT invoke verify-completeness.js: {cmd}")
+            if "state/ship.js" in cmd and " read" in cmd:
+                return f"Command exited with code 0.\\nCommand output:\\n{json.dumps({'steps': leaf_state_steps, 'decisions': []})}"
+            if "git status --porcelain" in cmd:
+                return "Command exited with code 0.\\nCommand output:\\n M src/fix.js\\n"
+            if "rebase-onto-base.js" in cmd:
+                return 'Command exited with code 0.\\nCommand output:\\n{"status":"up_to_date"}'
+            if "cleanup-pipeline" in cmd:
+                return 'Command exited with code 0.\\nCommand output:\\n{"currentRun":{"valid":true,"cleaned":true},"gc":{}}'
+            return "Command exited with code 0.\\nCommand output:\\n{}"
+
+        async def mock_leaf_agent(**kwargs):
+            leaf_agents.append(kwargs)
+            if kwargs.get("role") == "Ship: version-sdlc":
+                return {"status": "success", "new_tag": "v1.0.1", "version": "1.0.1", "summary": "tagged"}
+            if kwargs.get("role") == "Ship: pr-sdlc":
+                return {"status": "success", "pr_number": 55, "pr_url": "https://example/pr/55", "summary": "opened"}
+            return {"status": "success", "summary": "ok"}
+
+        # commit-fixes gate -> gate == "commit"
+        g_cf = await load_ship({
+            "args": {"prepare_output_file": str(leaf_prepare), "cwd": tmpdir, "plugin_root": str(repo_root)},
+            "call_tool": mock_leaf_call_tool,
+            "agent": mock_leaf_agent,
+        })["main"]()
+        assert g_cf["status"] == "needs_consent" and g_cf["gate"] == "commit" and g_cf["step"] == "commit-fixes"
+        assert len(leaf_agents) == 0
+
+        # approve_commit -> commit-fixes runs with --auto, then pauses at gate == "version"
+        g_ver = await load_ship({
+            "args": {"prepare_output_file": str(leaf_prepare), "cwd": tmpdir, "plugin_root": str(repo_root), "approve_commit": True},
+            "call_tool": mock_leaf_call_tool,
+            "agent": mock_leaf_agent,
+        })["main"]()
+        assert g_ver["status"] == "needs_consent" and g_ver["gate"] == "version"
+        assert len(leaf_agents) == 1 and "--auto" in leaf_agents[0]["prompt"]
+
+        # approve_version (with commit-fixes already completed in state) -> version runs with --auto, then pauses at gate == "pr"
+        leaf_state_steps[1]["status"] = "completed"
+        leaf_agents.clear()
+        g_pr = await load_ship({
+            "args": {"prepare_output_file": str(leaf_prepare), "cwd": tmpdir, "plugin_root": str(repo_root), "approve_version": True},
+            "call_tool": mock_leaf_call_tool,
+            "agent": mock_leaf_agent,
+        })["main"]()
+        assert g_pr["status"] == "needs_consent" and g_pr["gate"] == "pr"
+        assert len(leaf_agents) == 1 and leaf_agents[0]["role"] == "Ship: version-sdlc" and "--auto" in leaf_agents[0]["prompt"]
+
+        # approve_pr (with version already completed in state) -> pr runs with --auto and completes
+        leaf_state_steps[2]["status"] = "completed"
+        leaf_agents.clear()
+        g_done = await load_ship({
+            "args": {"prepare_output_file": str(leaf_prepare), "cwd": tmpdir, "plugin_root": str(repo_root), "approve_pr": True},
+            "call_tool": mock_leaf_call_tool,
+            "agent": mock_leaf_agent,
+        })["main"]()
+        assert g_done["status"] == "completed"
+        assert len(leaf_agents) == 1 and leaf_agents[0]["role"] == "Ship: pr-sdlc" and "--auto" in leaf_agents[0]["prompt"]
+
+        # 8f-2: skip_ci_fix on verify_pipeline (interactive mode)
+        vp_int_prepare = tmp / "vp-int-prepare.json"
+        vp_int_prepare.write_text(json.dumps({
+            "flags": {"auto": False, "steps": ["verify-pipeline"], "workspace": "continue", "verifyPipelineMaxIterations": 2},
+            "context": {"currentBranch": "feat/vp-int", "defaultBranch": "main", "expectedBranch": "feat/vp-int", "worktree": {"inLinkedWorktree": False}},
+            "resume": {"found": False},
+            "steps": [
+                {"name": "verify-pipeline", "skill": None, "model": None, "status": "will_run", "args": "--timeout 60"},
+                {"name": "cleanup", "skill": None, "model": None, "status": "will_run"},
+            ],
+        }), encoding="utf-8")
+        vp_int_cmds = []
+        vp_int_agents = []
+
+        async def mock_vp_int_call_tool(tool_name, **kwargs):
+            cmd = kwargs.get("CommandLine", "")
+            vp_int_cmds.append(cmd)
+            if "verify-completeness.js" in cmd:
+                raise AssertionError(f"P0-1: ship.py must NOT invoke verify-completeness.js: {cmd}")
+            if "state/ship.js" in cmd and " init " in cmd:
+                return f"Command exited with code 0.\\nCommand output:\\n{json.dumps({'filePath': str(tmp / 'vp-int-ship.json')})}"
+            if "state/ship.js" in cmd and " read" in cmd:
+                return f"Command exited with code 0.\\nCommand output:\\n{json.dumps({'steps': [{'name': 'verify-pipeline', 'status': 'in_progress'}], 'decisions': []})}"
+            if "verify-pipeline.js" in cmd:
+                return 'Command exited with code 0.\\nCommand output:\\n{"status":"failed","prNumber":91,"failedChecks":[{"name":"test","conclusion":"fail"}]}'
+            if "cleanup-pipeline" in cmd:
+                return 'Command exited with code 0.\\nCommand output:\\n{"currentRun":{"valid":true,"cleaned":true},"gc":{}}'
+            return "Command exited with code 0.\\nCommand output:\\n{}"
+
+        async def mock_vp_int_agent(**kwargs):
+            vp_int_agents.append(kwargs)
+            return {"status": "success"}
+
+        vp_pause = await load_ship({
+            "args": {"prepare_output_file": str(vp_int_prepare), "cwd": tmpdir, "plugin_root": str(repo_root)},
+            "call_tool": mock_vp_int_call_tool,
+            "agent": mock_vp_int_agent,
+        })["main"]()
+        assert vp_pause["status"] == "needs_consent" and vp_pause["gate"] == "verify_pipeline"
+
+        vp_int_resume = tmp / "vp-int-resume.json"
+        vp_int_resume.write_text(json.dumps({
+            "flags": {"auto": False, "resume": True, "steps": ["verify-pipeline"], "workspace": "continue", "verifyPipelineMaxIterations": 2},
+            "context": {"currentBranch": "feat/vp-int", "defaultBranch": "main", "expectedBranch": "feat/vp-int", "worktree": {"inLinkedWorktree": False}},
+            "resume": {"found": True, "fullPath": str(tmp / "vp-int-ship.json"), "nextPendingStep": "verify-pipeline"},
+            "steps": [
+                {"name": "verify-pipeline", "skill": None, "model": None, "status": "will_run", "args": "--timeout 60"},
+                {"name": "cleanup", "skill": None, "model": None, "status": "will_run"},
+            ],
+        }), encoding="utf-8")
+        vp_int_cmds.clear()
+        vp_skip = await load_ship({
+            "args": {"prepare_output_file": str(vp_int_resume), "cwd": tmpdir, "plugin_root": str(repo_root), "skip_ci_fix": True},
+            "call_tool": mock_vp_int_call_tool,
+            "agent": mock_vp_int_agent,
+        })["main"]()
+        assert vp_skip["status"] == "completed", f"P0-3: skip_ci_fix must continue cleanly, got: {vp_skip}"
+        assert len(vp_int_agents) == 0
+        assert any("skip --step verify-pipeline" in c for c in vp_int_cmds)
+        assert vp_skip["steps"][0]["step"] == "verify-pipeline" and vp_skip["steps"][0]["status"] == "skipped"
+
+        # 8f-3: P0-1 ship.py _run_execute_step accepts status in ('complete', 'completed', None) without verify-completeness.js
+        for mock_status_payload in (
+            {"status": "complete", "tasks_completed": 1, "tasks_total": 1},
+            {"tasks_completed": 1, "tasks_total": 1},
+        ):
+            ex_cmds = []
+
+            async def mock_ex_only_call_tool(tool_name, **kwargs):
+                cmd = kwargs.get("CommandLine", "")
+                ex_cmds.append(cmd)
+                if "verify-completeness.js" in cmd:
+                    raise AssertionError(f"P0-1: ship.py must NOT invoke verify-completeness.js: {cmd}")
+                if "ship-git-ops.js" in cmd and "stage-post-execute" in cmd:
+                    return 'Command exited with code 0.\\nCommand output:\\n{"staged":[]}'
+                return "Command exited with code 0.\\nCommand output:\\n{}"
+
+            ex_ship = load_ship({"call_tool": mock_ex_only_call_tool})
+            async def mock_run_exec(**kwargs):
+                return dict(mock_status_payload)
+            ex_ship["_load_subworkflow"] = lambda rel, pr: {"run_execute": mock_run_exec}
+            ok_ex, paused_ex = await ex_ship["_run_execute_step"](
+                step={"name": "execute", "args": ""},
+                wf_args={},
+                flags={"steps": ["execute"]},
+                prior_status="pending",
+                plan_file=str(tmp / "dummy.md"),
+                state_file=str(tmp / "ship-state.json"),
+                execute_branch="feat/ex-only",
+                work_dir=tmpdir,
+                plugin_root=str(repo_root),
+                prepare_file=str(vp_int_prepare),
+                artifacts={},
+                step_outcomes=[],
+            )
+            assert ok_ex is True and paused_ex is None
+            assert not any("verify-completeness.js" in c for c in ex_cmds)
 
     print(json.dumps({"ok": True, "ship_depth1_verified": True}))
 

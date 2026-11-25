@@ -32,8 +32,8 @@ When `run_workflow` is available (after Plan Mode Check, Step 0/1 explicit `EXPL
   ```
 
 Handle the structured JSON returned by `execute.py`:
-- `status === "needs_consent"` (`gate === "high_risk_wave"`): if `--auto`, re-invoke with `"resume": true, "approve_high_risk": true`; otherwise prompt via `ask_question` (**yes** / **skip** / **cancel**). On **yes**, re-invoke with `"resume": true, "approve_high_risk": true` (keeping the same `standard_worker_enum` and `prior_wave_context_caps`). On **cancel**, stop and preserve state for `--resume`.
-- `status === "completed"` or `"failed"`: run Learning Capture (Step 8-ter) if applicable, then render the **Step 9 (REPORT)** summary from the returned JSON (`tasks_completed`, `tasks_total`, `waves_executed`, `escalations_used`, `spec_reviews`, `openspec_warnings`). Stop here.
+- `status === "needs_consent"` (`gate === "high_risk_wave"`): if `--auto`, re-invoke with `"resume": true, "approve_high_risk": true`; otherwise prompt via `ask_question` (**yes** / **skip** / **cancel**). On **yes**, re-invoke with `"resume": true, "approve_high_risk": true`. On **skip**, re-invoke with `"resume": true, "skip_high_risk": true` (marks the gated wave skipped cleanly and continues; returns `status === "skipped"` if all tasks are skipped). Keep `standard_worker_enum` and `prior_wave_context_caps` on resume. On **cancel**, stop and preserve state for `--resume`.
+- `status === "completed"`, `"skipped"`, or `"failed"`: run Learning Capture (Step 8-ter) if applicable, then render the **Step 9 (REPORT)** summary from the returned JSON (`tasks_completed`, `tasks_total`, `waves_executed`, `escalations_used`, `completeness_verified`, `spec_reviews`, `openspec_warnings`). Stop here.
 
 ## Context Optimization
 

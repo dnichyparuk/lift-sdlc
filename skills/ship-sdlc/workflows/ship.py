@@ -106,6 +106,13 @@ PR_STEP_SCHEMA = {
     "required": ["status", "summary"],
 }
 
+LEAF_CONSENT_GATES = {
+    "commit": ("commit", "approve_commit"),
+    "commit-fixes": ("commit", "approve_commit"),
+    "version": ("version", "approve_version"),
+    "pr": ("pr", "approve_pr"),
+}
+
 
 def _wf_log(*parts):
     fn = globals().get("log")
@@ -444,6 +451,7 @@ async def _run_execute_step(
         "commit_waves": bool(flags.get("executeCommitWaves") or "--commit-waves" in step_args),
         "branch": execute_branch,
         "approve_high_risk": bool(wf_args.get("approve_high_risk")),
+        "skip_high_risk": bool(wf_args.get("skip_high_risk")),
         "cwd": work_dir,
         "plugin_root": plugin_root,
     }
@@ -473,7 +481,23 @@ async def _run_execute_step(
         }
         return False, paused
 
-    if not isinstance(exec_res, dict) or exec_res.get("status") not in ("completed", "success"):
+    if isinstance(exec_res, dict) and exec_res.get("status") == "skipped":
+        artifacts["execute"] = exec_res
+        reason = "high-risk wave skipped"
+        await _run_ship_state(
+            plugin_root,
+            work_dir,
+            f"skip --step execute --reason {shlex.quote(reason)}",
+            summary="Skip step execute",
+        )
+        step_outcomes.append({"step": "execute", "status": "skipped", "reason": reason})
+        return True, None
+
+    if (
+        not isinstance(exec_res, dict)
+        or exec_res.get("status") not in ("complete", "completed", "success", None)
+        or exec_res.get("error")
+    ):
         err_msg = (
             (exec_res or {}).get("error")
             or (exec_res or {}).get("summary")
@@ -483,18 +507,6 @@ async def _run_execute_step(
         return False, None
 
     artifacts["execute"] = exec_res
-
-    if plan_file and state_file:
-        vc_script = str(Path(plugin_root) / "scripts" / "util" / "verify-completeness.js")
-        vrc, vout, verr = await run_cmd(
-            f"node {shlex.quote(vc_script)} --state-file {shlex.quote(state_file)} --plan-file {shlex.quote(plan_file)}",
-            summary="Verify plan completeness",
-            cwd=work_dir,
-        )
-        if vrc != 0:
-            err_msg = verr or vout or f"verify-completeness failed (exit {vrc})"
-            await _fail_step(plugin_root, work_dir, "execute", err_msg, step_outcomes, exit_code=vrc)
-            return False, None
 
     git_ops = str(Path(plugin_root) / "scripts" / "util" / "ship-git-ops.js")
     src, sout, serr = await run_cmd(
@@ -645,6 +657,7 @@ async def _run_verify_pipeline_step(
     state_flag = f" --state-file {shlex.quote(state_file)}" if state_file else ""
     vp_final = {}
     paused_gate = None
+    skip_ci_fix: bool = bool(wf_args.get("skip_ci_fix"))
 
     for iteration in range(max_iters):
         vrc, vout, _ = await run_cmd(
@@ -657,6 +670,18 @@ async def _run_verify_pipeline_step(
         if vp_status in ("green", "skipped", "timeout", "error"):
             break
         if vp_status == "failed":
+            if skip_ci_fix:
+                vp_final["skipped_ci_fix"] = True
+                artifacts["verify_pipeline"] = vp_final
+                reason = "CI fix skipped by user"
+                await _run_ship_state(
+                    plugin_root,
+                    work_dir,
+                    f"skip --step verify-pipeline --reason {shlex.quote(reason)}",
+                    summary="Skip verify-pipeline",
+                )
+                step_outcomes.append({"step": "verify-pipeline", "status": "skipped", "reason": reason, "result": vp_final})
+                return vp_final, None
             if not auto and not wf_args.get("approve_ci_fix"):
                 paused_gate = {
                     "status": "needs_consent",
@@ -1450,9 +1475,33 @@ async def main():
             continue
 
         # ---- Main-level leaf agent step dispatch (commit, received-review, commit-fixes, version, pr) ----
-        await _run_ship_state(plugin_root, work_dir, f"start --step {shlex.quote(name)}", summary=f"Start step {name}")
         skill_name = step.get("skill")
-        step_args = step.get("args") or ""
+        step_args = (step.get("args") or "").strip()
+
+        if name in LEAF_CONSENT_GATES:
+            gate_name, approve_key = LEAF_CONSENT_GATES[name]
+            approved = bool(
+                auto
+                or wf_args.get(approve_key)
+                or (name == "commit-fixes" and wf_args.get("approve_commit_fixes"))
+            )
+            if not approved:
+                paused_gate = {
+                    "status": "needs_consent",
+                    "gate": gate_name,
+                    "step": name,
+                    "skill": skill_name,
+                    "args": step_args,
+                    "branch": execute_branch,
+                    "state_file": state_file,
+                    "work_dir": work_dir,
+                    "prepare_output_file": prepare_file,
+                }
+                break
+            if not re.search(r"(?:^|\s)--auto(?:\s|$)", step_args):
+                step_args = f"{step_args} --auto".strip()
+
+        await _run_ship_state(plugin_root, work_dir, f"start --step {shlex.quote(name)}", summary=f"Start step {name}")
 
         step_model = to_agy_model(step.get("model"))
         step_schema = STEP_RESULT_SCHEMA

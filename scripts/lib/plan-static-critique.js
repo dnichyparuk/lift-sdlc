@@ -202,7 +202,7 @@ function evaluateG4(parsedTasks, ancestorsByTask) {
 
 /**
  * G10: verify every Modify: file path exists on disk OR is listed under Create:
- * in an earlier task (strictly lower task number or transitive dependency).
+ * in an explicit transitive dependency task (Depends on:).
  * @param {Array<{ number: number, files: { create: string[], modify: string[] } }>} parsedTasks
  * @param {Map<number, Set<number>>} ancestorsByTask
  * @param {string} resolvedRoot
@@ -232,17 +232,21 @@ function evaluateG10(parsedTasks, ancestorsByTask, resolvedRoot) {
       const creators = createdByPath.get(filePath);
       if (creators && creators.size > 0) {
         const precededByCreator = [...creators].some(
-          creatorNum => creatorNum < task.number || ancestors.has(creatorNum)
+          creatorNum => creatorNum !== task.number && ancestors.has(creatorNum)
         );
         if (precededByCreator) {
           continue;
         }
         const sortedCreators = [...creators].sort((a, b) => a - b);
+        const otherCreators = sortedCreators.filter(c => c !== task.number);
+        const message = otherCreators.length > 0
+          ? `File '${filePath}' listed as Modify: in Task ${task.number} is created by Task ${otherCreators.join(', Task ')} which does not precede Task ${task.number} via explicit Depends on: Task ${otherCreators.join(' / Task ')}`
+          : `File '${filePath}' listed as Modify: in Task ${task.number} is created by Task ${sortedCreators.join(', Task ')} which does not precede Task ${task.number}`;
         issues.push({
           gateId: 'G10',
           severity: 'error',
           taskRef: `Task ${task.number}`,
-          message: `File '${filePath}' listed as Modify: in Task ${task.number} is created by Task ${sortedCreators.join(', Task ')} which does not precede Task ${task.number}`,
+          message,
           blocking: true,
         });
         continue;

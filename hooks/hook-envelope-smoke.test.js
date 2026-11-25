@@ -48,7 +48,7 @@ function resolveHookScript(command) {
 }
 
 /** Spawn a hook script from PLUGIN_ROOT (mirroring agy host behavior) with JSON stdin. */
-function spawnHook(command, payload) {
+function spawnHook(command, payload, extraEnv = {}) {
   const scriptPath = resolveHookScript(command);
   const res = spawnSync(process.execPath, [scriptPath], {
     cwd: PLUGIN_ROOT,
@@ -59,6 +59,8 @@ function spawnHook(command, payload) {
       ...process.env,
       // Ensure offline / isolated execution without inheriting external overrides
       SDLC_STATE_DIR_OVERRIDE: '',
+      SDLC_JIRA_STORE_DIR_OVERRIDE: '',
+      ...extraEnv,
     },
   });
   return res;
@@ -220,20 +222,51 @@ describe('hook-envelope-smoke (all 9 hooks.json scripts)', () => {
     assert.equal(parsed.decision, 'allow');
   });
 
-  it('PreToolUse (jira-write-guard) fails closed (deny) for createJiraIssue without approval token', () => {
+  it('PreToolUse (jira-write-guard) denies without approval token and allows with fresh paired artifacts', () => {
     const hook = registered.find((r) => r.group === 'jira-write-guard');
-    const res = spawnHook(hook.command, {
+    const tempStore = fs.mkdtempSync(path.join(os.tmpdir(), 'jira-guard-smoke-'));
+    const payload = {
       cwd: tempRepo,
       workspacePaths: [tempRepo],
       toolCall: {
         name: 'mcp_atlassian_createJiraIssue',
         args: { projectKey: 'DEMO', summary: 'Smoke test issue' },
       },
-    });
-    assert.equal(res.status, 0, `stderr: ${res.stderr}`);
-    const parsed = JSON.parse(res.stdout.trim());
-    assertValidDecisionEnvelope(parsed, 'jira-write-guard');
-    assert.equal(parsed.decision, 'deny');
+    };
+
+    try {
+      // (a) Fail-closed deny when no approval token exists
+      const denyRes = spawnHook(hook.command, payload, {
+        SDLC_JIRA_STORE_DIR_OVERRIDE: tempStore,
+      });
+      assert.equal(denyRes.status, 0, `stderr: ${denyRes.stderr}`);
+      const denyParsed = JSON.parse(denyRes.stdout.trim());
+      assertValidDecisionEnvelope(denyParsed, 'jira-write-guard deny');
+      assert.equal(denyParsed.decision, 'deny');
+
+      // (b) Allow when a fresh paired approval-<hash>.token + critique-<hash>.json exists
+      const testHash = 'a'.repeat(64);
+      fs.writeFileSync(
+        path.join(tempStore, `critique-${testHash}.json`),
+        JSON.stringify({ initial: 'draft', findings: [], final: 'draft' }),
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tempStore, `approval-${testHash}.token`),
+        String(Date.now()),
+        'utf8'
+      );
+
+      const allowRes = spawnHook(hook.command, payload, {
+        SDLC_JIRA_STORE_DIR_OVERRIDE: tempStore,
+      });
+      assert.equal(allowRes.status, 0, `stderr: ${allowRes.stderr}`);
+      const allowParsed = JSON.parse(allowRes.stdout.trim());
+      assertValidDecisionEnvelope(allowParsed, 'jira-write-guard allow');
+      assert.equal(allowParsed.decision, 'allow');
+    } finally {
+      fs.rmSync(tempStore, { recursive: true, force: true });
+    }
   });
 
   for (const stopGroup of ['stop-block', 'state-save', 'plan-integrity-guard']) {

@@ -139,13 +139,14 @@ Check `.sdlc/local.json` for `ship.engine`:
      Present workspace selection via `ask_question` (**branch** | **worktree** | **continue** on `current_branch`). If approved, re-invoke `ship.py` **WITHOUT `--resume`** in `raw_args` and pass `workspace_flag: "branch"|"worktree"|"continue"` in `Args`.
    - **Post-init `status === "needs_consent"` / `"paused_conflicts"` / `"paused_gate"` (state file IS preserved on disk):**
      Present the gate prompt via `ask_question`. If approved, re-invoke `ship.py` **WITH `--resume`** appended to `raw_args` plus the gate's approval flag in `Args`:
-     - **`gate === "high_risk_wave"`** (propagated from `execute.py`): ask via `ask_question` (**yes** | **skip** | **cancel**). On **yes**, re-invoke `ship.py` with `--resume` in `raw_args` and `approve_high_risk: true` in `Args`. On **cancel**, stop and preserve state for `/ship-sdlc --resume`.
+     - **`gate === "high_risk_wave"`** (propagated from `execute.py`): ask via `ask_question` (**yes** | **skip** | **cancel**). On **yes**, re-invoke `ship.py` with `--resume` and `approve_high_risk: true`. On **skip**, re-invoke with `--resume` and `skip_high_risk: true`. On **cancel**, stop and preserve state for `/ship-sdlc --resume`.
+     - **`gate === "commit"` | `"version"` | `"pr"`** (when not `--auto`): confirm `step` (`args` on `branch`) via `ask_question` (**yes** | **cancel**). On **yes**, re-invoke with `--resume` and `approve_commit: true` (covers `commit` / `commit-fixes`), `approve_version: true`, or `approve_pr: true` (`ship.py` forwards `--auto` to the leaf skill).
      - **`gate === "received_review"`:** Show `verdict`, `counts`, and `review_comment_file`; on approval, re-invoke with `--resume` and `approve_received_review: true`.
      - **`gate === "rebase_conflicts"`** (`needs_consent` or `paused_conflicts`): List conflicting `files` against `base`.
        - In `--auto` mode or when `status === "paused_conflicts"` (including failed fallback merge): stop, preserve state, and print `/ship-sdlc --resume` instructions.
        - In interactive mode: ask via `ask_question` (**Pause pipeline** — resolve manually then `/ship-sdlc --resume` | **Skip rebase** — re-invoke with `--resume` and `rebase_conflict_action: "skip"` | **Merge instead** — re-invoke with `--resume` and `rebase_conflict_action: "merge"`).
      - **`gate === "openspec_archive"`:** Confirm archiving OpenSpec `change`; on approval, re-invoke with `--resume` and `approve_openspec_archive: true`.
-     - **`gate === "verify_pipeline"`:** Show failed CI checks for PR; ask via `ask_question` (**analyze** — re-invoke with `--resume` and `approve_ci_fix: true` | **skip** | **abort**).
+     - **`gate === "verify_pipeline"`:** Show failed CI checks for PR; ask via `ask_question` (**analyze** — re-invoke with `--resume` and `approve_ci_fix: true` | **skip** — re-invoke with `--resume` and `skip_ci_fix: true` | **abort**).
      - **`gate === "await_remote_review"`:** Show actionable remote review summary; on approval, re-invoke with `--resume` and `approve_remote_review: true`.
    - **`status === "completed"` or `"failed"`:** Render **Step 6 (REPORT)** below from the returned JSON (and run the interactive worktree keep/remove prompt when a linked worktree is active). Stop here.
 
@@ -216,7 +217,7 @@ This will tag the release and generate the changelog from all merged commits.
 - Ignore a cleanup contract violation (`state/ship.js cleanup-pipeline` non-zero / `currentRun.valid === false`) — surface it and preserve state.
 - Skip the post-version ancestry HARD GATE (`verify-ancestry.js`) when `NEW_TAG` is set.
 - Exit the plan-mode-blocked path (Step 0) without running `rm -f "$PLAN_MODE_OUTPUT_FILE"` on every exit branch.
-- Re-invoke `ship.py` with `--resume` after a pre-init `workspace_mode` consent pause (no state file exists yet — pass `workspace_flag` without `--resume`), or omit `--resume` after post-init consent pauses (`high_risk_wave`, `received_review`, `rebase_conflicts`, `openspec_archive`, `verify_pipeline`, `await_remote_review`).
+- Re-invoke `ship.py` with `--resume` after a pre-init `workspace_mode` consent pause (no state file exists yet — pass `workspace_flag` without `--resume`), or omit `--resume` after post-init consent pauses (`high_risk_wave`, `commit`, `received_review`, `rebase_conflicts`, `version`, `openspec_archive`, `pr`, `verify_pipeline`, `await_remote_review`).
 
 ---
 
