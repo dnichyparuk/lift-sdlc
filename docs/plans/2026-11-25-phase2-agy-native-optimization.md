@@ -180,8 +180,8 @@ Move `pr.labels` off/rules/llm mode tables and custom PR template edge rules to 
 Move cold migration/section detail tables from `setup-sdlc/SKILL.md` and detailed Branch A/B edge narratives from `version-sdlc/SKILL.md` into `resources/`, keeping `--only`, pre-flight, config-write hard rules, and `DO NOT` inline.
 
 **Acceptance criteria:**
-- [ ] Both `skills/setup-sdlc/SKILL.md` and `skills/version-sdlc/SKILL.md` are ≤ 20,480 bytes
-- [ ] `npm run check:refs` and `npm run check:discovery` pass
+- [x] Both `skills/setup-sdlc/SKILL.md` and `skills/version-sdlc/SKILL.md` are ≤ 20,480 bytes
+- [x] `npm run check:refs` and `npm run check:discovery` pass
 
 ### Task 10: Trim `learn-sdlc/SKILL.md` below 20 KB
 
