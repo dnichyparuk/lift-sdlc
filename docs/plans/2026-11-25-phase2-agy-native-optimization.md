@@ -197,8 +197,8 @@ Move cold migration/section detail tables from `setup-sdlc/SKILL.md` and detaile
 Move `--reject <pr>`, `--stale`, and detailed rollback-window edge branches to `skills/learn-sdlc/resources/subcommands-and-recovery.md`, keeping Steps 1–8 core assimilation loop, write-ownership rules, and `DO NOT` inline.
 
 **Acceptance criteria:**
-- [ ] `skills/learn-sdlc/SKILL.md` is ≤ 20,480 bytes
-- [ ] `npm run test:learning-loop` and `npm run check:refs` pass
+- [x] `skills/learn-sdlc/SKILL.md` is ≤ 20,480 bytes
+- [x] `npm run test:learning-loop` and `npm run check:refs` pass
 
 ---
 
