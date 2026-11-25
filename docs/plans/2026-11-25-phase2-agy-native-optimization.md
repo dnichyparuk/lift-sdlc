@@ -277,8 +277,8 @@ Keep `Primary Dispatch` (`verify.py`), `Step 0/1a`, `alwaysFixSeverities` / `alw
 Keep `Step 0`, `1a` (`--init-config`, `--gc`), `1a-engine` (`ship.py` and `pipeline-sdlc` routers), updated `needs_consent` handling (including `high_risk_wave` from `execute.py`), `Step 6` summary, and `DO NOT` inline; move `ship.engine === "legacy"` Steps 1b–5 prose into `skills/ship-sdlc/resources/legacy-ship-workflow.md`.
 
 **Acceptance criteria:**
-- [ ] `skills/ship-sdlc/SKILL.md` is ≤ 18,432 bytes
-- [ ] `scripts/skill/ship.test.js`, `npm run check:refs`, and `npm run check:discovery` pass
+- [x] `skills/ship-sdlc/SKILL.md` is ≤ 18,432 bytes
+- [x] `scripts/skill/ship.test.js`, `npm run check:refs`, and `npm run check:discovery` pass
 
 ### Task 15: Enable strict 24 KB / 0-warning validation gate and update docs
 
